@@ -1,0 +1,36 @@
+{
+  "name": "psi-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lightweight AI harness made for long and intensive loops.",
+  "bin": {
+    "psi": "bin/psi.mjs"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "start": "node bin/psi.mjs",
+    "test": "node --test test/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "verify": "npm run check && npm test",
+    "catalog:sync": "node scripts/sync-catalog.mjs",
+    "install:local": "node scripts/install-local.mjs",
+    "preview:ui": "node scripts/preview-ui.mjs"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-tui": "1.4.0",
+    "linkedom": "0.18.14",
+    "playwright-core": "1.64.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastianmiletic/Psi.git"
+  },
+  "homepage": "https://github.com/sebastianmiletic/Psi#readme",
+  "bugs": {
+    "url": "https://github.com/sebastianmiletic/Psi/issues"
+  }
+}

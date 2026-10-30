@@ -1,0 +1,60 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { stripTerminalSequences, visibleWidth } from '@earendil-works/pi-tui';
+import { TerminalUI } from '../src/ui.mjs';
+import { renderPsi } from '../src/logo.mjs';
+import { MemoryTerminal } from './terminal.mjs';
+import { fixture } from './helpers.mjs';
+
+function frame(ui) { ui.tui.renderNow(); return ui.tui.getScreenLines().map(stripTerminalSequences); }
+
+test('prompt stays at the bottom on startup, transcript growth, menus and terminal resize', async t => {
+  const f = await fixture(t, () => ({ text: 'Unused' }));
+  const terminal = new MemoryTerminal(100, 32), ui = new TerminalUI(f.app, { terminal });
+  t.after(() => ui.stop());
+  ui.start(); ui.editor.setText('PROMPT-AT-BOTTOM');
+  for (const [columns, rows] of [[100,32],[68,24],[40,18],[28,12],[100,32]]) {
+    terminal.resize(columns,rows);
+    const lines = frame(ui);
+    assert.equal(lines.length, rows);
+    assert.match(lines[rows-3], /PROMPT-AT-BOTTOM/);
+    assert.match(lines[rows-1], /test/);
+    assert.doesNotMatch(lines[rows-1], /\$|ready|working|commands|ctrl|requests|cost/);
+    assert.ok(ui.tui.getScreenLines().every(line => visibleWidth(line) <= columns));
+  }
+  for (let i = 0; i < 30; i++) ui.note(`TRANSCRIPT-${i}`);
+  let lines = frame(ui); assert.match(lines[29], /PROMPT-AT-BOTTOM/); assert.ok(lines.some(l => l.includes('TRANSCRIPT-29')));
+  const choice = ui.choose('Select an account', Array.from({length:20},(_,i)=>({value:String(i),label:`Account ${i}`})));
+  lines = frame(ui); assert.match(lines[29], /PROMPT-AT-BOTTOM/);
+  terminal.input('\x1b'); await choice;
+});
+
+test('footer contains exactly the model, provider and thinking level, with no automatic cost display', async t => {
+  const f = await fixture(t, () => ({ text: 'Unused' }));
+  const ui = new TerminalUI(f.app); t.after(() => clearTimeout(ui.renderTimer));
+  f.session.totals.cost = 987.65; f.app.engine.busy = true;
+  assert.equal(stripTerminalSequences(ui.footer.render(100)[0]), '  test  ·  fixture  ·  thinking off');
+  f.app.engine.busy = false;
+});
+
+test('SGR mouse click starts the 3D logo, Escape restores the draft and all animation timers stop', async t => {
+  const f = await fixture(t, () => ({ text: 'Unused' }));
+  const terminal = new MemoryTerminal(100,32), ui = new TerminalUI(f.app,{terminal});
+  t.after(() => ui.stop()); ui.start(); ui.editor.setText('preserve my draft'); frame(ui);
+  assert.equal(ui.logoTimer, undefined);
+  terminal.input('\x1b[<0;10;5M'); terminal.input('\x1b[<0;10;5m');
+  assert.ok(ui.logoAnimation); assert.ok(ui.logoTimer); assert.ok(ui.tui.hasOverlay());
+  assert.ok(frame(ui).some(l => l.includes('click or esc to return')));
+  terminal.input('\x1b');
+  assert.equal(ui.logoAnimation,null); assert.equal(ui.logoTimer,null); assert.equal(ui.tui.hasOverlay(),false);
+  assert.equal(ui.editor.getText(),'preserve my draft');
+  assert.match(frame(ui)[29], /preserve my draft/);
+  ui.showLogo(); ui.stop(); assert.equal(ui.logoTimer,null);
+});
+
+test('the extruded Psi mesh changes with 3D rotation and fits its terminal canvas', () => {
+  const a=renderPsi(52,20,0,true), b=renderPsi(52,20,1.2,true);
+  assert.equal(a.length,20); assert.notDeepEqual(a,b);
+  assert.ok(a.every(line=>visibleWidth(line)===52));
+  assert.ok(a.join('').includes('48;2;'));
+});

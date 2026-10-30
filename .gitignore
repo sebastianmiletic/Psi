@@ -1,0 +1,12 @@
+node_modules/
+.psi/
+*.log
+.DS_Store
+coverage/
+.env
+
+# Local credentials and development overrides
+.env.*
+*.pem
+*.key
+/AGENTS.md

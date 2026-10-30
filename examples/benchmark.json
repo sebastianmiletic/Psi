@@ -1,0 +1,16 @@
+{
+  "command": ["python3", "tools/run_match.py", "--bot", "{candidate}", "--map", "{map}", "--seed", "{seed}", "--side", "{side}"],
+  "candidates": [
+    { "name": "baseline", "artifact": "build/baseline.wasm" },
+    { "name": "candidate", "artifact": "build/candidate.wasm" }
+  ],
+  "seeds": [1, 2, 3, 4, 5],
+  "sides": [0, 1],
+  "maps": ["published-map-name"],
+  "repeats": 1,
+  "workers": 4,
+  "timeoutMs": 120000,
+  "inputs": ["tools/run_match.py"],
+  "metadata": { "engine": "record-exact-engine-version-here", "evidence": "local comparative" },
+  "output": ".psi/benchmarks/experiment-001"
+}
