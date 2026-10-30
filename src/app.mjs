@@ -2,6 +2,7 @@ import { readFile, writeFile, stat, appendFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
+import { AccountUsage, usageLabel } from './usage.mjs';
 import { Registry } from './providers.mjs';
 import { Session } from './session.mjs';
 import { Jobs } from './jobs.mjs';
@@ -12,7 +13,7 @@ import { saveConfig, psiHome, cleanTerminal, redact } from './storage.mjs';
 export class App {
   constructor(config, session, options = {}) {
     this.config = config; this.session = session; this.options = options;
-    this.home = options.home || psiHome(); this.registry = new Registry(config, this.home);
+    this.home = options.home || psiHome(); this.registry = new Registry(config, this.home); this.accountUsage = new AccountUsage(this.home); this.activeAccount = null; this.activeUsage = null;
     this.bind();
   }
   bind() {
@@ -21,6 +22,10 @@ export class App {
     this.engine = new Engine({ registry: this.registry, session: this.session, tools: this.tools, config: this.config, onEvent: e => this.event(e) });
   }
   event(event) {
+    if (event.account && event.account.provider === this.engine.model.provider) {
+      this.activeAccount = event.account;
+      if (event.accountUsage) this.activeUsage = event.accountUsage;
+    }
     if (this.engine?.config.debug && !['text_delta', 'thinking_delta'].includes(event.type)) {
       // Verbose operational logging deliberately excludes prompts, credentials, tool arguments and provider payloads.
       const data = { at: new Date().toISOString(), type: event.type, model: event.model, attempt: event.attempt, duration: event.duration, tool: event.call?.name, error: !!event.error, status: event.status };
@@ -28,7 +33,14 @@ export class App {
     }
     this.ui?.event(event); this.options.onEvent?.(event);
   }
+  async refreshAccount() {
+    const account = await this.registry.accounts.selected(this.engine.model.provider);
+    const configured = account.type !== 'ambient' || !!await this.registry.models.checkAuth(account.provider);
+    this.activeAccount = configured ? account : null; this.activeUsage = await this.accountUsage.get(account.id);
+    this.ui?.render(); return { account: this.activeAccount, usage: this.activeUsage };
+  }
   async startUI() {
+    await this.refreshAccount();
     const { TerminalUI } = await import('./ui.mjs'); this.ui = new TerminalUI(this); this.ui.start();
     if (this.session.messages.length) {
       this.ui.note(`Resumed ${this.session.meta.id}. ${this.session.messages.length} context messages.`);
@@ -42,9 +54,10 @@ export class App {
     if (this.engine.busy) throw new Error('Stop the current run first.');
     await this.tools.close(); this.session = session; this.bind();
     if (this.ui) { const { CombinedAutocompleteProvider } = await import('@earendil-works/pi-tui'); const { commands } = await import('./ui.mjs'); this.ui.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, session.meta.cwd)); }
+    await this.refreshAccount();
     this.ui?.clear(); this.ui?.note(`Session ${session.meta.id}\n${session.meta.cwd}`);
   }
-  async update(patch) { await this.engine.settings(patch); this.config = await saveConfig(patch, this.home); }
+  async update(patch) { await this.engine.settings(patch); this.config = await saveConfig(patch, this.home); await this.refreshAccount(); }
   async selectModel(query = '') {
     if (query) {
       let model; try { model = this.registry.find(query); } catch (e) { if (!this.ui) throw e; }
@@ -59,7 +72,7 @@ export class App {
   async accountMenu(action) {
     if (this.engine.busy) throw new Error('Stop the current run before changing accounts.');
     action ||= await this.ui.choose('Accounts', [
-      { value: 'login', label: 'Login new account', description: 'Connect another provider or account' },
+      { value: 'login', label: 'Login new account', description: 'Add any provider, including another account with the same provider' },
       { value: 'switch', label: 'Switch accounts', description: 'Choose any saved account' },
       { value: 'remove', label: 'Remove account', description: 'Delete a saved credential from Psi' },
     ]);
@@ -92,10 +105,11 @@ export class App {
       } finally { this.authController = null; }
     } else if (action === 'switch' || action === 'remove') {
       const accounts = await this.registry.accounts.list();
-      const id = await this.ui.choose(action === 'switch' ? 'Switch accounts' : 'Remove account', accounts.map(a => ({ value: a.id, label: `${a.active ? '✓ ' : ''}${a.provider} · ${a.name}`, description: a.type === 'oauth' ? 'sign-in' : 'API key' })));
+      const usage = new Map(await Promise.all(accounts.map(async a => [a.id, await this.accountUsage.get(a.id)])));
+      const id = await this.ui.choose(action === 'switch' ? 'Switch accounts' : 'Remove account', accounts.map(a => ({ value: a.id, label: `${a.active ? '✓ ' : ''}${a.provider} · ${a.name}`, description: `${a.type === 'oauth' ? 'sign-in' : 'API key'} · ${a.id.slice(0,8)} · ${usage.get(a.id).requests} calls in Psi` })));
       if (!id) return;
       if (action === 'switch') { const provider = await this.registry.accounts.use(id); await this.useProvider(provider); this.ui.note('Account switched.'); }
-      else { await this.registry.accounts.remove(id); this.ui.note('Account removed.'); }
+      else { await this.registry.accounts.remove(id); await this.refreshAccount(); this.ui.note('Account removed.'); }
     } else throw new Error('Use /accounts login, switch, or remove.');
   }
   async useProvider(provider) {
@@ -127,7 +141,7 @@ export class App {
     }
     const match = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()); const command = match?.[1]; const arg = match?.[2] || '';
     if (this.authController && !['stop', 'quit', 'help'].includes(command)) throw new Error('Finish or cancel account sign-in first.');
-    if (this.engine.busy && !['stop', 'logo', 'cost', 'status', 'jobs', 'help', 'quit'].includes(command)) throw new Error('Use /stop before changing settings, or type a message to steer the active run.');
+    if (this.engine.busy && !['stop', 'logo', 'usage', 'tools', 'cost', 'status', 'jobs', 'help', 'quit'].includes(command)) throw new Error('Use /stop before changing settings, or type a message to steer the active run.');
     if (command === 'logo') { this.ui.showLogo(); return; }
     if (command === 'quit' || command === 'exit') return this.close();
     if (command === 'stop') { this.authController?.abort(); this.engine.stop(); return; }
@@ -152,6 +166,16 @@ export class App {
       await this.update({ [{ budget: 'budget', limit: 'maxSteps', tokens: 'maxOutputTokens' }[command]]: value }); this.ui.note(`${command}: ${value || 'unlimited'}`); return;
     }
     if (command === 'profile') { if (!['battlecode', 'general'].includes(arg)) throw new Error('Use /profile battlecode or /profile general.'); await this.update({ profile: arg }); this.ui.note(`Profile: ${arg}`); return; }
+    if (command === 'usage') {
+      const { account, usage } = await this.refreshAccount();
+      this.ui.note(usageLabel(account,usage));
+      this.ui.note('Counts cover requests recorded by Psi for this account across sessions. Provider quota/rate windows are shown only when returned by the provider; other clients and account billing are not inferred.');
+      if (usage.limits?.length) this.ui.note(JSON.stringify({ reportedAt: usage.limitsAt, limits: usage.limits },null,2));
+      return;
+    }
+    if (command === 'tools') {
+      this.ui.markdown(this.tools.definitions().map(tool => `**${tool.name}**  ${tool.description}`).join('\n\n')); return;
+    }
     if (command === 'cost') {
       const u = this.session.totals; const cached = u.input + u.cacheRead ? Math.round(u.cacheRead / (u.input + u.cacheRead) * 100) : 0;
       this.ui.note(`${u.requests} requests · ${u.input.toLocaleString()} input · ${u.output.toLocaleString()} output · ${u.cacheRead.toLocaleString()} cache read (${cached}%)\nEstimated catalog cost: $${u.cost.toFixed(5)}. Subscription quotas, tiered pricing and unknown/custom prices are not measured.`); return;

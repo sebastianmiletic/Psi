@@ -78,6 +78,8 @@ Custom endpoint prices default to unknown/zero estimates. Set accurate model lim
 | `/budget <dollars>` | Estimated session cost ceiling; `0` disables it |
 | `/limit <requests>` | Request ceiling for each run, including retries and summaries; `0` disables it |
 | `/tokens <count>` | Output token ceiling per model request |
+| `/usage` | Active account usage and provider-reported limits |
+| `/tools` | List the actual tools available to the AI |
 | `/cost` | Usage, cache reads and estimated cost |
 | `/compact` | Summarize older context while preserving the full journal |
 | `/summary-model provider/model` | Use a cheaper model for compaction; `same` restores the main model |
@@ -90,13 +92,27 @@ Custom endpoint prices default to unknown/zero estimates. Set accurate model lim
 | `/export [path]` | Export the current session context as Markdown |
 | `/status`, `/help`, `/quit` | Inspect state, see commands or exit |
 
-The prompt stays pinned to the bottom of the terminal while the conversation scrolls above it. Its single footer row shows only the model, provider and thinking level. Costs remain available explicitly through `/cost`, with no automatic cost display.
+The prompt stays pinned to the bottom of the terminal while the conversation scrolls above it. Its footer shows the model on the left and thinking level aligned to the right, without a provider label. The next row shows usage for the selected account. Costs remain available explicitly through `/cost`, with no automatic cost display.
 
-Click the larger Ψ mark to expand it into a shaded, rotating 3D mesh. Click again or press Escape to return to your unchanged prompt. `/logo` provides the same interaction from the keyboard. Animation renders only while open and adds no dependencies.
+Click the compact shaded Ψ mark to expand it into a shaded, rotating 3D mesh. Click again or press Escape to return to your unchanged prompt. `/logo` provides the same interaction from the keyboard. Animation renders only while open and adds no dependencies.
 
 Type to filter pickers, use arrows to navigate and Enter to select. Tab completes slash commands and paths. Shift+Enter creates a newline. Escape stops the current run. Ctrl+C cancels a prompt or run and exits when idle. A normal message typed during a run steers the next tool boundary.
 
 **Stopping generation or quitting does not kill detached jobs.** Inspect them with `/jobs` or `psi jobs`; terminate them with `/jobs stop <id>` or `psi jobs stop <id>`.
+
+## Usage and multiple accounts
+
+Use `/accounts` → **Login new account** repeatedly to add any number of named accounts, including several from the same provider. Saved credentials are separate; connecting another account does not overwrite the first. Use **Switch accounts** to select from the flat cross-provider list. Short account IDs distinguish duplicate names.
+
+The footer shows the selected account's requests and tokens recorded by Psi across sessions. Each inference request pins its account before authentication and refresh, preventing a concurrent account switch from mixing credentials or usage totals. Local totals are stored privately in `~/.psi/usage.json`.
+
+When a provider returns usable quota/rate-limit metadata, Psi displays that snapshot separately. Otherwise it says **quota unavailable**. Local token totals do not establish a subscription's remaining allowance, provider-wide billing, or usage from other clients. `/usage` shows the details, including reported reset metadata, without displaying credentials. No API quota polling or hidden paid requests run while idle.
+
+## Battlecode access and implementation plan
+
+The AI can already edit files, execute shell/compilers/tests, manage background jobs, run resumable local sweeps, fetch/search websites, use a JavaScript browser, inspect images and preserve checkpoints. `/tools` shows its actual tool definitions.
+
+The [Battlecode harness plan](docs/BATTLECODE_HARNESS_PLAN.md) maps these capabilities to the existing VisionV6/v248 workflow, distinguishes current tools from proposed additions, and prioritizes a durable experiment controller, the existing live-trial/replay tools, evidence gates and event-driven waiting. It keeps local correctness separate from live-strength claims. Writing this plan did not change or run the Battlecode bot.
 
 ## Long, low-overhead loops
 
@@ -172,6 +188,6 @@ npm run verify
 npm run catalog:sync
 ```
 
-Tests use an isolated local OpenAI-compatible streaming server and temporary data folders. They cover real HTTP tool cycles, account isolation and refresh locking, costs/limits, retries, resume/crash recovery, process cancellation, website extraction, the installed browser, paired benchmark sweeps, bottom-pinned layout through terminal resizes, footer contents, mouse-triggered 3D animation and timer cleanup. They do not spend paid inference or sign into external accounts. Provider login and all third-party endpoints still need verification with your own accounts.
+Tests use an isolated local OpenAI-compatible streaming server and temporary data folders. They cover real HTTP tool cycles, account isolation and refresh locking, costs/limits, retries, resume/crash recovery, process cancellation, website extraction, the installed browser, paired benchmark sweeps, bottom-pinned layout through terminal resizes, footer contents and account attribution, mouse-triggered 3D animation and timer cleanup. They do not spend paid inference or sign into external accounts. Provider login and all third-party endpoints still need verification with your own accounts.
 
 Transport and terminal rendering: [Pi](https://github.com/earendil-works/pi). Additional provider data: [models.dev](https://models.dev). Codex authentication reference: [official OpenAI documentation](https://developers.openai.com/codex/auth). Dependency licenses remain with their respective packages.

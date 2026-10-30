@@ -1,8 +1,9 @@
 import {
   ProcessTerminal, TuiAltScreen, VStack, ScrollView, Container, Text, Markdown, Editor, Input, SelectList,
   CombinedAutocompleteProvider, matchesKey, truncateToWidth, CURSOR_MARKER,
-  colorToRgb, parseColor,
+  colorToRgb, parseColor, visibleWidth,
 } from '@earendil-works/pi-tui';
+import { usageLabel } from './usage.mjs';
 import { PsiHeader, PsiAnimation } from './logo.mjs';
 import { cleanTerminal, redact } from './storage.mjs';
 
@@ -23,7 +24,7 @@ export const commands = [
   ['provider', 'Add a custom API endpoint'], ['loop', 'Work autonomously toward an objective'], ['stop', 'Stop generation and the active tool wait'],
   ['continue', 'Continue this session'], ['new', 'Start a fresh session'], ['resume', 'Resume a saved session'], ['cd', 'Open another workspace'],
   ['jobs', 'Inspect or stop background jobs'], ['budget', 'Set estimated session cost ceiling, 0 = unlimited'],
-  ['limit', 'Set requests per run, 0 = unlimited'], ['tokens', 'Set maximum output tokens'], ['cost', 'Show token and estimated cost totals'],
+  ['limit', 'Set requests per run, 0 = unlimited'], ['tokens', 'Set maximum output tokens'], ['usage', 'Show active account usage and reported limits'], ['tools', 'Show tools available to the AI'], ['cost', 'Show token and estimated cost totals'],
   ['summary-model', 'Choose a cheaper model for compaction'], ['compact', 'Summarize older context'], ['checkpoint', 'Read or write a durable progress note'], ['profile', 'battlecode or general'],
   ['refresh', 'Refresh a provider model catalog'], ['status', 'Show workspace and run settings'], ['export', 'Export this session as Markdown'],
   ['help', 'Show commands'], ['quit', 'Exit Psi; background jobs keep running'],
@@ -60,18 +61,20 @@ export class TerminalUI {
     this.footer = { invalidate() {}, render: width => {
       const c = app.engine.config;
       const slash = c.model.indexOf('/');
-      const provider = slash >= 0 ? c.model.slice(0, slash) : app.engine.model.provider;
-      const model = slash >= 0 ? c.model.slice(slash + 1) : c.model;
-      return [truncateToWidth(`  ${safe(model)}  ·  ${dim(safe(provider))}  ·  thinking ${safe(c.effort)}`, width)];
+      const model = safe(slash >= 0 ? c.model.slice(slash + 1) : c.model);
+      const right = truncateToWidth(`thinking ${safe(c.effort)}`, Math.max(0,width-3));
+      const left = truncateToWidth(`  ${model}`, Math.max(0,width-visibleWidth(right)-3));
+      const gap = Math.max(1,width-visibleWidth(left)-visibleWidth(right)-1);
+      return [left+' '.repeat(gap)+dim(right), truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage))),width)];
     } };
     this.scroll = new ScrollView(this.transcript, { follow: 'end', primary: true, scrollbar: 'auto' });
     this.panelScroll = new ScrollView(this.panel, { follow: 'end', scrollbar: 'auto' });
     this.layout = new VStack([
-      { component: this.header, basis: 'auto', shrink: 1, minSize: 0, visible: viewport => viewport.height >= 18 },
+      { component: this.header, basis: 'auto', shrink: 1, minSize: 0, visible: viewport => viewport.height >= 14 },
       { component: this.scroll, basis: 0, grow: 1, minSize: 1 },
       { component: this.panelScroll, basis: 'auto', shrink: 1, minSize: 0 },
       { component: this.editor, basis: 'auto', shrink: 1, minSize: 3 },
-      { component: this.footer, basis: 1, shrink: 0, minSize: 1 },
+      { component: this.footer, basis: 2, shrink: 0, minSize: 2 },
     ]);
     this.tui.setLayoutRoot(this.layout);
     this.tui.setFocus(this.editor);

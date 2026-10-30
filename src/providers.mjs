@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { createProvider, envApiKeyAuth, lazyApi } from '@earendil-works/pi-ai';
+import { createModels, createProvider, envApiKeyAuth, lazyApi } from '@earendil-works/pi-ai';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
 import { Accounts } from './accounts.mjs';
 
@@ -43,6 +43,12 @@ export class Registry {
       })), api: apis[api],
     });
     this.models.setProvider(provider);
+  }
+  async forRequest(provider) {
+    const account = await this.accounts.selected(provider);
+    const models = createModels({ credentials: this.accounts.store(account), identity: { version: '0.1.0' } });
+    for (const entry of this.models.getProviders()) models.setProvider(entry);
+    return { account, models };
   }
   all() { return this.models.getModels(); }
   find(value) {

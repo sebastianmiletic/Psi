@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { randomUUID } from 'node:crypto';
+import { AccountUsage, limitsFromHeaders } from './usage.mjs';
 import { Type, getSupportedThinkingLevels, clampThinkingLevel } from '@earendil-works/pi-ai';
 import { withLock, redact } from './storage.mjs';
 import { systemPrompt } from './prompt.mjs';
@@ -30,6 +32,7 @@ export class LimitError extends Error {}
 export class Engine {
   constructor({ registry, session, tools, config, onEvent = () => {} }) {
     this.registry = registry; this.session = session; this.tools = tools; this.config = { ...config, ...session.state.settings }; this.onEvent = onEvent;
+    this.accountUsage = new AccountUsage(session.home);
     this.busy = false; this.queue = []; this.controller = null;
     tools.add('finish', 'Mark the current autonomous objective complete. Provide the verified outcome and evidence paths. Use only when the objective has actually been achieved.', { summary: Type.String(), evidence: Type.Array(Type.String()) }, async args => {
       await session.event({ type: 'state', state: { loopGoal: null, completed: args } });
@@ -66,14 +69,18 @@ export class Engine {
       this.controller.signal.throwIfAborted();
       if (this.config.maxSteps > 0 && this.runRequests >= this.config.maxSteps) throw new LimitError(`Reached the ${this.config.maxSteps} request limit. Resume to continue.`);
       if (this.config.budget > 0 && this.session.totals.cost + reserve > this.config.budget) throw new LimitError('Budget reserve reached before retry.');
+      const { account, models } = await this.registry.forRequest(model.provider);
+      const requestId = randomUUID(); let limits = [];
+      this.onEvent({ type: 'account_selected', account, accountUsage: await this.accountUsage.get(account.id) });
       this.runRequests++;
       this.onEvent({ type: 'request_start', model: modelName, effort, summary, attempt });
       let result;
       try {
-        const stream = this.registry.models.streamSimple(model, { systemPrompt: this.prompt, messages, tools: tools ? this.tools.definitions() : undefined }, {
+        const stream = models.streamSimple(model, { systemPrompt: this.prompt, messages, tools: tools ? this.tools.definitions() : undefined }, {
           signal: this.controller.signal, reasoning: effort === 'off' ? undefined : effort,
           maxTokens, cacheRetention: this.config.cacheRetention, sessionId: this.session.meta.id,
           timeoutMs: 180000, maxRetries: 0, transport: 'sse',
+          onResponse: response => { limits = limitsFromHeaders(model.provider, response.headers); },
         });
         for await (const event of stream) {
           if (event.type === 'text_delta' || event.type === 'thinking_delta') this.onEvent({ type: event.type, delta: event.delta, summary });
@@ -84,8 +91,13 @@ export class Engine {
         result = { stopReason: 'error', errorMessage: e.message };
       }
       if (result.usage) {
-        await this.session.event({ type: 'usage', usage: result.usage });
-        this.onEvent({ type: 'usage', totals: this.session.totals, usage: result.usage });
+        await this.session.event({ type: 'usage', usage: result.usage, accountId: account.id, provider: model.provider, requestId });
+        const accountUsage = await this.accountUsage.record(account, { usage: result.usage, limits, requestId, model: modelName });
+        this.onEvent({ type: 'usage', totals: this.session.totals, usage: result.usage, account, accountUsage });
+      }
+      else if (limits.length) {
+        const accountUsage = await this.accountUsage.record(account, { limits, model: modelName });
+        this.onEvent({ type: 'account_usage', account, accountUsage });
       }
       if (result.stopReason === 'aborted' || this.controller.signal.aborted) throw this.controller.signal.reason || new Error('Request aborted.');
       if (result.stopReason !== 'error') { this.onEvent({ type: 'request_end', message: result, summary }); return result; }

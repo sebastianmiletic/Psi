@@ -15,6 +15,10 @@ export class Accounts {
     const d = await this.data();
     return d.accounts.map(({ id, provider, name, credential, createdAt }) => ({ id, provider, name, type: credential.type, createdAt, active: d.active[provider] === id }));
   }
+  async selected(provider) {
+    const data = await this.data(); const a = data.accounts.find(a => a.provider === provider && a.id === data.active[provider]);
+    return a ? { id: a.id, provider: a.provider, name: a.name, type: a.credential.type } : { id: `ambient:${provider}`, provider, name: 'Environment / local', type: 'ambient' };
+  }
   async add(provider, name, credential) {
     if (!name?.trim()) throw new Error('Account name is required.');
     return this.mutate(d => {
@@ -35,12 +39,13 @@ export class Accounts {
       }
     });
   }
-  store() {
+  store(pinned) {
+    const target = (data, provider) => pinned?.provider === provider ? (pinned.type === 'ambient' ? null : pinned.id) : data.active[provider];
     return {
-      read: async (provider) => { const d = await this.data(); return d.accounts.find(a => a.id === d.active[provider] && a.provider === provider)?.credential; },
+      read: async (provider) => { const d = await this.data(); const a = d.accounts.find(a => a.id === target(d, provider) && a.provider === provider); if (pinned?.provider === provider && pinned.type !== 'ambient' && !a) throw new Error('The account selected for this request was removed.'); return a?.credential; },
       list: async () => (await this.list()).filter(a => a.active).map(a => ({ providerId: a.provider, type: a.type })),
       modify: async (provider, fn, options) => this.mutate(async d => {
-        const a = d.accounts.find(a => a.id === d.active[provider] && a.provider === provider);
+        const a = d.accounts.find(a => a.id === target(d, provider) && a.provider === provider);
         const next = await fn(a?.credential);
         if (next && a) a.credential = next;
         else if (next) throw new Error('Add a named account before saving credentials.');

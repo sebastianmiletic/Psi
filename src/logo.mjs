@@ -85,12 +85,12 @@ export class PsiHeader {
   }
   invalidate() {}
   render(width) {
-    const logoWidth = Math.min(20, Math.max(6, width - 4)), logoRows = width < 35 ? 5 : 8;
+    const logoWidth = Math.min(12, Math.max(6, width - 4)), logoRows = 4;
     const key = `${logoWidth}:${logoRows}`;
     if (this.cached?.key !== key) this.cached = { key, lines: renderPsi(logoWidth,logoRows) };
     this.bounds = { x: 1, y: 1, width: logoWidth, height: logoRows };
     const path = this.app.session.meta.cwd.replace(process.env.HOME || '\0', '~');
-    const labels = width >= 48 ? { 2: this.format('P S I'), 3: this.subdued('long + intensive loops'), 5: this.subdued(path) } : {};
+    const labels = width >= 48 ? { 0: this.format('P S I'), 1: this.subdued('long + intensive loops'), 3: this.subdued(path) } : {};
     return ['', ...this.cached.lines.map((line, i) => truncateToWidth(' '+line+'  '+(labels[i] || ''), width)), ''];
   }
   // Bound the click region to the mark, leaving workspace text selectable.
@@ -110,8 +110,8 @@ export class PsiAnimation {
   invalidate() {}
   render(width) {
     const height = Math.max(1, this.terminal.rows);
-    const rows = Math.max(1, Math.min(32, height - 4));
-    const columns = Math.max(1, Math.min(100, width - 2));
+    const rows = Math.max(1, Math.min(16, Math.max(1, Math.floor(height * 0.5))));
+    const columns = Math.max(1, Math.min(52, Math.max(1, Math.floor(width * 0.55))));
     const phase = (this.now()-this.started)/1000 + this.offset;
     const glyph = renderPsi(columns, rows, phase, true);
     const padX = ' '.repeat(Math.max(0, Math.floor((width-columns)/2)));
