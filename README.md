@@ -57,11 +57,11 @@ Interactive startup checks the latest stable GitHub release in the background, a
 
 Psi grants the directory where the session starts. No AI tool can grant additional access. `/directory` lists the session's allowlist; `/directory add /path/to/project` and `/directory remove /path/to/project` change it. File tools resolve symlinks before access, and shell processes inherit an OS boundary. System executables/runtime libraries are available read-only; Psi manages its own scratch files, session artifacts and experiment evidence. Provider credentials and the real HOME are excluded from tool environments. The isolated shell HOME is a private scratch directory, so CLIs needing existing personal credentials require deliberate setup within the permitted directories.
 
-Press **Shift+Tab** for **PLAN** mode. The model can inspect files/websites and record a plan, but cannot edit project files, run shell/build commands, evaluate arbitrary browser scripts or perform live transactions. It can use the conversation to request missing information. Switch back to **EXECUTE** to implement the agreed plan. A mode change during inference is enforced before the returned tool calls run.
+Click the mode control inside the input row, or press **Shift+Tab**, for **PLAN** mode. The model can inspect files/websites and record a plan, but cannot edit project files, run shell/build commands, evaluate arbitrary browser scripts or perform live transactions. It can use the conversation to request missing information. Switch back to **EXECUTE** to implement the agreed plan. A mode change during inference is enforced before the returned tool calls run.
 
 Open `/effort`, then press **Tab** to toggle **OVERKILL**. Use `/agents` or the worker entry in `/settings` to set concurrency and edit each worker's name, job, model, thinking, plan/execute mode, request limit and budget independently. Workers inherit the approved directories, use separate durable model sessions, and cannot create nested workers. A plan-mode parent always forces read-only workers. The AI can spawn, send follow-ups, inspect, await and stop them through `agent`; completed workers can resume for follow-up tasks. Returned worker usage is included exactly once in parent session accounting. Per-worker budgets are capped to a share of the parent's remaining configured budget when a worker starts.
 
-Tool names, brief result previews, model updates and worker lifecycle events appear in the conversation. The bottom bar shows mode and **estimated** completion against the model's recorded plan. This percentage is not an independently measured guarantee of goal achievement. A verified loop finish still requires evidence.
+Tool names, brief result previews, model updates and worker lifecycle events appear in the conversation. The mode control sits beside the draft text. The bottom bar uses solid blocks and shows **estimated** completion, plus the remaining percentage on wide terminals. This percentage is not an independently measured guarantee of goal achievement. A verified loop finish still requires evidence.
 
 ## Providers and accounts
 
@@ -135,11 +135,15 @@ Custom endpoint prices default to unknown. Use `/settings` → **API pricing for
 
 The prompt stays pinned to the bottom of the terminal while the conversation scrolls above it. Its footer shows the model on the left and thinking level aligned to the right, without a provider label. The next row shows the selected account: subscription accounts display only reported usage windows; metered API accounts display the current session cost. No provider label appears in either footer row.
 
-Click the compact shaded Ψ mark to expand it into a shaded, rotating 3D mesh. Click again or press Escape to return to your unchanged prompt. `/logo` provides the same interaction from the keyboard. Animation renders only while open and adds no dependencies.
+Click the compact shaded Ψ mark to expand it into a shaded, rotating 3D mesh. Click again or press Escape to return to your unchanged prompt. `/logo` provides the same interaction from the keyboard. The 3D animation renders only while open and adds no dependencies.
 
-Type to filter pickers, use arrows to navigate and Enter to select. Tab completes slash commands and paths. Shift+Enter creates a newline. Escape twice within 600 ms stops the current run. Shift+Tab toggles plan/execute mode. Ctrl+C cancels a prompt or run and exits when idle. A message entered during a run is saved and queued after the next tool boundary. Remaining stale calls in that response are skipped with recorded outcomes before the correction reaches the model.
+Type to filter pickers, use arrows to navigate and Enter to select. Tab completes slash commands and paths. Shift+Enter creates a newline. The clickable mode control shares the input row with your draft. Escape twice within 600 ms stops the current run. Shift+Tab toggles plan/execute mode. Ctrl+C cancels a prompt or run and exits when idle. A message entered during a run is saved and queued after the next tool boundary. Remaining stale calls in that response are skipped with recorded outcomes before the correction reaches the model.
 
 Stopping the AI also signals its subagents. Standalone detached jobs can continue; inspect them with `psi jobs` and terminate them with `psi jobs stop <id>`. Revoking a directory stops active session jobs before changing the allowlist. Live-controller cleanup can take several minutes.
+
+Messages use a brief eased send indicator and a compact **Ψ Psi** response header. Active model/tool work pulses subtly; text streams immediately. Tool rows update in place with their outcome, duration and a short preview, including background job IDs. Disable **UI animations** in `/settings` for static activity labels. Animation timers stop when work and send feedback settle.
+
+![Psi conversation and inline mode control](docs/conversation.png)
 
 ## Usage and multiple accounts
 
@@ -156,7 +160,7 @@ Enable **Automatic account switching** in `/settings` to move between saved acco
 `/settings` opens a searchable keyboard UI. Type to filter, use arrows and Enter to choose, and Escape to go back. Settings persist under `~/.psi/config.json`.
 
 - Sage, cyan, blue, violet, rose or amber accents, plus custom hex/OKLCH colours.
-- Logo visibility, animation and account usage visibility.
+- Logo visibility, UI animations and account usage visibility.
 - Automatic account switching, threshold, explicit fallback models and usage refresh interval.
 - Main/compaction model, thinking, output tokens, prompt-cache retention and tool preview size.
 - Read concurrency, loop retry delay, budget/request limits, API prices, Battlecode CLI and debug logging.

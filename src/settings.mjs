@@ -7,7 +7,7 @@ export const settingItems = [
   {id:'checkForUpdates',label:'Check GitHub on startup',boolean:true},
   {id:'autoUpdate',label:'Install updates automatically',boolean:true,description:'Managed releases or clean source checkouts; restart to apply'},
   {id:'accent',label:'Accent colour',values:[...Object.keys(accents),'custom'],description:'Selection, links and the 3D Psi mark'},
-  {id:'showLogo',label:'Show logo',boolean:true},{id:'animations',label:'Animate logo',boolean:true},{id:'showUsage',label:'Show account usage',boolean:true},
+  {id:'showLogo',label:'Show logo',boolean:true},{id:'animations',label:'UI animations',boolean:true,description:'Send feedback, response activity and the 3D logo'},{id:'showUsage',label:'Show account usage',boolean:true},
   {id:'autoSwitchAccounts',label:'Automatic account switching',boolean:true,description:'Try another saved account when quota is exhausted'},
   {id:'accountSwitchThreshold',label:'Switch at quota percentage',number:[1,100]},
   {id:'fallbackModels',label:'Cross-provider fallback models',description:'Explicit provider/model routes, comma-separated; empty means same provider only'},

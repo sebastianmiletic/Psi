@@ -66,7 +66,7 @@ export class App {
     if (this.session.messages.length) {
       this.ui.note(`Resumed ${this.session.meta.id}. ${this.session.messages.length} context messages.`);
       for (const m of this.session.messages.slice(-8)) {
-        if (m.role === 'user') this.ui.user(typeof m.content === 'string' ? m.content.slice(0, 2000) : '[Attached content]');
+        if (m.role === 'user') this.ui.user(typeof m.content === 'string' ? m.content.slice(0, 2000) : '[Attached content]',{animate:false});
         if (m.role === 'assistant') { const text = m.content.filter(c => c.type === 'text').map(c => c.text).join('\n'); if (text) this.ui.markdown(text.slice(-6000)); }
       }
     }

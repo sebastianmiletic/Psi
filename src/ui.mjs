@@ -1,11 +1,12 @@
 import {
-  ProcessTerminal, TuiAltScreen, VStack, ScrollView, Container, Text, Markdown, Editor, Input, SelectList,
+  ProcessTerminal, TuiAltScreen, VStack, ScrollView, Container, Text, Markdown, Input, SelectList,
   CombinedAutocompleteProvider, matchesKey, truncateToWidth, CURSOR_MARKER,
   colorToRgb, parseColor, visibleWidth,
 } from '@earendil-works/pi-tui';
 import { accentText } from './theme.mjs';
 import { usageLabel } from './usage.mjs';
 import { PsiHeader, PsiAnimation } from './logo.mjs';
+import { Composer,UserMessage,AssistantMessage,ToolMessage } from './message-ui.mjs';
 import { cleanTerminal, redact } from './storage.mjs';
 
 const rgb = colorToRgb(parseColor('oklch(68% 0.105 162)'));
@@ -44,13 +45,14 @@ class SecretInput {
   render(width) { return [truncateToWidth('  ' + '•'.repeat(this.value.length), Math.max(1, width - 1)) + (this.focused ? CURSOR_MARKER : '')]; }
 }
 export class TerminalUI {
-  constructor(app, { terminal = new ProcessTerminal() } = {}) {
+  constructor(app, { terminal = new ProcessTerminal(), now=()=>performance.now() } = {}) {
     this.app = app; this.terminal = terminal; this.tui = new TuiAltScreen(terminal);
+    this.now=now;this.openTools=new Map();
     this.paint=t=>accentText(t,app.engine.config);
     this.selectionTheme={...selectionTheme,selectedPrefix:this.paint,selectedText:t=>this.paint(bold(t))};
     this.markdownTheme={...markdownTheme,link:this.paint,code:this.paint,listBullet:this.paint};
     this.transcript = new Transcript(); this.panel = new Container(); this.pending = null;
-    this.editor = new Editor(this.tui, { borderColor: dim, selectList: this.selectionTheme }, { paddingX: 1, autocompleteMaxVisible: 7 });
+    this.editor = new Composer(this, { borderColor: dim, selectList: this.selectionTheme });
     this.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, app.session.meta.cwd));
     this.editor.onSubmit = text => {
       if (!text.trim()) return;
@@ -68,9 +70,10 @@ export class TerminalUI {
       return [left+' '.repeat(gap)+dim(right), ...(app.engine.config.showUsage===false?[]:[truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage,{sessionCost:app.session.meteredCost,costKnown:app.session.meteredCostKnown}))),width)])];
     } };
     this.progressBar={invalidate(){},render:width=>{
-      const state=app.session.state.progress,pct=Math.max(0,Math.min(100,state?.percent||0)),mode=(app.engine.pendingSettings.agentMode||app.engine.config.agentMode||'execute').toUpperCase();
-      const label=`${mode}  ${pct}% est.`,available=Math.max(0,width-visibleWidth(label)-6),size=Math.min(30,available),filled=Math.round(size*pct/100);
-      return[truncateToWidth('  '+this.paint('━'.repeat(filled))+dim('─'.repeat(size-filled))+'  '+dim(label),width)];
+      const state=app.session.state.progress,pct=Math.max(0,Math.min(100,state?.percent||0));
+      const label=width>=70?`${pct}% · ${100-pct}% remaining · est.`:`${pct}% · est.`;
+      const available=Math.max(0,width-visibleWidth(label)-6),size=Math.min(30,available),filled=Math.round(size*pct/100);
+      return[truncateToWidth('  '+this.paint('█'.repeat(filled))+dim('░'.repeat(size-filled))+'  '+dim(label),width)];
     }};
     this.scroll = new ScrollView(this.transcript, { follow: 'end', primary: true, scrollbar: 'auto' });
     this.panelScroll = new ScrollView(this.panel, { follow: 'end', scrollbar: 'auto' });
@@ -93,7 +96,7 @@ export class TerminalUI {
         else void app.close();
         return { consume: true };
       }
-      if(matchesKey(data,'shift+tab')&&!this.pending){void app.setMode((app.engine.pendingSettings.agentMode||app.engine.config.agentMode)==='plan'?'execute':'plan').catch(e=>this.note(e.message,true));return{consume:true};}
+      if(matchesKey(data,'shift+tab')&&!this.pending){this.toggleMode();return{consume:true};}
       if(matchesKey(data,'escape')&&!this.pending&&app.engine.busy){const now=Date.now();if(now-(this.lastEscape||0)<600){this.lastEscape=0;app.engine.stop();}else this.lastEscape=now;return{consume:true};}
       if (matchesKey(data, 'ctrl+d') && !this.pending && !this.editor.getText()) { void app.close(); return { consume: true }; }
     });
@@ -102,7 +105,23 @@ export class TerminalUI {
     this.closed=false;
     this.tui.start();
   }
-  stop() { this.closed=true; this.hideLogo(); clearTimeout(this.renderTimer); this.pending?.cancel(); clearTimeout(this.renderTimer); this.tui.stop(); }
+  stop() { this.closed=true; this.hideLogo();this.stopMotion();clearTimeout(this.renderTimer); this.pending?.cancel(); clearTimeout(this.renderTimer); this.tui.stop(); }
+  toggleMode() {
+    if(this.modeSwitch)return;
+    const mode=this.app.engine.pendingSettings.agentMode||this.app.engine.config.agentMode;
+    this.modeSwitch=this.app.setMode(mode==='plan'?'execute':'plan').catch(e=>this.note(e.message,true)).finally(()=>{this.modeSwitch=null;this.render();});
+    this.render();
+  }
+  stopMotion() { clearInterval(this.motionTimer);this.motionTimer=null; }
+  syncMotion() {
+    const active=this.response?.active||this.openTools.size||this.lastUser?.animate!==false&&this.lastUser&&this.now()-this.lastUser.started<240;
+    if(this.closed||this.app.engine.config.animations===false||!active){this.stopMotion();return;}
+    if(!this.motionTimer){this.motionTimer=setInterval(()=>{this.syncMotion();if(!this.closed)this.tui.requestRender();},80);this.motionTimer.unref();}
+  }
+  finishResponse(phase='') {
+    if(this.response){this.response.phase=phase;this.response.active=false;if(!this.response.text)this.transcript.removeChild(this.response);}
+    this.response=null;this.stream=null;this.syncMotion();
+  }
   showLogo() {
     if (this.logoAnimation || this.pending) return;
     this.logoAnimation = new PsiAnimation({ terminal: this.terminal, config:()=>this.app.engine.config, onClose: () => this.hideLogo() });
@@ -119,43 +138,40 @@ export class TerminalUI {
     if (!this.renderTimer) this.renderTimer = setTimeout(() => { this.renderTimer = null; this.tui.requestRender(); }, 35);
   }
   note(text, isError = false) { this.transcript.addChild(new Text(`  ${isError ? error(safe(text)) : dim(safe(text))}`, 0, 1)); this.render(); }
-  user(text) { this.transcript.addChild(new Text(`  ${this.paint('›')} ${safe(text)}`, 0, 1)); this.render(); }
+  user(text,options) { this.lastUser=new UserMessage(this,text,options);this.transcript.addChild(this.lastUser);if(options?.animate!==false)this.syncMotion();this.render(); }
   markdown(text, label = true) {
-    if (label) this.transcript.addChild(new Text(`  ${this.paint('Ψ')}`, 0, 0));
-    const component = new Markdown(safe(text), 2, 1, this.markdownTheme); this.transcript.addChild(component); this.render(); return component;
+    const component = label?new AssistantMessage(this,text):new Markdown(safe(text),5,1,this.markdownTheme);this.transcript.addChild(component);this.render();return component;
   }
   event(event) {
     if(this.closed)return;
     if(event.type==='settings_queued')this.note('Settings saved for the next model/tool boundary.');
-    if(event.type==='settings'){this.tui.invalidate();this.tui.requestRender(true);}
-    if(event.type==='waiting')this.note(event.reason+' · Escape twice to stop; /settings or /accounts can resolve the wait.');
+    if(event.type==='settings'){this.syncMotion();this.tui.invalidate();this.tui.requestRender(true);}
+    if(event.type==='waiting'){this.finishResponse('partial response');this.note(event.reason+' · Escape twice to stop; /settings or /accounts can resolve the wait.');}
     if(event.type==='account_switched')this.note(`Switched account: ${event.previous} → ${event.account.name}`);
     if(event.type==='model_fallback')this.note(`Using configured fallback: ${event.model}`);
     if(event.type==='account_exhausted')this.note(`${event.account.name}: checking another configured account.`);
-    if (event.type === 'request_start') { this.activity = event.summary ? 'compacting' : 'thinking'; this.streamText = ''; this.stream = null; }
-    if (event.type === 'text_delta' && !event.summary) {
-      if (!this.stream) this.stream = this.markdown('');
-      this.activity = 'writing'; this.streamText += event.delta;
-      // UI memory is bounded separately from the full session journal.
-      this.stream.setText(safe(this.streamText.slice(-100000))); this.render();
+    if (event.type === 'request_start') {
+      this.finishResponse('partial response');this.activity=event.summary?'compacting':'thinking';this.streamText='';
+      this.response=new AssistantMessage(this,'',event.summary?'compacting context':'thinking');this.stream=this.response;
+      this.transcript.addChild(this.response);this.syncMotion();
     }
+    if (event.type === 'text_delta' && !event.summary) {
+      if(!this.response){this.response=new AssistantMessage(this,'','responding');this.stream=this.response;this.transcript.addChild(this.response);this.streamText='';}
+      this.activity = 'writing';this.response.phase='responding';this.streamText += event.delta;
+      // UI memory is bounded separately from the full session journal.
+      this.stream.setText(safe(this.streamText.slice(-100000)));this.syncMotion();this.render();
+    }
+    if(event.type==='request_end')this.finishResponse();
     if (event.type === 'tool_start') {
       this.activity = event.call.name;
-      const a = event.call.arguments; const detail = a.command || a.path || a.url || a.query || a.action || '';
-      this.note(`${event.call.name}  ${String(detail).slice(0, 170)}`);
+      const tool=new ToolMessage(this,event);this.openTools.set(event.call.id,tool);this.transcript.addChild(tool);this.syncMotion();
     }
     if (event.type === 'tool_end') {
-      const text = event.result.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
-      let display = text;
-      try {
-        const parsed = JSON.parse(text);
-        if (parsed && typeof parsed === 'object' && 'output' in parsed) display = `${parsed.status} · job ${parsed.id}${parsed.exitCode !== undefined ? ` · exit ${parsed.exitCode}` : ''}\n${parsed.output}`;
-        else if (parsed?.title && parsed?.url) display = `${parsed.title}\n${parsed.url}\n${parsed.text || ''}`;
-      } catch {}
-      const preview = display.split('\n').slice(0, 4).join('\n').slice(0, 450);
-      this.note(`${event.result.isError ? 'failed' : 'done'} · ${(event.duration / 1000).toFixed(1)}s\n${preview}`, event.result.isError);
+      const tool=this.openTools.get(event.call.id)||new ToolMessage(this,event);
+      if(!this.openTools.has(event.call.id))this.transcript.addChild(tool);
+      tool.finish(event);this.openTools.delete(event.call.id);this.syncMotion();
     }
-    if (event.type === 'retry') this.note(`Provider retry ${event.attempt} in ${(event.delay / 1000).toFixed(1)}s: ${event.error}`, true);
+    if (event.type === 'retry') {this.finishResponse('partial response');this.note(`Provider retry ${event.attempt} in ${(event.delay / 1000).toFixed(1)}s: ${event.error}`, true);}
     if (event.type === 'compacted') this.note(`Context compacted: ~${event.before} → ~${event.after} tokens. Full history saved.`);
     if (event.type === 'queued') this.note('Message queued for the next tool boundary.');
     if (event.type === 'stopped') this.note('Stopped. Queued messages and unfinished goals are saved.');
@@ -164,7 +180,7 @@ export class TerminalUI {
     if(event.type==='agent_finished')this.note(`Worker ${event.agent.name}: ${event.agent.status}`);
     if (event.type === 'error') this.note(event.error, true);
     if (event.type === 'goal_complete') this.note(`Objective complete. ${event.summary}`);
-    if (event.type === 'run_end') { this.activity = ''; this.stream = null; }
+    if (event.type === 'run_end') {this.finishResponse(event.status==='stopped'?'stopped':['error','limited'].includes(event.status)?'partial response':'');this.activity='';this.openTools.clear();this.syncMotion();}
     this.render();
   }
   async choose(title, items, options={}) {
@@ -208,5 +224,5 @@ export class TerminalUI {
       this.editor.disableSubmit = true; this.tui.setFocus(component); this.render();
     });
   }
-  clear() { this.transcript.clear(); this.scroll.scrollToEnd(); this.tui.resetTextSelection(); this.render(); }
+  clear() {this.response=null;this.stream=null;this.lastUser=null;this.openTools.clear();this.stopMotion();this.transcript.clear();this.scroll.scrollToEnd();this.tui.resetTextSelection();this.render();}
 }

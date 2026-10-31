@@ -33,9 +33,17 @@ try {
   browser=await chromium.launch({executablePath:process.env.PSI_CHROME_PATH||'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',headless:true});
   const page=await browser.newPage({viewport:{width:1040,height:744},deviceScaleFactor:2});
   await mkdir(new URL('../docs/',import.meta.url),{recursive:true});
-  for (const [name,animation] of [['terminal',false],['logo-3d',true],['settings',false]]) {
+  for (const [name,animation] of [['terminal',false],['logo-3d',true],['settings',false],['conversation',false]]) {
     let settings;
     if(name==='settings'){ui.hideLogo();settings=app.settingsMenu();}
+    if(name==='conversation'){
+      ui.clear();ui.user('Inspect the baseline and prepare the next experiment.',{animate:false});
+      ui.markdown('I’ll verify the frozen source and inspect the replay evidence before selecting a candidate.');
+      const call={id:'preview-read',name:'read',arguments:{path:'bots/vision-v6/manifest.json'}};
+      ui.event({type:'tool_start',call});ui.event({type:'tool_end',call,duration:180,result:{isError:false,content:[{type:'text',text:'Baseline identity verified. Source hashes match the frozen manifest.'}]}});
+      ui.event({type:'request_start'});ui.event({type:'text_delta',delta:'The baseline is unchanged. I’m checking both sides of the paired fixtures and keeping the candidate separate from the incumbent.'});
+      session.state.progress={percent:64};ui.editor.setText('Compare both sides before changing the strategy.');
+    }
     if(animation) { ui.showLogo(); ui.logoAnimation.started-=520; }
     ui.tui.renderNow();
     const lines=ui.tui.getScreenLines();
@@ -43,5 +51,5 @@ try {
     await page.screenshot({path:new URL(`../docs/${name}.png`,import.meta.url).pathname});
     if(settings){ui.pending?.cancel();await settings;}
   }
-  console.log('Rendered terminal, 3D logo and settings previews from actual terminal frames.');
+  console.log('Rendered terminal, 3D logo, settings and conversation previews from actual terminal frames.');
 } finally {ui?.stop();await app?.close();await browser?.close();await rm(home,{recursive:true,force:true});}

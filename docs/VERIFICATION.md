@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **72 passing tests**.
+- `npm run verify`: syntax checks and **75 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -66,3 +66,11 @@ Actual API invoices and real competition transactions were not exercised in this
 - Windows CI exposed transient file-sharing violations during atomic snapshot replacement. Writes now retry those bounded errors while preserving the prior committed file; a fault-injection test covers the behavior. Worker completion/exit races and cross-platform graceful cancellation also have explicit tests.
 
 - A Linux watcher race could defer completed jobs until the 30-second backup check. Completion events arriving during an in-flight read now schedule a fresh read, with a deterministic regression test.
+
+## Message and composer polish
+
+- The actual terminal renderer verifies the PLAN/EXECUTE control in the draft row, mouse toggling, multiline draft preservation and narrow-width bounds.
+- Deterministic animation-time checks verify eased send feedback and active response motion, immediate full streamed text, and timer cleanup at completion and close.
+- Disabled UI animations retain static response/tool state without animation timers. Tool-only requests leave no empty assistant message, completed tool rows update in place, and background job identity/status remain visible.
+- Progress uses full-height solid blocks. Wide terminals also show the estimated remaining percentage.
+- `docs/conversation.png` is a preview from the actual renderer with illustrative data, not evidence of a live Battlecode experiment.
