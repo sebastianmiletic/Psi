@@ -36,9 +36,9 @@ test('footer hides provider, right-aligns thinking, and shows the active account
   f.app.activeAccount = { id: 'a', name: 'Personal' }; f.app.activeUsage = { totalTokens: 1250, requests: 2 };
   const lines = ui.footer.render(100).map(stripTerminalSequences);
   assert.ok(lines[0].startsWith('  test')); assert.ok(lines[0].endsWith('thinking off'));
-  assert.equal(visibleWidth(lines[0]),99); assert.doesNotMatch(lines.join('\n'), /fixture|\$|987/);
-  assert.match(lines[1], /Personal.*1.3k tokens.*2 calls in Psi/);
-  assert.match(lines[1], /quota unavailable/);
+  assert.equal(visibleWidth(lines[0]),99); assert.doesNotMatch(lines.join('\n'), /fixture|987/);
+  assert.match(lines[1], /Personal.*session.*1.3k tokens/);
+  assert.match(lines[1], /session/);
   f.app.engine.busy = false;
 });
 

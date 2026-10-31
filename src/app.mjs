@@ -1,7 +1,11 @@
+import { existsSync } from 'node:fs';
 import { readFile, writeFile, stat, appendFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
+import { Battlecode } from './battlecode.mjs';
+import { settingItems } from './settings.mjs';
+import { accents } from './theme.mjs';
 import { AccountUsage, usageLabel } from './usage.mjs';
 import { Registry } from './providers.mjs';
 import { Session } from './session.mjs';
@@ -19,9 +23,17 @@ export class App {
   bind() {
     this.jobs = new Jobs(this.home, this.session.meta.id);
     this.tools = new Tools({ session: this.session, jobs: this.jobs, config: { ...this.config, ...this.session.state.settings }, onEvent: e => this.event(e) });
+    this.battlecode=new Battlecode({session:this.session,jobs:this.jobs,config:this.config,home:this.home});this.tools.projectAdapter=this.battlecode;
     this.engine = new Engine({ registry: this.registry, session: this.session, tools: this.tools, config: this.config, onEvent: e => this.event(e) });
+    this.battlecode.config=this.engine.config;
+    this.syncProjectTools();
+  }
+  syncProjectTools() {
+    for(const name of this.tools.entries.keys())if(name.startsWith('battlecode_'))this.tools.entries.delete(name);
+    if(this.engine.config.profile==='battlecode'&&existsSync(join(this.session.meta.cwd,'tools/vision/live_trial.py')))this.battlecode.register(this.tools);
   }
   event(event) {
+    if(event.type==='settings')this.syncProjectTools();
     if (event.account && event.account.provider === this.engine.model.provider) {
       this.activeAccount = event.account;
       if (event.accountUsage) this.activeUsage = event.accountUsage;
@@ -33,15 +45,15 @@ export class App {
     }
     this.ui?.event(event); this.options.onEvent?.(event);
   }
-  async refreshAccount() {
+  async refreshAccount({live=false}={}) {
     const account = await this.registry.accounts.selected(this.engine.model.provider);
     const configured = account.type !== 'ambient' || !!await this.registry.models.checkAuth(account.provider);
-    this.activeAccount = configured ? account : null; this.activeUsage = await this.accountUsage.get(account.id);
+    account.billingMode=this.registry.billingMode(account);this.activeAccount = configured ? account : null; this.activeUsage = live && account.type==='oauth'?await this.engine.quota.refresh(account,{signal:this.quotaController?.signal}):await this.accountUsage.get(account.id);
     this.ui?.render(); return { account: this.activeAccount, usage: this.activeUsage };
   }
   async startUI() {
     await this.refreshAccount();
-    const { TerminalUI } = await import('./ui.mjs'); this.ui = new TerminalUI(this); this.ui.start();
+    const { TerminalUI } = await import('./ui.mjs'); this.ui = new TerminalUI(this); this.ui.start(); this.startUsageMonitor();
     if (this.session.messages.length) {
       this.ui.note(`Resumed ${this.session.meta.id}. ${this.session.messages.length} context messages.`);
       for (const m of this.session.messages.slice(-8)) {
@@ -50,14 +62,40 @@ export class App {
       }
     }
   }
+  startUsageMonitor() {
+    clearInterval(this.quotaTimer);this.quotaController?.abort();this.quotaController=new AbortController();
+    if(this.activeAccount?.type!=='oauth')return;
+    const poll=()=>{if(!this.closing)void this.refreshAccount({live:true}).catch(()=>{});};poll();
+    this.quotaTimer=setInterval(poll,Math.max(60,this.engine.config.quotaRefreshSeconds||120)*1000);this.quotaTimer.unref();
+  }
+  async settingsMenu() {
+    while(true){
+      const c={...this.engine.config,...this.engine.pendingSettings};
+      const selected=await this.ui.choose('Settings',settingItems.map(item=>({value:item.id,label:item.label,description:`${item.special==='prices'?'configure':Array.isArray(c[item.id])?c[item.id].join(', ')||'none':typeof c[item.id]==='boolean'?(c[item.id]?'on':'off'):c[item.id]??'default'}${item.description?' · '+item.description:''}`})));
+      if(!selected)return;
+      const item=settingItems.find(i=>i.id===selected);let value;
+      if(item.special==='model'){await this.selectModel();continue;}
+      if(item.special==='effort'){value=await this.ui.choose('Thinking effort',getSupportedThinkingLevels(this.engine.model).map(v=>({value:v,label:v})));if(!value)continue;}
+      else if(item.special==='prices'){
+        const key=this.engine.config.model,previous=c.customPrices?.[key]||this.engine.model.cost,prices={};let cancelled=false;
+        for(const field of ['input','output','cacheRead','cacheWrite']){const answer=await this.ui.ask({type:'text',message:`${field} USD per million tokens`,placeholder:String(previous[field]||0)});if(answer===null){cancelled=true;break;}const n=Number(answer);if(!Number.isFinite(n)||n<0){this.ui.note('Enter a nonnegative price.',true);cancelled=true;break;}prices[field]=n;}
+        if(!cancelled)await this.update({customPrices:{...c.customPrices,[key]:prices}});continue;
+      } else if(item.boolean)value=!c[item.id];
+      else if(item.values){value=await this.ui.choose(item.label,item.values.map(v=>({value:v,label:v})));if(value===null)continue;if(item.id==='accent'&&value==='custom'){value=await this.ui.ask({type:'text',message:'Accent colour',placeholder:'#80cda8 or oklch(70% 0.12 200)'});if(!value)continue;}}
+      else{value=await this.ui.ask({type:'text',message:item.label,placeholder:item.id==='fallbackModels'?'openai-codex/model, anthropic/model':String(c[item.id]??'')});if(value===null)continue;
+        if(item.number)value=Number(value);else if(item.id==='fallbackModels')value=value.split(',').map(s=>s.trim()).filter(Boolean);else if(item.id==='summaryModel')value=value==='same'||!value?null:value;}
+      try{await this.update({[item.id]:value});}catch(e){this.ui.note(e.message,true);}
+    }
+  }
   async changeSession(session) {
     if (this.engine.busy) throw new Error('Stop the current run first.');
     await this.tools.close(); this.session = session; this.bind();
     if (this.ui) { const { CombinedAutocompleteProvider } = await import('@earendil-works/pi-tui'); const { commands } = await import('./ui.mjs'); this.ui.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, session.meta.cwd)); }
     await this.refreshAccount();
+    if(this.ui)this.startUsageMonitor();
     this.ui?.clear(); this.ui?.note(`Session ${session.meta.id}\n${session.meta.cwd}`);
   }
-  async update(patch) { await this.engine.settings(patch); this.config = await saveConfig(patch, this.home); await this.refreshAccount(); }
+  async update(patch) { await this.engine.settings(patch); this.config = await saveConfig(patch, this.home); await this.refreshAccount(); if(this.ui)this.startUsageMonitor(); this.engine.wake?.(); }
   async selectModel(query = '') {
     if (query) {
       let model; try { model = this.registry.find(query); } catch (e) { if (!this.ui) throw e; }
@@ -70,7 +108,7 @@ export class App {
     if (choice) { await this.update({ model: choice }); this.ui.note(`Model: ${choice}`); }
   }
   async accountMenu(action) {
-    if (this.engine.busy) throw new Error('Stop the current run before changing accounts.');
+    if (this.engine.busy&&!this.engine.waiting) throw new Error('Stop the current run before changing accounts, or wait for a quota pause.');
     action ||= await this.ui.choose('Accounts', [
       { value: 'login', label: 'Login new account', description: 'Add any provider, including another account with the same provider' },
       { value: 'switch', label: 'Switch accounts', description: 'Choose any saved account' },
@@ -141,7 +179,10 @@ export class App {
     }
     const match = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()); const command = match?.[1]; const arg = match?.[2] || '';
     if (this.authController && !['stop', 'quit', 'help'].includes(command)) throw new Error('Finish or cancel account sign-in first.');
-    if (this.engine.busy && !['stop', 'logo', 'usage', 'tools', 'cost', 'status', 'jobs', 'help', 'quit'].includes(command)) throw new Error('Use /stop before changing settings, or type a message to steer the active run.');
+    if (this.engine.busy && !this.engine.waiting && !['stop', 'settings', 'logo', 'usage', 'tools', 'project', 'experiments', 'cost', 'status', 'jobs', 'help', 'quit'].includes(command)) throw new Error('Use /stop before changing settings, or type a message to steer the active run.');
+    if(command==='settings')return this.settingsMenu();
+    if(command==='project'){const p=await this.battlecode.inspect();this.ui.note(JSON.stringify({project:p.project,baseline:p.baseline,version:p.baselineVersion,source:p.baselineHashes.fingerprint,cli:p.cli,controllers:p.scripts,policy:p.policy},null,2));return;}
+    if(command==='experiments'){const list=arg?await this.battlecode.reconcile(arg):await this.battlecode.store.list(this.session.meta.cwd);this.ui.note(JSON.stringify(list,null,2));return;}
     if (command === 'logo') { this.ui.showLogo(); return; }
     if (command === 'quit' || command === 'exit') return this.close();
     if (command === 'stop') { this.authController?.abort(); this.engine.stop(); return; }
@@ -167,9 +208,9 @@ export class App {
     }
     if (command === 'profile') { if (!['battlecode', 'general'].includes(arg)) throw new Error('Use /profile battlecode or /profile general.'); await this.update({ profile: arg }); this.ui.note(`Profile: ${arg}`); return; }
     if (command === 'usage') {
-      const { account, usage } = await this.refreshAccount();
-      this.ui.note(usageLabel(account,usage));
-      this.ui.note('Counts cover requests recorded by Psi for this account across sessions. Provider quota/rate windows are shown only when returned by the provider; other clients and account billing are not inferred.');
+      const { account, usage } = await this.refreshAccount({live:true});
+      this.ui.note(usageLabel(account,usage,{sessionCost:this.session.meteredCost,costKnown:this.session.meteredCostKnown}));
+      this.ui.note('Subscription windows are refreshed from the provider and omitted when absent. API session cost uses returned billed USD when supplied, otherwise actual token usage at configured model rates; provider invoices can differ. Token counters cover Psi activity across sessions.');
       if (usage.limits?.length) this.ui.note(JSON.stringify({ reportedAt: usage.limitsAt, limits: usage.limits },null,2));
       return;
     }
@@ -181,7 +222,7 @@ export class App {
       this.ui.note(`${u.requests} requests · ${u.input.toLocaleString()} input · ${u.output.toLocaleString()} output · ${u.cacheRead.toLocaleString()} cache read (${cached}%)\nEstimated catalog cost: $${u.cost.toFixed(5)}. Subscription quotas, tiered pricing and unknown/custom prices are not measured.`); return;
     }
     if (command === 'status') { this.ui.note(JSON.stringify({ session: this.session.meta.id, cwd: this.session.meta.cwd, status: this.session.status, model: this.engine.config.model, effort: this.engine.config.effort, profile: this.engine.config.profile, budget: this.engine.config.budget || 'unlimited', maxSteps: this.engine.config.maxSteps || 'unlimited', access: 'full host access, no approval prompts', objective: this.session.state.loopGoal || null }, null, 2)); return; }
-    if (command === 'loop') { if (!arg) throw new Error('Usage: /loop <objective>'); this.ui.user(arg); await this.engine.run(arg, { loop: true }).catch(() => {}); return; }
+    if (command === 'loop') { const objective=arg || await this.ui.ask({type:'text',message:'What should Psi achieve?',placeholder:'Describe the goal and how success can be verified'}); if(!objective?.trim())return; this.ui.user(objective); await this.engine.run(objective, { loop: true }).catch(() => {}); return; }
     if (command === 'continue') { await this.engine.run(arg || 'Continue the pending task from the recorded progress.').catch(() => {}); return; }
     if (command === 'compact') { await this.engine.run(null, { compactOnly: true }).catch(() => {}); return; }
     if (command === 'checkpoint') {
@@ -214,6 +255,6 @@ export class App {
   }
   async close() {
     if (this.closing) return; this.closing = true;
-    this.authController?.abort(); this.engine.stop(); this.ui?.stop(); await this.tools.close(); this.options.onClose?.();
+    clearInterval(this.quotaTimer);this.quotaController?.abort();this.authController?.abort(); this.engine.stop(); this.ui?.stop(); await this.tools.close(); this.options.onClose?.();
   }
 }

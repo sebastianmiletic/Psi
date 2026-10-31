@@ -7,7 +7,13 @@ const empty = () => ({ requests: 0, input: 0, output: 0, cacheRead: 0, cacheWrit
 export class AccountUsage {
   constructor(home = psiHome()) { this.home = home; this.path = join(home, 'usage.json'); }
   async get(id) { const data = await readJSON(this.path, { accounts: {} }); return data.accounts[id] || { ...empty(), limits: [] }; }
-  async record(account, { usage, limits, requestId, model } = {}) {
+  async patch(id, patch) {
+    return withLock(join(this.home,'usage.lock'),async()=>{
+      const data=await readJSON(this.path,{accounts:{}}); const row=data.accounts[id] ||= {...empty(),limits:[],recentRequests:[]};
+      Object.assign(row,patch);await atomicJSON(this.path,data);return row;
+    });
+  }
+  async record(account, { usage, limits, requestId, model, replaceLimits=false } = {}) {
     return withLock(join(this.home, 'usage.lock'), async () => {
       const data = await readJSON(this.path, { accounts: {} });
       const row = data.accounts[account.id] ||= { ...empty(), provider: account.provider, limits: [], recentRequests: [], firstSeenAt: new Date().toISOString() };
@@ -17,7 +23,11 @@ export class AccountUsage {
         row.totalTokens += count(usage.totalTokens) ?? ['input','output','cacheRead','cacheWrite'].reduce((n,k)=>n+(count(usage[k])||0),0);
         row.recentRequests = [...row.recentRequests, requestId].slice(-1000);
       }
-      if (limits?.length) { row.limits = limits; row.limitsAt = new Date().toISOString(); }
+      if (limits?.length || replaceLimits) {
+        const at=new Date().toISOString(),fresh=(limits || []).map(l=>({...l,reportedAt:at}));
+        row.limits = replaceLimits ? fresh : [...new Map([...(row.limits || []),...fresh].map(l=>[`${l.kind}:${l.label}`,l])).values()];
+        row.limitsAt = at;
+      }
       row.updatedAt = new Date().toISOString(); if (model) row.model = model;
       await atomicJSON(this.path, data); return row;
     });
@@ -45,15 +55,12 @@ export function limitsFromHeaders(provider, raw) {
 export function compactCount(n = 0) {
   return n >= 1e6 ? `${(n/1e6).toFixed(1)}m` : n >= 1e3 ? `${(n/1e3).toFixed(1)}k` : String(Math.round(n));
 }
-export function usageLabel(account, usage = {}) {
+export function usageLabel(account, usage = {}, { sessionCost, costKnown=true } = {}) {
   if (!account) return 'No account connected · /accounts';
   const prefix = account.name || 'Environment / local';
-  const count = `${compactCount(usage.totalTokens || 0)} tokens · ${usage.requests || 0} calls in Psi`;
   const now = Date.now()/1000;
-  const sampleAge = Date.now() - Date.parse(usage.limitsAt || '');
-  const quota = (usage.limits || []).filter(l => l.kind === 'quota' && (l.resetAt ? l.resetAt > now : sampleAge < 300000));
-  if (quota.length) return `${prefix} · ${quota.map(l=>`${l.label} ${Math.round(l.usedPercent)}% used`).join(' · ')} · ${count}`;
-  const rate = sampleAge < 60000 && (usage.limits || []).find(l=>l.kind === 'rate' && l.label === 'requests');
-  if (rate) return `${prefix} · ${count} · API window ${compactCount(rate.remaining)}/${compactCount(rate.limit)} calls left`;
-  return `${prefix} · ${count} · quota unavailable`;
+  const quota=(usage.limits || []).filter(l=>l.kind==='quota' && (l.resetAt ? l.resetAt>now : Date.now()-Date.parse(l.reportedAt||usage.limitsAt||'')<300000));
+  if(account.billingMode==='subscription'||(account.billingMode===undefined&&account.type==='oauth')) return prefix+(quota.length?' · '+quota.map(l=>`${l.label} ${Math.round(l.usedPercent)}% used`).join(' · '):'');
+  if(sessionCost!==undefined) return `${prefix} · session ${costKnown?'$'+sessionCost.toFixed(4):'cost unavailable'} · ${compactCount(usage.totalTokens || 0)} tokens`;
+  return `${prefix} · ${compactCount(usage.totalTokens || 0)} tokens · ${usage.requests || 0} calls in Psi`;
 }

@@ -1,3 +1,4 @@
+import { accentColor } from './theme.mjs';
 import { colorToRgb, parseColor, truncateToWidth } from '@earendil-works/pi-tui';
 
 // A small extruded mesh, shaded on the CPU. No canvas, native binary or animation dependency.
@@ -22,10 +23,13 @@ for (let row = 0; row < ROWS; row++) for (let col = 0; col < COLUMNS; col++) {
   if (!mask[row-1]?.[col]) face([[x,y,-z],[x+DX,y,-z],[x+DX,y,z],[x,y,z]], [0,-1,0]);
   if (!mask[row+1]?.[col]) face([[x,y+DY,z],[x+DX,y+DY,z],[x+DX,y+DY,-z],[x,y+DY,-z]], [0,1,0]);
 }
-const palette = Array.from({ length: 20 }, (_, i) => {
-  const { r, g, b } = colorToRgb(parseColor(`oklch(${30 + i * 2.5}% ${0.065 + i * 0.0015} ${164 - i * 0.6})`));
-  return { fg: `\x1b[38;2;${r};${g};${b}m`, bg: `\x1b[48;2;${r};${g};${b}m` };
-});
+const palettes=new Map();
+function paletteFor(accent) {
+  if(palettes.has(accent))return palettes.get(accent);
+  const rgb=accentColor({accent});
+  const palette=Array.from({length:20},(_,i)=>{const factor=0.35+i*0.047;const c=[rgb.r,rgb.g,rgb.b].map(n=>Math.min(255,Math.round(n*factor)));return{fg:`\x1b[38;2;${c.join(';')}m`,bg:`\x1b[48;2;${c.join(';')}m`};});
+  if(palettes.size>16)palettes.clear();palettes.set(accent,palette);return palette;
+}
 function rotation(yaw, pitch, roll) {
   const cy = Math.cos(yaw), sy = Math.sin(yaw), cx = Math.cos(pitch), sx = Math.sin(pitch), cz = Math.cos(roll), sz = Math.sin(roll);
   return ([x, y, z]) => {
@@ -34,8 +38,9 @@ function rotation(yaw, pitch, roll) {
     return [xx * cz - yy * sz, xx * sz + yy * cz, zzz];
   };
 }
-export function renderPsi(width, rows, phase = 0, animated = false) {
+export function renderPsi(width, rows, phase = 0, animated = false, accent='sage') {
   width = Math.max(1, Math.floor(width)); rows = Math.max(1, Math.floor(rows));
+  const palette=paletteFor(accent);
   const height = rows * 2;
   const pixels = new Int16Array(width * height).fill(-1), depth = new Float32Array(width * height).fill(-Infinity);
   const turn = rotation(animated ? 0.42 + phase * 0.72 : 0.42, animated ? -0.12 + Math.sin(phase * 0.63) * 0.24 : -0.12, animated ? Math.sin(phase * 0.4) * 0.09 : -0.04);
@@ -86,8 +91,9 @@ export class PsiHeader {
   invalidate() {}
   render(width) {
     const logoWidth = Math.min(12, Math.max(6, width - 4)), logoRows = 4;
-    const key = `${logoWidth}:${logoRows}`;
-    if (this.cached?.key !== key) this.cached = { key, lines: renderPsi(logoWidth,logoRows) };
+    const accent=this.app.engine.config.accent || 'sage';
+    const key = `${logoWidth}:${logoRows}:${accent}`;
+    if (this.cached?.key !== key) this.cached = { key, lines: renderPsi(logoWidth,logoRows,0,false,accent) };
     this.bounds = { x: 1, y: 1, width: logoWidth, height: logoRows };
     const path = this.app.session.meta.cwd.replace(process.env.HOME || '\0', '~');
     const labels = width >= 48 ? { 0: this.format('P S I'), 1: this.subdued('long + intensive loops'), 3: this.subdued(path) } : {};
@@ -104,8 +110,8 @@ export class PsiHeader {
 
 export class PsiAnimation {
   focused = true;
-  constructor({ terminal, onClose, now = () => performance.now() }) {
-    this.terminal = terminal; this.onClose = onClose; this.now = now; this.started = now(); this.offset = 0;
+  constructor({ terminal, onClose, config=()=>({}), now = () => performance.now() }) {
+    this.config=config; this.terminal = terminal; this.onClose = onClose; this.now = now; this.started = now(); this.offset = 0;
   }
   invalidate() {}
   render(width) {
@@ -113,7 +119,7 @@ export class PsiAnimation {
     const rows = Math.max(1, Math.min(16, Math.max(1, Math.floor(height * 0.5))));
     const columns = Math.max(1, Math.min(52, Math.max(1, Math.floor(width * 0.55))));
     const phase = (this.now()-this.started)/1000 + this.offset;
-    const glyph = renderPsi(columns, rows, phase, true);
+    const glyph = renderPsi(columns, rows, phase, this.config().animations!==false,this.config().accent);
     const padX = ' '.repeat(Math.max(0, Math.floor((width-columns)/2)));
     const padY = Math.max(0, Math.floor((height-rows-2)/2));
     const hint = 'click or esc to return';

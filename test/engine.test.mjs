@@ -43,7 +43,8 @@ test('budget blocks a request before network activity', async t => {
 test('step ceiling pauses a loop with a durable pending goal', async t => {
   const f = await fixture(t, () => ({ call: { name: 'checkpoint', args: { note: 'Experiment A complete; next experiment B.' } } }));
   f.app.engine.config.maxSteps = 1;
-  await assert.rejects(f.app.engine.run('Two experiments', { loop: true }), /request limit/);
+  const original=f.app.options.onEvent;f.app.options.onEvent=e=>{original(e);if(e.type==='waiting')f.app.engine.stop();};
+  await f.app.engine.run('Two experiments', { loop: true });
   assert.equal(f.requests.length, 1); assert.equal(f.session.state.loopGoal, 'Two experiments');
   assert.match(await readFile(join(f.session.dir, 'checkpoint.md'), 'utf8'), /experiment B/);
   const restored = await Session.load(f.session.meta.id, f.session.home);

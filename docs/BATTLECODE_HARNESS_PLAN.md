@@ -1,4 +1,6 @@
-# Psi: the Battlecode loop to build
+# Psi: original Battlecode harness design
+
+**Implementation status:** the P0 project adapter, durable experiment records, existing controller integration, replay checks, fresh-fixture confirmation and event-driven job waiting are now implemented. See [the current workflow](BATTLECODE_WORKFLOW.md) for actual tool names and behaviour. The plan below is retained as the original design, including proposed future capabilities.
 
 This plan targets `/Users/sebastianmiletic/Coding/Cambridge Battlecode 2026`. It describes capabilities and implementation priorities for Psi. It does not authorize an experiment, change a bot, queue a match or submit a version.
 

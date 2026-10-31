@@ -25,7 +25,7 @@ function terminate(cause) {
   if (reason) return;
   reason = cause;
   try { process.kill(-process.pid, 'SIGTERM'); } catch {}
-  escalation = setTimeout(() => { try { process.kill(-process.pid, 'SIGKILL'); } catch {} }, 1800); escalation.unref();
+  escalation = setTimeout(() => { try { process.kill(-process.pid, 'SIGKILL'); } catch {} }, Math.max(1800,(job.graceful_stop_ms||2000)-200)); escalation.unref();
 }
 process.on('SIGTERM', () => terminate('cancelled'));
 process.on('SIGINT', () => terminate('cancelled'));
@@ -39,7 +39,7 @@ child.on('close', async (code, signal) => {
   await new Promise(res => log.end(res));
   await atomicJSON(path, job);
   // Leave the escalation timer in place for descendants that ignore SIGTERM.
-  if (reason) await new Promise(res => setTimeout(res, 2000));
+  if (reason && (job.graceful_stop_ms||2000) <= 2000) await new Promise(res => setTimeout(res, 2000));
   clearTimeout(escalation);
   process.exit(code === 0 ? 0 : 1);
 });

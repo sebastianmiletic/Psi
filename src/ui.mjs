@@ -3,6 +3,7 @@ import {
   CombinedAutocompleteProvider, matchesKey, truncateToWidth, CURSOR_MARKER,
   colorToRgb, parseColor, visibleWidth,
 } from '@earendil-works/pi-tui';
+import { accentText } from './theme.mjs';
 import { usageLabel } from './usage.mjs';
 import { PsiHeader, PsiAnimation } from './logo.mjs';
 import { cleanTerminal, redact } from './storage.mjs';
@@ -20,7 +21,7 @@ const markdownTheme = {
   bold, italic: t => `\x1b[3m${t}\x1b[23m`, strikethrough: t => `\x1b[9m${t}\x1b[29m`, underline: t => `\x1b[4m${t}\x1b[24m`,
 };
 export const commands = [
-  ['logo', 'Animate the Psi logo'], ['model', 'Choose a provider and model'], ['effort', 'Set reasoning effort'], ['accounts', 'Login, switch or remove accounts'],
+  ['project', 'Discover the current Battlecode baseline and controller'], ['settings', 'Appearance, accounts, loop and resource settings'], ['experiments', 'Inspect durable Battlecode experiments'], ['logo', 'Animate the Psi logo'], ['model', 'Choose a provider and model'], ['effort', 'Set reasoning effort'], ['accounts', 'Login, switch or remove accounts'],
   ['provider', 'Add a custom API endpoint'], ['loop', 'Work autonomously toward an objective'], ['stop', 'Stop generation and the active tool wait'],
   ['continue', 'Continue this session'], ['new', 'Start a fresh session'], ['resume', 'Resume a saved session'], ['cd', 'Open another workspace'],
   ['jobs', 'Inspect or stop background jobs'], ['budget', 'Set estimated session cost ceiling, 0 = unlimited'],
@@ -49,8 +50,11 @@ class SecretInput {
 export class TerminalUI {
   constructor(app, { terminal = new ProcessTerminal() } = {}) {
     this.app = app; this.terminal = terminal; this.tui = new TuiAltScreen(terminal);
+    this.paint=t=>accentText(t,app.engine.config);
+    this.selectionTheme={...selectionTheme,selectedPrefix:this.paint,selectedText:t=>this.paint(bold(t))};
+    this.markdownTheme={...markdownTheme,link:this.paint,code:this.paint,listBullet:this.paint};
     this.transcript = new Transcript(); this.panel = new Container(); this.pending = null;
-    this.editor = new Editor(this.tui, { borderColor: dim, selectList: selectionTheme }, { paddingX: 1, autocompleteMaxVisible: 7 });
+    this.editor = new Editor(this.tui, { borderColor: dim, selectList: this.selectionTheme }, { paddingX: 1, autocompleteMaxVisible: 7 });
     this.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, app.session.meta.cwd));
     this.editor.onSubmit = text => {
       if (!text.trim()) return;
@@ -65,16 +69,16 @@ export class TerminalUI {
       const right = truncateToWidth(`thinking ${safe(c.effort)}`, Math.max(0,width-3));
       const left = truncateToWidth(`  ${model}`, Math.max(0,width-visibleWidth(right)-3));
       const gap = Math.max(1,width-visibleWidth(left)-visibleWidth(right)-1);
-      return [left+' '.repeat(gap)+dim(right), truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage))),width)];
+      return [left+' '.repeat(gap)+dim(right), ...(app.engine.config.showUsage===false?[]:[truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage,{sessionCost:app.session.meteredCost,costKnown:app.session.meteredCostKnown}))),width)])];
     } };
     this.scroll = new ScrollView(this.transcript, { follow: 'end', primary: true, scrollbar: 'auto' });
     this.panelScroll = new ScrollView(this.panel, { follow: 'end', scrollbar: 'auto' });
     this.layout = new VStack([
-      { component: this.header, basis: 'auto', shrink: 1, minSize: 0, visible: viewport => viewport.height >= 14 },
+      { component: this.header, basis: 'auto', shrink: 1, minSize: 0, visible: viewport => viewport.height >= 14 && app.engine.config.showLogo!==false && !this.pending },
       { component: this.scroll, basis: 0, grow: 1, minSize: 1 },
       { component: this.panelScroll, basis: 'auto', shrink: 1, minSize: 0 },
       { component: this.editor, basis: 'auto', shrink: 1, minSize: 3 },
-      { component: this.footer, basis: 2, shrink: 0, minSize: 2 },
+      { component: this.footer, basis: 'auto', shrink: 0, minSize: 1 },
     ]);
     this.tui.setLayoutRoot(this.layout);
     this.tui.setFocus(this.editor);
@@ -92,15 +96,16 @@ export class TerminalUI {
     });
   }
   start() {
+    this.closed=false;
     this.note('Build, research, benchmark. Pick a model with /model, connect an account with /accounts.\nTools run with full access. /help shows every command.');
     this.tui.start();
   }
-  stop() { this.hideLogo(); clearTimeout(this.renderTimer); this.pending?.cancel(); clearTimeout(this.renderTimer); this.tui.stop(); }
+  stop() { this.closed=true; this.hideLogo(); clearTimeout(this.renderTimer); this.pending?.cancel(); clearTimeout(this.renderTimer); this.tui.stop(); }
   showLogo() {
     if (this.logoAnimation || this.pending) return;
-    this.logoAnimation = new PsiAnimation({ terminal: this.terminal, onClose: () => this.hideLogo() });
+    this.logoAnimation = new PsiAnimation({ terminal: this.terminal, config:()=>this.app.engine.config, onClose: () => this.hideLogo() });
     this.logoOverlay = this.tui.showOverlay(this.logoAnimation, { width: '100%', maxHeight: '100%', row: 0, col: 0, margin: 0 });
-    this.logoTimer = setInterval(() => this.tui.requestRender(), 1000 / 24); this.logoTimer.unref();
+    if(this.app.engine.config.animations!==false){this.logoTimer = setInterval(() => this.tui.requestRender(), 1000 / 24); this.logoTimer.unref();}
     this.tui.requestRender();
   }
   hideLogo() {
@@ -108,15 +113,23 @@ export class TerminalUI {
     this.logoOverlay?.hide(); this.logoOverlay = null;
   }
   render() {
+    if(this.closed)return;
     if (!this.renderTimer) this.renderTimer = setTimeout(() => { this.renderTimer = null; this.tui.requestRender(); }, 35);
   }
   note(text, isError = false) { this.transcript.addChild(new Text(`  ${isError ? error(safe(text)) : dim(safe(text))}`, 0, 1)); this.render(); }
-  user(text) { this.transcript.addChild(new Text(`  ${accent('›')} ${safe(text)}`, 0, 1)); this.render(); }
+  user(text) { this.transcript.addChild(new Text(`  ${this.paint('›')} ${safe(text)}`, 0, 1)); this.render(); }
   markdown(text, label = true) {
-    if (label) this.transcript.addChild(new Text(`  ${accent('Ψ')}`, 0, 0));
-    const component = new Markdown(safe(text), 2, 1, markdownTheme); this.transcript.addChild(component); this.render(); return component;
+    if (label) this.transcript.addChild(new Text(`  ${this.paint('Ψ')}`, 0, 0));
+    const component = new Markdown(safe(text), 2, 1, this.markdownTheme); this.transcript.addChild(component); this.render(); return component;
   }
   event(event) {
+    if(this.closed)return;
+    if(event.type==='settings_queued')this.note('Settings saved for the next model/tool boundary.');
+    if(event.type==='settings'){this.tui.invalidate();this.tui.requestRender(true);}
+    if(event.type==='waiting')this.note(event.reason+' · /stop ends the loop; /settings or /accounts can resolve the wait.');
+    if(event.type==='account_switched')this.note(`Switched account: ${event.previous} → ${event.account.name}`);
+    if(event.type==='model_fallback')this.note(`Using configured fallback: ${event.model}`);
+    if(event.type==='account_exhausted')this.note(`${event.account.name}: checking another configured account.`);
     if (event.type === 'request_start') { this.activity = event.summary ? 'compacting' : 'thinking'; this.streamText = ''; this.stream = null; }
     if (event.type === 'text_delta' && !event.summary) {
       if (!this.stream) this.stream = this.markdown('');
@@ -154,7 +167,7 @@ export class TerminalUI {
     return this.interact(title, ({ resolve, cancel }) => {
       const input = new Input({ prompt: '  Search: ', placeholder: 'type to filter' });
       input.focused = true;
-      const list = new SelectList(items, 9, selectionTheme, { minPrimaryColumnWidth: 22, maxPrimaryColumnWidth: 55 });
+      const list = new SelectList(items, 9, this.selectionTheme, { minPrimaryColumnWidth: 22, maxPrimaryColumnWidth: 55 });
       list.onSelect = item => resolve(item.value); list.onCancel = cancel;
       const component = {
         focused: true, invalidate() { input.invalidate(); list.invalidate(); },

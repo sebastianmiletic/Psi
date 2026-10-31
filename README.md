@@ -59,7 +59,7 @@ psi provider add --id local --url http://localhost:8000/v1 --model my-model --ke
 psi -m local/my-model --effort off
 ```
 
-Custom endpoint prices default to unknown/zero estimates. Set accurate model limits and `cost` fields in `~/.psi/config.json` when using cost ceilings with a custom endpoint.
+Custom endpoint prices default to unknown. Use `/settings` → **API pricing for current model** to configure USD per million input/output/cache tokens. A missing price is shown as unavailable, rather than a free session.
 
 ## Terminal commands
 
@@ -70,7 +70,10 @@ Custom endpoint prices default to unknown/zero estimates. Set accurate model lim
 | `/effort [level]` | Choose a model-supported reasoning effort |
 | `/accounts` | Login, switch or remove accounts |
 | `/provider` | Add a custom endpoint and model |
-| `/loop <objective>` | Work until the objective is finished, interrupted or limited |
+| `/settings` | Searchable settings UI for appearance, accounts, models, limits and execution |
+| `/loop [objective]` | Ask for a goal, then work until verified completion or user stop |
+| `/project` | Inspect the documented baseline and existing Battlecode controllers |
+| `/experiments [id]` | List durable experiments or reconcile one experiment |
 | `/continue [instruction]` | Continue saved progress |
 | `/stop` | Stop inference and active tool waiting |
 | `/jobs [id]` | List jobs or inspect output |
@@ -92,7 +95,7 @@ Custom endpoint prices default to unknown/zero estimates. Set accurate model lim
 | `/export [path]` | Export the current session context as Markdown |
 | `/status`, `/help`, `/quit` | Inspect state, see commands or exit |
 
-The prompt stays pinned to the bottom of the terminal while the conversation scrolls above it. Its footer shows the model on the left and thinking level aligned to the right, without a provider label. The next row shows usage for the selected account. Costs remain available explicitly through `/cost`, with no automatic cost display.
+The prompt stays pinned to the bottom of the terminal while the conversation scrolls above it. Its footer shows the model on the left and thinking level aligned to the right, without a provider label. The next row shows the selected account: subscription accounts display only reported usage windows; metered API accounts display the current session cost. No provider label appears in either footer row.
 
 Click the compact shaded Ψ mark to expand it into a shaded, rotating 3D mesh. Click again or press Escape to return to your unchanged prompt. `/logo` provides the same interaction from the keyboard. Animation renders only while open and adds no dependencies.
 
@@ -104,15 +107,35 @@ Type to filter pickers, use arrows to navigate and Enter to select. Tab complete
 
 Use `/accounts` → **Login new account** repeatedly to add any number of named accounts, including several from the same provider. Saved credentials are separate; connecting another account does not overwrite the first. Use **Switch accounts** to select from the flat cross-provider list. Short account IDs distinguish duplicate names.
 
-The footer shows the selected account's requests and tokens recorded by Psi across sessions. Each inference request pins its account before authentication and refresh, preventing a concurrent account switch from mixing credentials or usage totals. Local totals are stored privately in `~/.psi/usage.json`.
+Subscription accounts show their provider-reported **5h** and **7d** usage windows when supplied. Codex and Claude OAuth accounts refresh on startup, before inference and periodically while the UI is open (default 120 seconds; minimum 60). Absent, unlimited or expired windows are omitted. `/usage` includes the snapshot timestamp and reset data. Polling uses the usage endpoint, not paid inference, and backs off when the service rate-limits it. These endpoints may be unavailable for some accounts or change independently of Psi; unavailable data is never inferred from tokens.
 
-When a provider returns usable quota/rate-limit metadata, Psi displays that snapshot separately. Otherwise it says **quota unavailable**. Local token totals do not establish a subscription's remaining allowance, provider-wide billing, or usage from other clients. `/usage` shows the details, including reported reset metadata, without displaying credentials. No API quota polling or hidden paid requests run while idle.
+Metered API accounts show **session $…** below the prompt. Psi uses billed USD returned by a provider when available; otherwise it calculates cost from actual returned token usage at the configured model rates. Unknown pricing shows **cost unavailable**. This is not an invoice guarantee: provider pricing tiers, discounts and reporting can differ. The session total includes metered requests across accounts/models and survives resume; `/new` starts a fresh total. Subscription activity is excluded from that monetary total.
 
-## Battlecode access and implementation plan
+Enable **Automatic account switching** in `/settings` to move between saved accounts of the same provider on exhaustion or authentication failure. You can set a reported usage threshold. **Cross-provider fallback models** is an explicit ordered list of `provider/model` routes; an empty list keeps the current provider. Switching is off by default. If every eligible account is unavailable, a goal waits and rechecks until an account recovers, settings change or the user stops it. Accounts remain pinned per request; switching cannot mix credentials or usage attribution. Local per-account request/token counters live in `~/.psi/usage.json` and cover Psi activity only.
 
-The AI can already edit files, execute shell/compilers/tests, manage background jobs, run resumable local sweeps, fetch/search websites, use a JavaScript browser, inspect images and preserve checkpoints. `/tools` shows its actual tool definitions.
+## Settings
 
-The [Battlecode harness plan](docs/BATTLECODE_HARNESS_PLAN.md) maps these capabilities to the existing VisionV6/v248 workflow, distinguishes current tools from proposed additions, and prioritizes a durable experiment controller, the existing live-trial/replay tools, evidence gates and event-driven waiting. It keeps local correctness separate from live-strength claims. Writing this plan did not change or run the Battlecode bot.
+`/settings` opens a searchable keyboard UI. Type to filter, use arrows and Enter to choose, and Escape to go back. Settings persist under `~/.psi/config.json`.
+
+- Sage, cyan, blue, violet, rose or amber accents, plus custom hex/OKLCH colours.
+- Logo visibility, animation and account usage visibility.
+- Automatic account switching, threshold, explicit fallback models and usage refresh interval.
+- Main/compaction model, thinking, output tokens, prompt-cache retention and tool preview size.
+- Read concurrency, loop retry delay, budget/request limits, API prices, Battlecode CLI and debug logging.
+
+Appearance changes apply immediately. Model/execution changes during inference apply at the next boundary, preserving the in-flight request. A waiting loop wakes when its settings change.
+
+![Psi settings UI](docs/settings.png)
+
+## Battlecode project adapter
+
+Psi now integrates the existing Vision controller in `/Users/sebastianmiletic/Coding/Cambridge Battlecode 2026`. `/project` verifies the README/manifest baseline and source hashes without contacting the platform. The adapter exposes tools only in a recognized Battlecode workspace with the Battlecode profile selected.
+
+A durable experiment isolates the candidate, freezes source and WASM identity, runs local correctness commands, invokes the existing `live_trial.py`/`live_collect.py`/`live_report.py`, and verifies complete replay-backed discovery and preselected fresh confirmation panels. Live intents and receipts are persisted before advancing. Unknown live outcomes require reconciliation rather than duplicate creation. Live workers allow the controller to restore the incumbent before cancellation completes.
+
+Decisions require exact map/opponent/seat pairing, all five games, matching engine and outcomes, archive hashes, the candidate marker in actual own-team replay stdout, no recorded runtime faults, and incumbent restoration readbacks. Collected evidence is hashed when the worker commits it and checked again before deciding. A candidate must preserve every incumbent win and gain a win in discovery and across the fresh confirmation set. Confirmation reuses the exact submitted candidate version. Passing yields **qualified_for_review**, not automatic release or a claim of broad ranked superiority.
+
+See the [implemented workflow and tool examples](docs/BATTLECODE_WORKFLOW.md), and the [original design rationale](docs/BATTLECODE_HARNESS_PLAN.md). Building this adapter did not queue real competition games or change the active bot.
 
 ## Long, low-overhead loops
 
@@ -132,22 +155,24 @@ psi --resume SESSION_ID --json -p "Report pending work and continue."
 
 `--json` emits event JSONL for automation. Use a process supervisor such as `tmux`, `launchd` or your existing runner to survive terminal loss or reboot. Detached benchmark jobs survive a Psi process exit; they do not survive a machine reboot or sleep as continuously running compute.
 
-Psi's normal agent loop continues through tool calls. Autonomous `/loop` also continues after plain responses and uses an explicit `finish` tool to record completion. It pauses after three consecutive autonomous responses without tool progress to avoid repeatedly paying for stalled narration.
+Psi's normal agent loop continues through tool calls. `/loop` without an argument asks for the objective. Autonomous goals continue after plain final responses, recoverable provider errors and stalls; `finish` requires a verified summary and existing evidence paths. Battlecode completion can additionally validate the experiment's fresh-fixture qualification.
+
+A reached budget/request limit keeps the goal **waiting**, with no further inference until the limit changes or the run resumes. Exhausted accounts and temporary failures also wait and recover. `/stop`, Escape or Ctrl+C stops the run and preserves the unfinished goal; `/continue` or a resumed session continues it. Defaults impose no cost or request ceiling. A killed process or reboot requires restarting Psi and resuming the saved session; no harness can guarantee uninterrupted execution through host failure or independently prove every natural-language objective.
 
 Efficiency mechanisms:
 
-- Lazy provider SDK and browser loading. No idle polling or animation timer when the logo view is closed.
+- Lazy provider SDK and browser loading. No idle animation timer when the logo view is closed; subscription usage refresh runs at a bounded, configurable interval.
 - Stable session identifiers and provider-supported prompt-cache hints.
 - Configurable reasoning and output budgets; an optional cheaper compaction model.
 - Bounded tool results with full text saved to artifact files.
 - Parallel independent reads/fetches/searches, ordered writes and edits.
-- Detached jobs, bounded logs and a resumable sweep runner instead of one model turn per match.
+- Detached jobs, bounded logs, event-driven `job await`, and a resumable sweep runner instead of one model turn per match or queue poll.
 - Automatic context compaction. Append-only journals preserve evidence; session loading streams the journal rather than reading it all into memory.
 - A maximum of 100 visible transcript components, independent of the full disk journal.
-- Bounded retries with exponential backoff for transient provider errors; authentication failures surface immediately.
+- Bounded request retries with exponential backoff; goal-level recovery and optional account/model failover preserve long tasks.
 - Writer locks, partial-journal recovery and explicit unknown outcomes for tools interrupted by a crash. Psi does not silently re-execute an uncertain side effect.
 
-Cost is a **catalog-based estimate**, not a provider billing guarantee. Subscription quotas, unknown/custom prices, tiered/long-context rates and provider accounting differences are not fully measured. Before each request Psi reserves estimated input and maximum output cost against `/budget`. Defaults impose no cost or step ceiling. Choose limits appropriate to your account.
+Budget reservation uses configured/catalog rates, not a provider billing guarantee. Before each request Psi reserves estimated input and maximum output cost against `/budget`; returned billed USD overrides the completed request total when supplied. Unknown/custom prices, tiered/long-context rates and provider accounting differences can affect accuracy. Defaults impose no cost or step ceiling. Choose limits appropriate to your account.
 
 ## Local benchmark sweeps
 
@@ -173,11 +198,11 @@ Results are stored in `results.jsonl`, `sweep.json`, per-match logs, and `summar
 
 ## Tools
 
-`read`, `write`, `edit`, `search`, `bash`, `benchmark`, `job`, `fetch`, `search_web`, `browser`, `checkpoint`, `finish`.
+`read`, `write`, `edit`, `search`, `bash`, `benchmark`, `job`, `fetch`, `search_web`, `browser`, `checkpoint`, `finish`. Recognized Battlecode workspaces additionally expose `battlecode_inspect`, `battlecode_control`, `battlecode_experiment`, `battlecode_freeze`, `battlecode_correctness`, `battlecode_live_trial`, `battlecode_collect`, `battlecode_report` and `battlecode_decide`.
 
 `fetch` handles HTML extraction, links, JSON/text, a short cache and full-response artifacts. `search_web` uses DuckDuckGo HTML and reports blocking/no-results errors explicitly. `browser` uses a separate ephemeral headless browser with JavaScript evaluation, links, screenshots and a persistent page for the running Psi process. It does not reuse your personal browser profile. Arbitrary installed CLIs, Python scripts, databases and download tools remain available through `bash`.
 
-Ancestor `AGENTS.md` files are loaded for the selected workspace. The Battlecode profile asks the model to freeze baselines, separate local correctness/comparison from competition evidence, inspect failures/replays and retain checkpoints. It is guidance, not a guarantee of bot quality. Psi does not automatically submit a bot.
+Ancestor `AGENTS.md` files are loaded for the selected workspace. The Battlecode profile asks the model to freeze baselines, separate local correctness/comparison from competition evidence, inspect failures/replays and retain checkpoints. It is guidance, not a guarantee of bot quality. A requested live trial can upload and temporarily select a candidate through the existing controller; final release remains a separate objective.
 
 Operational debug logging is enabled by default, per the local development preferences. It records event types, model labels, retries, tool names, durations and errors, without recording raw provider payloads or credential values. Full conversation and tool content are stored in the separate private session journal. Use `--no-debug` to disable operational logging.
 
@@ -188,6 +213,6 @@ npm run verify
 npm run catalog:sync
 ```
 
-Tests use an isolated local OpenAI-compatible streaming server and temporary data folders. They cover real HTTP tool cycles, account isolation and refresh locking, costs/limits, retries, resume/crash recovery, process cancellation, website extraction, the installed browser, paired benchmark sweeps, bottom-pinned layout through terminal resizes, footer contents and account attribution, mouse-triggered 3D animation and timer cleanup. They do not spend paid inference or sign into external accounts. Provider login and all third-party endpoints still need verification with your own accounts.
+Tests use an isolated local OpenAI-compatible streaming server and temporary data folders. They cover real HTTP tool cycles, account isolation and refresh locking, costs/limits, retries, resume/crash recovery, process cancellation, website extraction, the installed browser, paired benchmark sweeps, bottom-pinned layout through terminal resizes, footer contents and account attribution, mouse-triggered 3D animation and timer cleanup. They also exercise persistent goal recovery, quota-aware account/model failover, settings changes during inference, and an entire offline Battlecode controller/collector/replay qualification workflow. They do not spend paid inference, sign into external accounts or queue real matches. Provider login, live usage access and all third-party endpoints still need verification with your own accounts. See [verification details](docs/VERIFICATION.md).
 
 Transport and terminal rendering: [Pi](https://github.com/earendil-works/pi). Additional provider data: [models.dev](https://models.dev). Codex authentication reference: [official OpenAI documentation](https://developers.openai.com/codex/auth). Dependency licenses remain with their respective packages.

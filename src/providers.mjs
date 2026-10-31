@@ -13,6 +13,7 @@ export class Registry {
   constructor(config, home) {
     this.accounts = new Accounts(home);
     this.models = builtinModels({ credentials: this.accounts.store(), identity: { version: '0.1.0' } });
+    this.config=config;
     this.catalogDate = catalog.fetchedAt;
     this.unavailable = [];
     for (const p of catalog.providers) {
@@ -24,6 +25,7 @@ export class Registry {
     this.register({ id: 'ollama', name: 'Ollama (local)', baseUrl: 'http://localhost:11434/v1', keyless: true, models: [] });
     this.register({ id: 'lmstudio', name: 'LM Studio (local)', baseUrl: 'http://localhost:1234/v1', keyless: true, models: [] });
     for (const p of config.customProviders || []) this.register(p);
+    this.applyPrices(config.customPrices || {});
   }
   register(p) {
     if (!p.id || !p.baseUrl) throw new Error('Custom providers require id and baseUrl.');
@@ -44,11 +46,19 @@ export class Registry {
     });
     this.models.setProvider(provider);
   }
-  async forRequest(provider) {
-    const account = await this.accounts.selected(provider);
+  billingMode(account) {return account.type==='oauth'&&(this.models.getProvider(account.provider)?.auth.oauth?.isSubscription===true||['openai','openai-codex','anthropic','github-copilot'].includes(account.provider))?'subscription':'metered';}
+  applyPrices(prices) {
+    this.config.customPrices=prices;for(const model of this.all()){const p=prices[`${model.provider}/${model.id}`];if(p)model.cost={...model.cost,...p};}
+  }
+  pricesKnown(model) { return !!this.config.customPrices?.[`${model.provider}/${model.id}`] || Object.values(model.cost).some(n=>n>0) || /:free$/.test(model.id) || /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/)/.test(model.baseUrl); }
+  forAccount(account) {
     const models = createModels({ credentials: this.accounts.store(account), identity: { version: '0.1.0' } });
     for (const entry of this.models.getProviders()) models.setProvider(entry);
-    return { account, models };
+    return models;
+  }
+  async forRequest(provider, selected) {
+    const account = selected || await this.accounts.selected(provider);
+    return { account, models: this.forAccount(account) };
   }
   all() { return this.models.getModels(); }
   find(value) {

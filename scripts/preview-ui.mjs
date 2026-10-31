@@ -29,16 +29,19 @@ function htmlLine(line) {
 const home=await mkdtemp(join(tmpdir(),'psi-preview-')); let app,ui,browser;
 try {
   const session=await Session.create('/workspace/battlecode',home); app=new App({...defaults,debug:false},session,{home});
-  const terminal=new MemoryTerminal(100,32);ui=new TerminalUI(app,{terminal});ui.start();ui.tui.renderNow();
+  const terminal=new MemoryTerminal(100,32);ui=new TerminalUI(app,{terminal});app.ui=ui;ui.start();ui.tui.renderNow();
   browser=await chromium.launch({executablePath:process.env.PSI_CHROME_PATH||'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',headless:true});
   const page=await browser.newPage({viewport:{width:1040,height:744},deviceScaleFactor:2});
   await mkdir(new URL('../docs/',import.meta.url),{recursive:true});
-  for (const [name,animation] of [['terminal',false],['logo-3d',true]]) {
+  for (const [name,animation] of [['terminal',false],['logo-3d',true],['settings',false]]) {
+    let settings;
+    if(name==='settings'){ui.hideLogo();settings=app.settingsMenu();}
     if(animation) { ui.showLogo(); ui.logoAnimation.started-=520; }
     ui.tui.renderNow();
     const lines=ui.tui.getScreenLines();
     await page.setContent(`<html><style>body{margin:0;padding:20px;background:#18221d}pre{margin:0;font:16px/22px Menlo,monospace;white-space:pre}</style><body><pre>${lines.map(htmlLine).join('\n')}</pre></body></html>`);
     await page.screenshot({path:new URL(`../docs/${name}.png`,import.meta.url).pathname});
+    if(settings){ui.pending?.cancel();await settings;}
   }
-  console.log('Rendered docs/terminal.png and docs/logo-3d.png from actual terminal frames.');
+  console.log('Rendered terminal, 3D logo and settings previews from actual terminal frames.');
 } finally {ui?.stop();await app?.close();await browser?.close();await rm(home,{recursive:true,force:true});}

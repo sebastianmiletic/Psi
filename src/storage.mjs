@@ -47,7 +47,9 @@ export const defaults = {
   model: 'openai-codex/gpt-5.6-sol', effort: 'medium', profile: 'battlecode',
   maxSteps: 0, budget: 0, maxOutputTokens: 8192, contextFraction: 0.72,
   toolOutputChars: 16000, concurrency: 4, retries: 4, cacheRetention: 'long',
-  debug: true, customProviders: [],
+  debug: true, customProviders: [], accent: 'sage', showLogo: true, animations: true,
+  autoSwitchAccounts: false, accountSwitchThreshold: 100, quotaRefreshSeconds: 120,
+  fallbackModels: [], loopRetrySeconds: 30, showUsage: true, customPrices: {},
 };
 export async function loadConfig(home = psiHome()) { return { ...defaults, ...await readJSON(join(home, 'config.json'), {}) }; }
 export async function saveConfig(patch, home = psiHome()) {

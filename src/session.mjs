@@ -9,7 +9,8 @@ export class Session {
   constructor(home, meta) {
     this.home = home; this.meta = meta; this.dir = join(home, 'sessions', meta.id);
     this.messages = []; this.totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, requests: 0 };
-    this.state = {}; this.status = 'idle'; this.journalSize = 0;
+    this.accountTotals = {}; this.meteredCost = 0; this.meteredCostKnown = true;
+    this.state = {}; this.status = 'idle'; this.journalSize = 0; this.writeChain=Promise.resolve();
   }
   static async create(cwd, home = psiHome()) {
     const meta = { id: `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`, cwd: resolve(cwd), createdAt: new Date().toISOString(), title: 'New session' };
@@ -49,14 +50,22 @@ export class Session {
     try { for await (const line of lines) if (line) yield JSON.parse(line); }
     finally { lines.close(); input.destroy(); }
   }
+  enqueue(fn) {const next=this.writeChain.then(fn);this.writeChain=next.catch(()=>{});return next;}
   async assertLatest() {
-    const size = await stat(join(this.dir, 'events.jsonl')).then(s => s.size).catch(e => { if (e.code === 'ENOENT') return 0; throw e; });
-    if (size !== this.journalSize) throw new Error('This session changed in another Psi process. Resume it again before continuing.');
+    return this.enqueue(async()=>{
+      const size=await stat(join(this.dir,'events.jsonl')).then(s=>s.size).catch(e=>{if(e.code==='ENOENT')return 0;throw e;});
+      if(size!==this.journalSize)throw new Error('This session changed in another Psi process. Resume it again before continuing.');
+    });
   }
   apply(event) {
     if (event.type === 'message') this.messages.push(event.message);
     if (event.type === 'compact') this.messages = event.messages;
     if (event.type === 'usage') {
+      if(event.accountId) {
+        const a=this.accountTotals[event.accountId] ||= {cost:0,requests:0,tokens:0};a.cost+=event.usage.cost?.total||0;a.requests++;a.tokens+=event.usage.totalTokens||0;
+      }
+      if(event.billing?.mode==='metered') {this.meteredCost+=event.usage.cost?.total||0;if(!event.billing.known)this.meteredCostKnown=false;}
+
       for (const k of ['input', 'output', 'cacheRead', 'cacheWrite']) this.totals[k] += event.usage[k] || 0;
       this.totals.cost += event.usage.cost?.total || 0; this.totals.requests++;
     }
@@ -64,10 +73,10 @@ export class Session {
     if (event.type === 'status') this.status = event.status;
   }
   async event(event) {
-    const line = JSON.stringify({ ...event, at: new Date().toISOString() }) + '\n';
-    await appendFile(join(this.dir, 'events.jsonl'), line, { mode: 0o600 });
-    this.journalSize += Buffer.byteLength(line);
-    this.apply(event);
+    return this.enqueue(async()=>{
+      const line=JSON.stringify({...event,at:new Date().toISOString()})+'\n';
+      await appendFile(join(this.dir,'events.jsonl'),line,{mode:0o600});this.journalSize+=Buffer.byteLength(line);this.apply(event);
+    });
   }
   async message(message) {
     await this.event({ type: 'message', message });

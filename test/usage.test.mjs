@@ -8,6 +8,14 @@ import { fixture } from './helpers.mjs';
 
 const sample = { input: 70, output: 20, cacheRead: 30, cacheWrite: 0, totalTokens: 120 };
 
+test('request rate headers preserve subscription windows and an authoritative refresh can remove absent windows',async t=>{
+  const f=await fixture(t,()=>({text:'ok'})),ledger=new AccountUsage(f.home),account={id:'quota-merge',provider:'anthropic'};
+  await ledger.record(account,{limits:[{kind:'quota',label:'5h',usedPercent:25,resetAt:9999999999}],replaceLimits:true});
+  const row=await ledger.record(account,{limits:[{kind:'rate',label:'requests',usedPercent:10,remaining:90,limit:100}]});
+  assert.equal(row.limits.length,2);assert.match(usageLabel({...account,name:'Claude',type:'oauth'},row),/5h 25%/);
+  assert.deepEqual((await ledger.record(account,{limits:[],replaceLimits:true})).limits,[]);
+});
+
 test('same-provider accounts keep independent credentials and usage even if another process switches during a request', async t => {
   let switchAccount;
   const f = await fixture(t, async () => {
@@ -53,13 +61,13 @@ test('only provider-reported quota/rate numbers are retained; missing and expire
     authorization:'Bearer test-secret',cookie:'private',
   });
   assert.equal(limits.length,2); assert.equal(limits[0].label,'5h');
-  assert.match(usageLabel({name:'Personal'},{limits,limitsAt:new Date().toISOString()}),/5h 37% used.*7d 51% used/);
+  assert.match(usageLabel({name:'Personal',type:'oauth'},{limits,limitsAt:new Date().toISOString()}),/5h 37% used.*7d 51% used/);
   assert.doesNotMatch(JSON.stringify(limits),/test-secret|private/);
   assert.deepEqual(limitsFromHeaders('openai-codex',{}),[]);
-  assert.match(usageLabel({name:'Personal'},{limits:[{kind:'quota',label:'5h',usedPercent:100,resetAt:1}]}),/quota unavailable/);
+  assert.equal(usageLabel({name:'Personal',type:'oauth'},{limits:[{kind:'quota',label:'5h',usedPercent:100,resetAt:1}]}),'Personal');
   const rate=limitsFromHeaders('anthropic',{'anthropic-ratelimit-requests-remaining':'40','anthropic-ratelimit-requests-limit':'50'});
   assert.ok(Math.abs(rate[0].usedPercent-20)<0.001);
-  assert.match(usageLabel({name:'Personal'},{limits:rate,limitsAt:'2000-01-01T00:00:00Z'}),/quota unavailable/);
+  assert.equal(usageLabel({name:'Personal',type:'oauth'},{limits:rate,limitsAt:'2000-01-01T00:00:00Z'}),'Personal');
 });
 
 test('a pinned request refreshes the original account after switching and never overwrites the new active account', async t => {
