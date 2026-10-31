@@ -57,7 +57,7 @@ export class TerminalUI {
     this.editor = new Composer(this, { borderColor: dim, selectList: this.selectionTheme });
     this.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, app.session.meta.cwd));
     this.editor.onSubmit = text => {
-      if(this.modelSearch)return;
+      if(this.composerSearch)return;
       if (!text.trim()) return;
       this.editor.addToHistory(text); this.editor.setText('');
       void app.submit(text).catch(e => this.note(e.message, true));
@@ -236,20 +236,22 @@ export class TerminalUI {
       };return component;
     });
   }
-  async modelMenu(items,query=''){
+  async modelMenu(items,query=''){return this.composerMenu('Model',items,query,{deduplicate:true});}
+  async composerMenu(title,items,query='',{deduplicate=false,refresh,showDetails=false}={}){
     if(this.pending)throw new Error('Finish the current selection first.');
     const draft=this.editor.getText(),previousChange=this.editor.onChange,previousSubmit=this.editor.onSubmit;
-    const previousAutocomplete=this.editor.autocompleteProvider;
-    let list,finish;
+    const previousAutocomplete=this.editor.autocompleteProvider,controller=new AbortController();
+    let list,finish,filter;
     const make=source=>{const value=new SelectList(source,Math.max(1,Math.min(7,this.panelRows()-2)),this.selectionTheme);value.onSelect=item=>finish(item.value);value.onCancel=()=>finish(null);return value;};
     try{return await this.interact('',({resolve,cancel})=>{
       finish=value=>value===null?cancel():resolve(value);
-      const filter=text=>{const parts=text.toLowerCase().trim().split(/\s+/).filter(Boolean);const seen=new Set();list=make(items.filter(item=>parts.every(q=>(item.search||item.label).toLowerCase().includes(q))).filter(item=>{const key=item.label.toLowerCase();if(seen.has(key))return false;seen.add(key);return true;}));this.render();};
+      filter=text=>{const selected=list?.getSelectedItem()?.value,parts=text.toLowerCase().trim().split(/\s+/).filter(Boolean),seen=new Set();const filtered=items.filter(item=>parts.every(q=>(item.search||`${item.label} ${item.description||''}`).toLowerCase().includes(q))).filter(item=>{const key=item.label.toLowerCase();if(deduplicate&&seen.has(key))return false;seen.add(key);return true;});list=make(filtered);const index=filtered.findIndex(item=>item.value===selected);if(index>=0)list.setSelectedIndex(index);this.render();};
       const handleInput=data=>{if(['up','down','enter','escape','pageUp','pageDown','tab'].some(k=>matchesKey(data,k))){list.handleInput(matchesKey(data,'tab')?'\x1b[B':data);this.render();return true;}return false;};
-      this.modelSearch={handleInput};this.editor.onChange=filter;this.editor.onSubmit=()=>{};this.editor.setAutocompleteProvider({getSuggestions:async()=>null,applyCompletion:()=>{throw new Error('No model completion');}});this.editor.setText(query);filter(query);
-      return{focused:true,invalidate(){},render:width=>{list.maxVisible=Math.max(1,Math.min(7,this.panelRows()-2));return[truncateToWidth('  '+bold('Model'),width),...list.render(width),truncateToWidth(dim('  ↑ ↓ · ↵ · esc'),width)];},handleInput};
+      this.composerSearch={handleInput};this.editor.onChange=filter;this.editor.onSubmit=()=>{};this.editor.setAutocompleteProvider({getSuggestions:async()=>null,applyCompletion:()=>{throw new Error('No picker completion');}});this.editor.setText(query);filter(query);
+      if(refresh)void Promise.resolve().then(()=>refresh({signal:controller.signal,update:next=>{if(!controller.signal.aborted){items=next;filter(this.editor.getText());}}})).catch(()=>{});
+      return{focused:true,invalidate(){},dispose(){controller.abort();},render:width=>{const details=showDetails&&width<72&&list.getSelectedItem()?.description?new Text(dim(safe(list.getSelectedItem().description)),0,0).render(Math.max(1,width-4)).slice(0,3).map(line=>'  '+line):[];list.maxVisible=Math.max(1,Math.min(7,this.panelRows()-2-details.length));return[truncateToWidth('  '+bold(safe(title)),width),...list.render(width),...details,truncateToWidth(dim('  ↑ ↓ · ↵ · esc'),width)];},handleInput};
     },undefined,{editorFocus:true});}
-    finally{this.modelSearch=null;this.editor.onChange=previousChange;this.editor.onSubmit=previousSubmit;if(previousAutocomplete)this.editor.setAutocompleteProvider(previousAutocomplete);this.editor.setText(draft);this.render();}
+    finally{controller.abort();this.composerSearch=null;this.editor.onChange=previousChange;this.editor.onSubmit=previousSubmit;if(previousAutocomplete)this.editor.setAutocompleteProvider(previousAutocomplete);this.editor.setText(draft);this.render();}
   }
   async effortMenu(options){
     try{return await this.interact('',({resolve,cancel})=>new EffortPanel(this,{...options,resolve,cancel}));}

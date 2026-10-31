@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { existsSync } from 'node:fs';
+import { canonical } from './directories.mjs';
 import { Agents } from './agents.mjs';
 import { modelLabel } from './model-label.mjs';
 import { Resets } from './resets.mjs';
@@ -14,7 +15,7 @@ import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
 import { Battlecode } from './battlecode.mjs';
 import { settingItems,validateSettings } from './settings.mjs';
 import { accents } from './theme.mjs';
-import { AccountUsage, usageLabel } from './usage.mjs';
+import { AccountUsage, usageLabel,accountResetLabel } from './usage.mjs';
 import { Registry } from './providers.mjs';
 import { Session } from './session.mjs';
 import { Jobs } from './jobs.mjs';
@@ -105,13 +106,13 @@ export class App {
       try{await this.update({[item.id]:value});}catch(e){this.ui.note(e.message,true);}
     }
   }
-  async changeSession(session) {
+  async changeSession(session,{preserveTranscript=false}={}) {
     if (this.engine.busy) throw new Error('Stop the current run first.');
     await this.agents.dispose();if(session.meta.id===this.session.meta.id){await session.assertLatest().catch(async()=>{session=await Session.load(session.meta.id,this.home);});}await this.tools.close(); this.session = session; this.bind();
     if (this.ui) { const { CombinedAutocompleteProvider } = await import('@earendil-works/pi-tui'); const { commands } = await import('./ui.mjs'); this.ui.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, session.meta.cwd)); }
     await this.refreshAccount();
     if(this.ui)this.startUsageMonitor();
-    this.ui?.clear();if(this.ui)await this.agents.restore(); this.ui?.note(`Session ${session.meta.id}\n${session.meta.cwd}`);
+    if(!preserveTranscript)this.ui?.clear();if(this.ui)await this.agents.restore(); this.ui?.note(`Session ${session.meta.id}\n${session.meta.cwd}`);
   }
   async update(patch) { await this.engine.settings(patch); this.config = await saveConfig(patch, this.home); await this.refreshAccount(); if(this.ui)this.startUsageMonitor(); this.engine.wake?.(); }
   async selectModel(query = '') {
@@ -127,11 +128,7 @@ export class App {
   }
   async accountMenu(action) {
     if (this.engine.busy&&!this.engine.waiting) throw new Error('Press Escape twice to stop before changing accounts, or wait for a quota pause.');
-    action ||= await this.ui.choose('Accounts', [
-      { value: 'login', label: 'Login new account' },
-      { value: 'switch', label: 'Switch accounts' },
-      { value: 'remove', label: 'Remove account' },
-    ]);
+    if(!action){const selected=await this.accountPicker('Accounts',{overview:true});if(!selected)return;if(selected.startsWith('account:')){const provider=await this.registry.accounts.use(selected.slice(8));await this.useProvider(provider);this.ui.note('Account switched.');return;}action=selected;}
     if (!action) return;
     if (action === 'login') {
       const providers = [...this.registry.models.getProviders()].sort((a, b) => Number(!!b.auth.oauth) - Number(!!a.auth.oauth) || a.name.localeCompare(b.name));
@@ -160,12 +157,27 @@ export class App {
         await this.useProvider(id);
       } finally { this.authController = null; }
     } else if (action === 'switch' || action === 'remove') {
-      const accounts = await this.registry.accounts.list();
-      const id = await this.ui.choose(action === 'switch' ? 'Switch accounts' : 'Remove account', accounts.map(a => ({ value: a.id, label: `${a.provider==='openai-codex'?'codex':a.provider} · ${a.name}` })));
+      const id = await this.accountPicker(action === 'switch' ? 'Switch accounts' : 'Remove account');
       if (!id) return;
       if (action === 'switch') { const provider = await this.registry.accounts.use(id); await this.useProvider(provider); this.ui.note('Account switched.'); }
       else { await this.registry.accounts.remove(id); await this.refreshAccount(); this.ui.note('Account removed.'); }
     } else throw new Error('Use /accounts login, switch, or remove.');
+  }
+  async accountPicker(title,{overview=false}={}){
+    const accounts=await this.registry.accounts.list(),usage=new Map(await Promise.all(accounts.map(async a=>[a.id,await this.accountUsage.get(a.id)])));
+    const rows=()=>[...(overview?[{value:'login',label:'Login new account'},{value:'switch',label:'Switch accounts'},{value:'remove',label:'Remove account'}]:[]),...accounts.map(a=>({value:(overview?'account:':'')+a.id,label:`${a.provider==='openai-codex'?'codex':a.provider} · ${a.name}`,description:accountResetLabel(a,usage.get(a.id))}))];
+    return this.ui.composerMenu(title,rows(),'',{showDetails:true,refresh:async({signal,update})=>{
+      let index=0;
+      await Promise.all(Array.from({length:Math.min(2,accounts.length)},async()=>{
+        while(!signal.aborted&&index<accounts.length){const a=accounts[index++];if(a.type!=='oauth')continue;
+          try{
+            const cached=usage.get(a.id),codex=['openai-codex','openai'].includes(a.provider);
+            const snapshot=codex&&Date.now()-Date.parse(cached.resetsCheckedAt||'')<120000?{usage:await this.engine.quota.refresh(a,{signal})}:await this.resets.read(a,{signal});
+            if(signal.aborted)return;usage.set(a.id,snapshot.usage);update(rows());
+          }catch{if(!signal.aborted)update(rows());}
+        }
+      }));
+    }});
   }
   async useProvider(provider) {
     const current = this.engine.model;
@@ -277,13 +289,20 @@ export class App {
   async setMode(mode){if(mode==='plan')await this.agents.stopAll({wait:true});await this.update({agentMode:mode});}
   async directoryCommand(arg){
     const match=/^(add|remove)(?:\s+([\s\S]+))?$/.exec(arg.trim());
-    if(!arg.trim()){this.ui.note('Allowed directories:\n'+(await this.tools.policy.roots()).join('\n')+'\n/directory add <path> · /directory remove <path>');return;}
-    if(!match)throw new Error('Use /directory, /directory add <path> or /directory remove <path>.');
+    if(!arg.trim()){this.ui.note('Allowed directories:\n'+(await this.tools.policy.roots()).join('\n')+'\n/directory <path> · /directory add <path> · /directory remove <path>');return;}
+    if(!match)return this.setDirectory(arg.trim());
     // Existing sandboxes keep their original allowlist, so stop them before revoking access.
     if(this.engine.busy)this.engine.stop();await this.agents.stopAll({wait:true});
     for(const job of await this.jobs.list())if(job.sessionId===this.session.meta.id&&['running','queued'].includes(job.status)){await this.jobs.stop(job.id);await this.jobs.awaitCompletion(job.id);}
     while(this.engine.busy)await delay(25);
     const path=match[2]?.replace(/^(["'])(.*)\1$/,'$2');const roots=await this.tools.policy.change(match[1],path);this.ui.note('Allowed directories:\n'+roots.join('\n'));
+  }
+  async setDirectory(value){
+    const path=value.replace(/^(["'])(.*)\1$/,'$2').replace(/^~(?=\/|\\|$)/,process.env.HOME||process.env.USERPROFILE||'~');
+    const cwd=await canonical(resolve(this.session.meta.cwd,path));if(!(await stat(cwd)).isDirectory())throw new Error('Choose an existing directory.');
+    const roots=[...new Set([...await this.tools.policy.roots(),cwd])];
+    this.engine.stop();await this.agents.stopAll({wait:true});while(this.engine.busy)await delay(25);
+    await this.session.directory(cwd,roots);await this.changeSession(this.session,{preserveTranscript:true});
   }
   async checkUpdates(){try{const update=await checkUpdate(this.home);if(!update.available||this.closing)return;if(this.engine.config.autoUpdate&&!this.engine.busy){this.ui.note((await updateInstallation(this.home,{release:update})).message);}else this.ui.note(`Psi ${update.latest} is available. Run /update or psi update, then restart.`);}catch{/* Offline startup remains quiet and fast. */}}
   async agentsMenu(){

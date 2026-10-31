@@ -105,6 +105,14 @@ test('account login UI adds several accounts from the same provider and another 
 test('account switch and remove rows contain only the short provider and account name',async t=>{
  const f=await fixture(t,()=>({text:'Unused'}));
  await f.app.registry.accounts.add('openai-codex','Personal',{type:'oauth',access:'private',refresh:'private',expires:9999999999999});await f.app.registry.accounts.add('anthropic','Team',{type:'api_key',key:'private'});
- f.app.ui={choose:async(title,items)=>{assert.ok(['Switch accounts','Remove account'].includes(title));assert.deepEqual(items.map(({label,...rest})=>({label,keys:Object.keys(rest)})),[{label:'codex · Personal',keys:['value']},{label:'anthropic · Team',keys:['value']}]);return null;},stop(){}};
+ f.app.ui={composerMenu:async(title,items)=>{assert.ok(['Switch accounts','Remove account'].includes(title));assert.deepEqual(items.map(i=>i.label),['codex · Personal','anthropic · Team']);assert.equal(items[0].description,'resets unavailable');assert.equal(items[1].description,'');return null;},stop(){}};
  await f.app.accountMenu('switch');await f.app.accountMenu('remove');
+});
+
+
+test('account reset summaries omit absent windows and API limits, and distinguish due or unknown resets',async()=>{
+ const {accountResetLabel}=await import('../src/usage.mjs'),a={provider:'openai-codex',type:'oauth'},now=1000000;
+ assert.equal(accountResetLabel(a,{limits:[{kind:'quota',label:'7d',resetAt:now/1000+7200}],resetCredits:{availableCount:3}},now),'week 2h 0m · resets 3');
+ assert.equal(accountResetLabel({...a,type:'api_key'},{resetCredits:{availableCount:3}},now),'');assert.equal(accountResetLabel(a,{},now),'resets unavailable');assert.equal(accountResetLabel(a,{limits:[],quotaCheckedAt:new Date(now).toISOString()},now),'');
+ assert.equal(accountResetLabel(a,{limits:[{kind:'quota',label:'5h',resetAt:now/1000-1},{kind:'quota',label:'7d'}],quotaError:'offline'},now),'5h due · week ? · cached');
 });

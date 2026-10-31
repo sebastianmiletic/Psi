@@ -40,6 +40,7 @@ export class Engine {
     this.router=new AccountRouter(registry,this.accountUsage,this.config);this.quota=new QuotaMonitor(registry,this.config,session.home);
     this.pendingSettings={...session.state.pendingSettings};
     this.busy = false; this.queue = [...session.state.queuedMessages||[]]; this.controller = null;
+    tools.add('session_title','Set a concise chat title once after the first user message. User-set names are protected; never rename later.',{title:Type.String({minLength:1,maxLength:80})},async({title})=>({renamed:await session.autoName(title),title:session.meta.title}));
     tools.add('finish', 'Mark the current autonomous objective complete. Provide the verified outcome and evidence paths. Use only when the objective has actually been achieved.', { summary: Type.String({minLength:1}), evidence: Type.Array(Type.String(),{minItems:1}), experiment_id:Type.Optional(Type.String()) }, async args => {
       if((await this.tools.subagentsUnreported?.())?.length){this.awaitWorkers=true;throw new Error('Subagents are still reporting. Review their results before finishing.');}
       for(const path of args.evidence){await this.tools.policy?.check(path);await stat(resolve(session.meta.cwd,path)).catch(()=>{throw new Error(`Completion evidence does not exist: ${path}`);});}

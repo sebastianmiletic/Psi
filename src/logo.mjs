@@ -1,5 +1,5 @@
 import { accentColor } from './theme.mjs';
-import { colorToRgb, parseColor, truncateToWidth } from '@earendil-works/pi-tui';
+import { colorToRgb, parseColor, truncateToWidth,visibleWidth } from '@earendil-works/pi-tui';
 
 // A small extruded mesh, shaded on the CPU. No canvas, native binary or animation dependency.
 const COLUMNS = 23, ROWS = 29, DX = 2.3 / COLUMNS, DY = 2.9 / ROWS, DEPTH = 0.34;
@@ -86,6 +86,11 @@ export function renderPsi(width, rows, phase = 0, animated = false, accent='sage
   return lines;
 }
 
+function headerPath(path,width){
+  if(visibleWidth(path)<=width)return path;
+  const tail=Array.from(path);while(tail.length&&visibleWidth(tail.join(''))>Math.max(0,width-1))tail.shift();return '…'+tail.join('');
+}
+
 export class PsiHeader {
   constructor({ app, onActivate, format = s => s, subdued = s => s,terminal,glow=()=>null }) {
     this.terminal=terminal;this.glow=glow;this.app = app; this.onActivate = onActivate; this.format = format; this.subdued = subdued; this.cached = null;
@@ -93,10 +98,10 @@ export class PsiHeader {
   invalidate() {}
   render(width) {
     const short=(this.terminal?.rows||32)<18;
-    if(short){
+    if(short||width<48){
       const path=this.app.session.meta.cwd.replace(process.env.HOME||'\0','~');
       this.bounds={x:1,y:0,width:1,height:1};
-      return [truncateToWidth(' '+this.format('Ψ Psi'),width),truncateToWidth(' '+this.subdued(path),width),''];
+      return [truncateToWidth(' '+this.format('Ψ Psi'),width),truncateToWidth(' '+this.format(this.app.session.meta.title||'New session'),width),truncateToWidth(' '+this.subdued(headerPath(path,Math.max(1,width-1))),width),''];
     }
     const logoWidth = Math.min(short?9:12, Math.max(6,width-4)), logoRows=short?2:4;
     const accent=this.app.engine.config.accent || 'sage';
@@ -105,7 +110,7 @@ export class PsiHeader {
     if (this.cached?.key !== key) this.cached = { key, lines: renderPsi(logoWidth,logoRows,0,false,accent,glow) };
     this.bounds = { x: 1, y: 1, width: logoWidth, height: logoRows };
     const path = this.app.session.meta.cwd.replace(process.env.HOME || '\0', '~');
-    const labels = width >= 48 ? {0:this.format('Ψ  Psi'),[logoRows-1]:this.subdued(path)}:{0:this.format('Ψ  Psi')};
+    const labels = {0:this.format('Ψ  Psi'),[logoRows-2]:this.format(this.app.session.meta.title||'New session'),[logoRows-1]:this.subdued(headerPath(path,Math.max(1,width-logoWidth-3)))};
     return ['', ...this.cached.lines.map((line, i) => truncateToWidth(' '+line+'  '+(labels[i] || ''), width)), ''];
   }
   // Bound the click region to the mark, leaving workspace text selectable.

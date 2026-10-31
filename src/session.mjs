@@ -73,6 +73,8 @@ export class Session {
       this.totals.cost += event.usage.cost?.total || 0; this.totals.requests++;
     }
     if(event.type==='session_name'){this.meta.title=event.name;this.meta.named=true;}
+    if(event.type==='session_auto_name'&&!this.meta.named){this.meta.title=event.name;this.meta.autoNamed=true;}
+    if(event.type==='session_directory'){this.meta.cwd=event.cwd;if(event.directories)this.state.directories=event.directories;}
     if (event.type === 'state') Object.assign(this.state, event.state);
     if (event.type === 'status') this.status = event.status;
   }
@@ -84,14 +86,27 @@ export class Session {
   }
   async message(message) {
     await this.event({ type: 'message', message });
-    if (message.role === 'user' && this.meta.title === 'New session'&&!this.meta.named) {
-      this.meta.title = String(message.content).slice(0, 100); await atomicJSON(join(this.dir, 'meta.json'), this.meta);
+    if (message.role === 'user' && this.meta.title === 'New session'&&!this.meta.named&&!this.meta.seedNamed) {
+      await this.enqueue(async()=>{if(this.meta.named||this.meta.seedNamed||this.meta.title!=='New session')return;this.meta.seedNamed=true;this.meta.title=cleanTerminal(String(message.content)).replace(/\s+/g,' ').trim().slice(0,100)||'New session';await atomicJSON(join(this.dir,'meta.json'),this.meta);});
     }
   }
   async rename(name,{duringRun=false}={}){
     const title=cleanTerminal(name).replace(/\s+/g,' ').trim();if(!title)throw new Error('Enter a session name.');if(Array.from(title).length>120)throw new Error('Session names can be up to 120 characters.');
     const save=async()=>{await this.assertLatest();await this.event({type:'session_name',name:title});await this.enqueue(()=>atomicJSON(join(this.dir,'meta.json'),this.meta));return title;};
     return duringRun?save():withLock(join(this.dir,'run.lock'),save,{timeout:500});
+  }
+  async autoName(name){
+    const title=cleanTerminal(name).replace(/\s+/g,' ').trim();if(!title||Array.from(title).length>80)throw new Error('Use a short title, up to 80 characters.');
+    // Journal and snapshot share a queue slot so a manual rename always wins.
+    return this.enqueue(async()=>{
+      if(this.meta.named||this.meta.autoNamed)return false;
+      const event={type:'session_auto_name',name:title,at:new Date().toISOString()},line=JSON.stringify(event)+'\n';
+      await appendFile(join(this.dir,'events.jsonl'),line,{mode:0o600});this.journalSize+=Buffer.byteLength(line);this.apply(event);
+      await atomicJSON(join(this.dir,'meta.json'),this.meta);return true;
+    });
+  }
+  async directory(cwd,roots){
+    return withLock(join(this.dir,'run.lock'),async()=>{await this.assertLatest();await this.event({type:'session_directory',cwd,directories:roots});await this.enqueue(()=>atomicJSON(join(this.dir,'meta.json'),this.meta));},{timeout:500});
   }
   static async list(home = psiHome()) {
     const names = await readdir(join(home, 'sessions')).catch(e => { if (e.code === 'ENOENT') return []; throw e; });

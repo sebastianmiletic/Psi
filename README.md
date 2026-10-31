@@ -53,7 +53,7 @@ Installers verify GitHub's archive digest and preserve accounts/settings under `
 
 ## Less text. More control.
 
-The Ψ header stays visible above compact bottom menus. Model search lives in the input bar, with names such as `5.6 luna`. Effort is a slider with OVERKILL on the right. Statistics are a heatmap. Weekly quota sits beside your account as **percent left**; the bottom meter prioritizes the five-hour window. OVERKILL makes the prompt, meter and terminal logo flow in your chosen accent.
+The Ψ header stays visible above compact bottom menus. Chat names sit above the saved workspace path, including after resume. Model and account search live in the input bar, with names such as `5.6 luna`. Effort is a slider with OVERKILL on the right. Statistics are a heatmap. Weekly quota sits beside your account as **percent left**; the bottom meter prioritizes the five-hour window. OVERKILL makes the prompt, meter and terminal logo flow in your chosen accent.
 
 <table>
 <tr><td><a href="docs/effort.png"><img src="docs/effort.png" alt="Minimal effort slider and OVERKILL switch"></a></td><td><a href="docs/stats.png"><img src="docs/stats.png" alt="Compact statistics panel with a calendar heatmap"></a></td></tr>
@@ -66,7 +66,7 @@ The Ψ header stays visible above compact bottom menus. Model search lives in th
 | `/accounts` | Add, switch or remove accounts |
 | `/subagents` | Roles, models, effort and concurrency |
 | `/loop` | Give Psi a persistent objective |
-| `/directory` | Add or remove working directories |
+| `/directory [path]` | Switch workspace or manage directory access |
 | `/stats` · `/tools` | Activity and available tools |
 | `/reset` | Reset times and available account resets |
 | `/settings` · `/reload` | Configure Psi or reload disk settings |
@@ -80,6 +80,10 @@ Answers use clean Markdown without repeated assistant headings. Reads and search
 **Shift+Tab** switches plan/execute. **Escape** closes menus; **double Escape** stops the AI. Enter a message during work to queue it at the next tool boundary. Tools run without approval dialogs inside the directories you grant.
 
 `/reset` shows reported five-hour and weekly reset times, a countdown, and account-specific reset options. Codex banked resets can be redeemed through a current Codex CLI on PATH, using in-memory authentication for the selected Psi account. Claude offers open the provider’s Usage page for redemption. [Reset details →](docs/RESETS.md)
+
+![Account reset countdowns](docs/accounts.png)
+
+Account menus show provider-reported five-hour and weekly reset countdowns and available reset credits. First prompts get an automatic chat title; `/name` locks your own title. Use `/directory /path/to/project` or start with `psi -C /path/to/project` to work elsewhere without changing your shell directory.
 
 Budget, request limits, output tokens and **Compaction model** stay in `/settings`.
 

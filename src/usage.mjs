@@ -70,3 +70,20 @@ export function usageLabel(account, usage = {}, { sessionCost, costKnown=true,om
   if(sessionCost!==undefined) return `${prefix} · session ${costKnown?'$'+sessionCost.toFixed(4):'cost unavailable'}${compact?'':' · '+compactCount(usage.totalTokens || 0)+' tokens'}`;
   return `${prefix} · ${compactCount(usage.totalTokens || 0)} tokens · ${usage.requests || 0} calls in Psi`;
 }
+
+// Subscription metadata only; never invent reset windows or credits for API plans.
+export function accountResetLabel(account,usage={},now=Date.now()){
+ if(account.type!=='oauth')return '';
+ const parts=[];
+ for(const [labels,label]of[[['5h'],'5h'],[['7d','1w','weekly'],'week']]){
+  const window=(usage.limits||[]).find(l=>l.kind==='quota'&&labels.includes(l.label));
+  if(!window)continue;
+  const left=window.resetAt*1000-now;
+  let time='?';
+  if(Number.isFinite(window.resetAt)&&window.resetAt>0){const m=Math.ceil(Math.max(0,left)/60000),h=Math.floor(m/60),d=Math.floor(h/24);time=left<=0?'due':d?`${d}d ${h%24}h`:h?`${h}h ${m%60}m`:`${m}m`;}
+  parts.push(`${label} ${time}`);
+ }
+ if(Number.isSafeInteger(usage.resetCredits?.availableCount)&&usage.resetCredits.availableCount>=0)parts.push(`resets ${usage.resetCredits.availableCount}`);
+ if(!parts.length&&['openai-codex','openai','anthropic'].includes(account.provider)&&(!usage.quotaCheckedAt||usage.quotaError))return 'resets unavailable';
+ return parts.join(' · ')+(usage.quotaError&&parts.length?' · cached':'');
+}

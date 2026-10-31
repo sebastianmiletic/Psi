@@ -168,7 +168,7 @@ export class Tools {
       signal?.throwIfAborted(); if (!entry) throw new Error(`Unknown tool: ${call.name}`);
       const args = validateToolArguments(entry, call);
       if(this.config.agentMode==='plan'){
-        const allowed=['read','search','fetch','search_web','checkpoint','progress','finish','battlecode_inspect'];
+        const allowed=['session_title','read','search','fetch','search_web','checkpoint','progress','finish','battlecode_inspect'];
         const researchBrowser=call.name==='browser'&&['open','read','close'].includes(args.action);
         const observeJob=call.name==='job'&&['list','status','wait','await'].includes(args.action);
         if(!allowed.includes(call.name)&&!researchBrowser&&!observeJob&&call.name!=='agent')throw new Error('Plan mode is read-only. The user can press Shift+Tab to execute the plan.');

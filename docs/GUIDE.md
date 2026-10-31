@@ -138,9 +138,13 @@ Custom endpoint prices default to unknown. Use `/settings` → **API rates** to 
 | `/export [path]` | Export the current session context as Markdown |
 | `/status`, `/help`, `/quit` | Inspect state, see commands or exit |
 
+The header shows the chat name above its saved working directory. Both survive reopening the session, regardless of the shell directory. Long paths shorten from the left to retain the project name. First prompts seed a title immediately; the model can refine it once through `session_title` during its normal work. `/name` locks a user title permanently against automatic changes.
+
 The prompt stays pinned to the bottom of the terminal while the conversation scrolls above it. Its footer shows the model on the left and the effort value (such as `medium`) aligned to the right, without a provider label or “thinking” prefix. The next row shows the selected account: subscription accounts display only the weekly window as percent left; metered API accounts display the current session cost. No provider label appears in either footer row.
 
 Click the compact shaded Ψ mark to expand it into a shaded, rotating 3D mesh. Click again or press Escape to return to your unchanged prompt. `/logo` provides the same interaction from the keyboard. The 3D animation renders only while open and adds no dependencies.
+
+In `/model`, `/accounts`, Switch accounts and Remove account, type searches into the main composer. Search text is never added to conversation history, queued or sent to inference; Enter selects a row and Escape restores the previous draft. Account rows show reported reset countdowns, such as `5h 1h 30m · week 2d 4h · resets 2`. Missing windows and API plans omit this metadata; unavailable reports are marked. Cached rows appear immediately, then at most two read-only provider refreshes run concurrently and cancel on close.
 
 Type to filter pickers, use arrows to navigate and Enter to select. Tab completes slash commands and paths. Shift+Enter creates a newline. The clickable mode control sits on the input border without shifting draft text or slash commands. One Escape closes a submenu. Escape twice within 600 ms stops the current run. Shift+Tab toggles plan/execute mode. Ctrl+C cancels a prompt or run and exits when idle. A message entered during a run is saved and queued after the next tool boundary. Remaining stale calls in that response are skipped with recorded outcomes before the correction reaches the model.
 
@@ -295,3 +299,5 @@ See [Reset details](RESETS.md) for banked Codex resets, provider reset schedules
 ## Session names
 
 `/name My experiment` renames the current session. `/name` without an argument opens a title prompt. Names persist in the journal and session metadata, appear in `/resume` and session listings, and are included in exports. Naming does not clear context, goals, account data or files and works while inference is active. Escape cancels the prompt. Names are one line, up to 120 characters.
+
+Use `/directory /path/to/project` to select a workspace inside the current chat, or `psi -C /path/to/project` at startup. Psi saves the selected path in the session, rebuilds tools against it and retains the conversation and previously granted directories. `/directory add` and `/directory remove` continue to manage extra access independently. Resuming a chat always restores its own saved workspace rather than the launch directory.

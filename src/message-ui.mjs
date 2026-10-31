@@ -29,7 +29,7 @@ export function flowAccent(text,ui,offset=0){
 export class Composer extends Editor {
   constructor(ui,theme){super(ui.tui,theme,{paddingX:1,autocompleteMaxVisible:7});this.ui=ui;}
   handleInput(data){
-    if(this.ui.modelSearch&&this.ui.modelSearch.handleInput(data))return;
+    if(this.ui.composerSearch&&this.ui.composerSearch.handleInput(data))return;
     super.handleInput(data);
   }
   render(width){

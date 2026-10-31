@@ -34,8 +34,10 @@ try {
   browser=await chromium.launch({executablePath:process.env.PSI_CHROME_PATH||'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',headless:true});
   const page=await browser.newPage({viewport:{width:1040,height:744},deviceScaleFactor:2});
   await mkdir(new URL('../docs/',import.meta.url),{recursive:true});
-  for (const [name,animation] of [['terminal',false],['logo-3d',true],['settings',false],['conversation',false],['models',false],['effort',false],['stats',false],['reset',false],['tools',false],['subagents',false],['overkill',false]]) {
+  for (const [name,animation] of [['terminal',false],['logo-3d',true],['settings',false],['conversation',false],['models',false],['accounts',false],['effort',false],['stats',false],['reset',false],['tools',false],['subagents',false],['overkill',false]]) {
     let settings;
+    session.meta.title=name==='conversation'?'Baseline verification':name==='overkill'?'Experiment review':'New session';
+    if(name==='accounts'){ui.clear();settings=ui.composerMenu('Switch accounts',[{value:'one',label:'codex · Personal',description:'5h 1h 30m · week 2d 4h · resets 2'},{value:'two',label:'codex · School',description:'5h 3h 10m · week 5d 2h · resets 0'},{value:'three',label:'anthropic · Team',description:'5h 2h 15m · week 3d 6h'}],'',{showDetails:true});}
     if(name==='models'){ui.clear();settings=app.selectModel('5.6 luna');await new Promise(r=>setTimeout(r,10));}
     if(name==='reset'){ui.clear();const now=Date.now();const data={account:{id:'preview',name:'Personal',provider:'openai-codex',type:'oauth'},mode:'codex',credits:{availableCount:2,credits:[{status:'available',expiresAt:now/1000+10*86400}]},usage:{limits:[{kind:'quota',label:'5h',usedPercent:91,resetAt:now/1000+5400},{kind:'quota',label:'7d',usedPercent:17,resetAt:now/1000+3*86400}]}};settings=ui.resetMenu({account:data.account,read:async()=>data,use:async()=>data,onUsage:d=>{app.activeAccount=d.account;app.activeUsage=d.usage;}});await new Promise(r=>setTimeout(r,0));}
     if(name==='tools'){ui.clear();settings=ui.toolsMenu(app.tools.definitions());}

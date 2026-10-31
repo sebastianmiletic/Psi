@@ -1,4 +1,4 @@
-// Optional Codex app-server bridge, started only for user-invoked reset actions.
+// Optional Codex app-server bridge, started only for user-invoked account and reset menus.
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 
