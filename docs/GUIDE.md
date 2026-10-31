@@ -63,7 +63,7 @@ Use `/model` to type a search in the main input bar. The list and footer show mo
 
 Open `/effort` for a compact slider: **←/→** adjust effort, **Tab** stages the right-aligned **OVERKILL** toggle, **Enter** applies and **Escape** cancels. OVERKILL adds a flowing glow in your selected accent around the input bar. Disable Motion for a static accent. Use `/subagents` or the worker entry in `/settings` to set concurrency and edit each worker's name, job, model, thinking, plan/execute mode, request limit and budget independently. With OVERKILL enabled, every new task automatically starts available role-specific advisory workers, up to the configured concurrency. Automatic workers inspect in plan mode, which prevents conflicting edits/builds; the main agent owns implementation and can use `agent` to delegate explicitly scoped execution afterward. The configured profile mode still applies to manually delegated workers.
 
-Worker rows below the usage bar show task names, model, active tool/response state, elapsed time and completion/failure. At most three rows are shown; extra active workers are counted and `/subagents` exposes all runs. Completion uses filesystem events rather than inference polling. Reports are delivered at safe model boundaries and must be reviewed before the parent finishes. Interrupted parents can recover reports and deduplicated token receipts from saved journals. Double Escape stops the parent and workers.
+Worker rows below the usage bar show task names, model, active tool/response state and elapsed time. Finished workers disappear automatically; their records and results stay available in `/subagents`. At most three rows are shown; extra active workers are counted and `/subagents` exposes all runs. Completion uses filesystem events rather than inference polling. Reports are delivered at safe model boundaries and must be reviewed before the parent finishes. Interrupted parents can recover reports and deduplicated token receipts from saved journals. Double Escape stops the parent and workers.
 
 Workers inherit the approved directories, use separate durable model sessions, and cannot create nested workers. A plan-mode parent always forces read-only workers. The AI can spawn, send follow-ups, inspect, await and stop them through `agent`; completed workers can resume for follow-up tasks. Returned worker usage is included exactly once in parent session accounting. Per-worker budgets are capped to a share of the parent's remaining configured budget when a worker starts.
 
@@ -134,7 +134,7 @@ Custom endpoint prices default to unknown. Use `/settings` → **API rates** to 
 | `/name [title]` | Rename the current session, or prompt for a title |
 | `/new` | Start a fresh session |
 | `/resume [id]` | Search saved sessions |
-| `/refresh` | Reload settings, accounts, providers and tools |
+| `/reload` · `/refresh` | Reload settings, accounts, providers and tools |
 | `/export [path]` | Export the current session context as Markdown |
 | `/status`, `/help`, `/quit` | Inspect state, see commands or exit |
 
@@ -280,7 +280,7 @@ Transport and terminal rendering: [Pi](https://github.com/earendil-works/pi). Ad
 
 ## Reload
 
-`/refresh` reloads disk settings, provider/model registrations, accounts, tools and the UI configuration. It retains the session journal, allowed directories, queued messages, objectives and draft. Global disk settings take precedence over previous session settings. If inference is active, select **Reload** to stop it and rebuild, or cancel to continue uninterrupted. Reload does not start another model request; unfinished work stays saved. Detached standalone jobs remain managed by their existing job records. Installed source code changes still require a process restart.
+`/reload` (also `/refresh`) reloads disk settings, provider/model registrations, accounts, tools and the UI configuration. It retains the session journal, allowed directories, queued messages, objectives and draft. Global disk settings take precedence over previous session settings. If inference is active, select **Reload** to stop it and rebuild, or cancel to continue uninterrupted. Reload does not start another model request; unfinished work stays saved. Detached standalone jobs remain managed by their existing job records. Installed source code changes still require a process restart.
 
 The compaction model remains in `/settings`. Custom provider setup remains available through `psi provider add`. See [removed commands and recommendations](COMMAND_CHANGES.md).
 

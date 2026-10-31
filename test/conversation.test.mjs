@@ -47,6 +47,17 @@ test('stopped tools remain interrupted and subagents always sit below the usage 
  terminal.resize(100,32);const menu=ui.effortMenu({levels:['off','low','medium','high'],effort:'medium',overkill:false});const lines=frame(ui);assert.match(lines.slice(0,6).join('\n'),/Psi/);assert.ok(lines.findIndex(l=>l.includes('Replay audit'))>lines.findIndex(l=>l.includes('% left')));terminal.input('\x1b');await menu;
 });
 
+test('finished subagents hide immediately while active overflow and saved worker details remain',async t=>{
+ const {ui}=await setup(t);
+ for(let i=0;i<4;i++)ui.event({type:'agent_status',agent:{id:'worker-'+i,name:'Audit '+i,model:'fixture/test',status:'running'}});
+ assert.match(frame(ui).join('\n'),/Audit 2.*\+1/);
+ ui.event({type:'agent_finished',agent:{id:'worker-0',name:'Audit 0',model:'fixture/test',status:'completed'}});
+ let screen=frame(ui).join('\n');assert.doesNotMatch(screen,/Audit 0/);assert.match(screen,/Audit 3/);assert.equal(ui.workerRows.get('worker-0').status,'completed');
+ for(const [i,status]of[[1,'failed'],[2,'cancelled'],[3,'completed']])ui.event({type:'agent_finished',agent:{id:'worker-'+i,name:'Audit '+i,model:'fixture/test',status}});
+ assert.equal(ui.subagentBar.render(100).length,0);assert.doesNotMatch(frame(ui).join('\n'),/Audit [0-3]/);assert.equal(ui.workerRows.size,4);
+ ui.event({type:'agent_started',agent:{id:'worker-0',name:'Follow-up audit',model:'fixture/test',status:'running'}});assert.match(frame(ui).join('\n'),/Follow-up audit/);
+});
+
 test('/name persists the current session title through list and resume without replacing context or making inference calls',async t=>{
  const {app,session,requests,ui}=await setup(t);await session.message({role:'user',content:'Original task',timestamp:Date.now()});await session.event({type:'state',state:{loopGoal:'Unfinished work'}});app.engine.busy=true;
  await app.submit('/name Experiment 7');app.engine.busy=false;assert.equal(session.meta.title,'Experiment 7');assert.ok(commands.some(c=>c.name==='name'));

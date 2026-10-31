@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { stripTerminalSequences,visibleWidth } from '@earendil-works/pi-tui';
-import { TerminalUI } from '../src/ui.mjs';
+import { TerminalUI,commands } from '../src/ui.mjs';
 import { MemoryTerminal } from './terminal.mjs';
 import { fixture } from './helpers.mjs';
 import { applicableQuota } from '../src/usage.mjs';
@@ -51,7 +51,7 @@ test('reload reads disk settings, rebuilds tools and accounts, and preserves ses
  await session.message({role:'user',content:'Saved context',timestamp:Date.now()});await session.event({type:'state',state:{loopGoal:'Unfinished goal',queuedMessages:['Next task']}});
  await app.update({accent:'rose'});await writeFile(join(app.home,'config.json'),JSON.stringify({...config,accent:'cyan',checkForUpdates:false}));
  const oldEngine=app.engine,oldTools=app.tools,oldRegistry=app.registry;let closed=false;const close=oldTools.close.bind(oldTools);oldTools.close=async()=>{closed=true;await close();};ui.editor.setText('Preserve draft');
- await app.submit('/refresh');assert.notEqual(app.engine,oldEngine);assert.notEqual(app.registry,oldRegistry);assert.equal(closed,true);assert.equal(app.engine.config.accent,'cyan');assert.equal(app.tools.config.accent,'cyan');assert.equal(app.session.meta.id,session.meta.id);assert.equal(app.session.messages[0].content,'Saved context');assert.equal(app.session.state.loopGoal,'Unfinished goal');assert.deepEqual(app.engine.queue,['Next task']);assert.ok((await app.tools.policy.roots()).includes(await realpath(extra)));assert.equal(ui.editor.getText(),'Preserve draft');assert.equal(requests.length,0);
+ assert.ok(commands.some(c=>c.name==='reload'));assert.ok(commands.some(c=>c.name==='refresh'));await app.submit('/reload');assert.notEqual(app.engine,oldEngine);assert.notEqual(app.registry,oldRegistry);assert.equal(closed,true);assert.equal(app.engine.config.accent,'cyan');assert.equal(app.tools.config.accent,'cyan');assert.equal(app.session.meta.id,session.meta.id);assert.equal(app.session.messages[0].content,'Saved context');assert.equal(app.session.state.loopGoal,'Unfinished goal');assert.deepEqual(app.engine.queue,['Next task']);assert.ok((await app.tools.policy.roots()).includes(await realpath(extra)));assert.equal(ui.editor.getText(),'Preserve draft');assert.equal(requests.length,0);
  assert.ok(app.tools.definitions().some(t=>t.name==='read'));assert.equal(app.engine.model.id,'test');
 });
 
@@ -61,7 +61,7 @@ test('an active reload requires confirmation; Escape keeps the run and acceptanc
  const terminal=new MemoryTerminal(100,32),ui=new TerminalUI(f.app,{terminal});f.app.ui=ui;t.after(()=>ui.stop());ui.start();
  const {writeFile}=await import('node:fs/promises');const {join}=await import('node:path');await writeFile(join(f.app.home,'config.json'),JSON.stringify({...f.config,checkForUpdates:false}));
  const running=f.app.submit('Do work');await started;const old=f.app.engine;
- let reload=f.app.submit('/refresh');frame(ui);assert.match(frame(ui).join('\n'),/Stop AI and reload/);terminal.input('\x1b');assert.equal(await reload,false);assert.equal(old.busy,true);assert.equal(old.controller.signal.aborted,false);
+ let reload=f.app.submit('/reload');frame(ui);assert.match(frame(ui).join('\n'),/Stop AI and reload/);terminal.input('\x1b');assert.equal(await reload,false);assert.equal(old.busy,true);assert.equal(old.controller.signal.aborted,false);
  reload=f.app.submit('/refresh');frame(ui);terminal.input('\x1b[B');terminal.input('\r');await reload;await running;
  assert.equal(old.busy,false);assert.notEqual(f.app.engine,old);assert.equal(f.app.engine.busy,false);assert.equal(f.requests.length,1);release();
 });

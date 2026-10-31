@@ -69,11 +69,11 @@ The Ψ header stays visible above compact bottom menus. Model search lives in th
 | `/directory` | Add or remove working directories |
 | `/stats` · `/tools` | Activity and available tools |
 | `/reset` | Reset times and available account resets |
-| `/settings` · `/refresh` | Configure Psi or reload disk settings |
+| `/settings` · `/reload` | Configure Psi or reload disk settings |
 | `/name [title]` | Rename the current session |
 | `/help` | Every command |
 
-With **OVERKILL** on, each task starts advisory subagents up to your configured concurrency. Their task names, activity, model and completion status appear below the usage bar. Reports return to the main agent before it finishes; implementation can then be delegated with explicit ownership. Subagents use their configured models and selected provider accounts and consume normal provider usage.
+With **OVERKILL** on, each task starts advisory subagents up to your configured concurrency. Their task names, activity and model appear below the usage bar while active; finished workers hide automatically, with results retained in `/subagents`. Reports return to the main agent before it finishes; implementation can then be delegated with explicit ownership. Subagents use their configured models and selected provider accounts and consume normal provider usage.
 
 Answers use clean Markdown without repeated assistant headings. Reads and searches group under **Exploring / Explored**; commands use **Running / Ran** with indented output. **Ctrl+T** expands tool details.
 

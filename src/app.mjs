@@ -182,7 +182,7 @@ export class App {
     }
     const match = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()); const command = match?.[1]; const arg = match?.[2] || '';
     if (this.authController && !['quit', 'help'].includes(command)) throw new Error('Finish or cancel account sign-in first.');
-    if (this.engine.busy && !this.engine.waiting && !['name','reset','stats','effort','settings','subagents','refresh','directory','update','logo','usage','tools','project','experiments','cost','status','help','quit'].includes(command)) throw new Error('Press Escape twice to stop, or enter a message to queue it at the next tool boundary.');
+    if (this.engine.busy && !this.engine.waiting && !['name','reset','stats','effort','settings','subagents','reload','refresh','directory','update','logo','usage','tools','project','experiments','cost','status','help','quit'].includes(command)) throw new Error('Press Escape twice to stop, or enter a message to queue it at the next tool boundary.');
     if(['continue','stop','jobs','budget','limit','tokens','agents','provider','cd','summary-model','checkpoint'].includes(command))throw new Error(`/${command} was removed. Use /settings for limits, /subagents for workers, or Escape twice to stop.`);
     if(command==='name'){const value=arg||await this.ui.ask({type:'text',message:'Session name',placeholder:this.session.meta.title});if(value===null)return;this.ui.note('Session: '+await this.session.rename(value,{duringRun:this.engine.busy}));return;}
     if(command==='settings')return this.settingsMenu();
@@ -224,7 +224,7 @@ export class App {
       const id = arg || await this.ui.choose('Resume session', sessions.map(s => ({ value: s.id, label: s.title, description: `${s.createdAt.slice(0, 16)} · ${s.cwd}` })));
       if (id) await this.changeSession(await Session.load(id, this.home)); return;
     }
-    if (command === 'refresh') return this.reload();
+    if (command === 'reload' || command === 'refresh') return this.reload();
     if (command === 'export') { const path = resolve(this.session.meta.cwd, arg || `psi-${this.session.meta.id}.md`); await writeFile(path, this.exportMarkdown(), { mode: 0o600 }); this.ui.note(`Exported: ${path}`); return; }
     throw new Error(`Unknown command: /${command}. Use /help.`);
   }

@@ -26,7 +26,7 @@ const markdownTheme = {
 export const commands = [
  ['model','Model'],['effort','Effort + OVERKILL'],['accounts','Accounts'],['directory','Working directories'],['settings','Settings'],['subagents','Subagents'],
  ['loop','Persistent goal'],['stats','Activity'],['tools','Tools'],['usage','Account usage'],['reset','Quota resets'],['cost','Session cost'],['new','New session'],['resume','Resume'],['name','Rename session'],
- ['refresh','Reload Psi'],['compact','Compact context'],['project','Battlecode project'],['experiments','Experiments'],['profile','Agent profile'],
+ ['reload','Reload Psi'],['refresh','Reload Psi'],['compact','Compact context'],['project','Battlecode project'],['experiments','Experiments'],['profile','Agent profile'],
  ['logo','3D logo'],['update','Update Psi'],['status','Session status'],['export','Export session'],['help','Commands'],['quit','Quit']
 ].map(([name,description])=>({name,description}));
 
@@ -74,10 +74,10 @@ export class TerminalUI {
       return [left+' '.repeat(gap)+(state.overkill?accentBadge(' '+right+' ',c):dim(right)), ...(app.engine.config.showUsage===false?[]:[truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage,{sessionCost:app.session.meteredCost,costKnown:app.session.meteredCostKnown,remaining:true,compact:true,weeklyOnly:true}))),width)])];
     } };
     this.subagentBar={invalidate(){},render:width=>{
-      const all=[...this.workerRows.values()],active=all.filter(r=>['running','queued','waiting'].includes(r.status)),idle=all.filter(r=>!['running','queued','waiting'].includes(r.status));
-      const max=Math.max(1,Math.min(3,Math.floor(this.terminal.rows/10))),rows=[...active,...idle.slice(-max).reverse()].slice(0,max);
-      return rows.map((r,i)=>{const extra=i===rows.length-1&&active.length>rows.length?` · +${active.length-rows.length}`:'';const running=['running','queued','waiting'].includes(r.status),icon=running?'●':r.status==='completed'?'✓':'!';const elapsed=Math.max(0,Math.floor((Date.now()-Date.parse(r.createdAt||new Date()))/1000));
-        return truncateToWidth('  '+this.paint(icon)+' '+safe(r.name)+' · '+dim(`${r.activity&&running?r.activity:r.status} · ${modelLabel(r.model)}${running?' · '+elapsed+'s':''}${extra}`),width);
+      const active=[...this.workerRows.values()].filter(r=>['running','queued','waiting'].includes(r.status));
+      const max=Math.max(1,Math.min(3,Math.floor(this.terminal.rows/10))),rows=active.slice(0,max);
+      return rows.map((r,i)=>{const extra=i===rows.length-1&&active.length>rows.length?` · +${active.length-rows.length}`:'';const elapsed=Math.max(0,Math.floor((Date.now()-Date.parse(r.createdAt||new Date()))/1000));
+        return truncateToWidth('  '+this.paint('●')+' '+safe(r.name)+' · '+dim(`${r.activity||r.status} · ${modelLabel(r.model)} · ${elapsed}s${extra}`),width);
       });
     }};
     this.progressBar={invalidate(){},render:width=>{

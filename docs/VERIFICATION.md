@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **112 passing tests**.
+- `npm run verify`: syntax checks and **113 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -129,3 +129,8 @@ Actual API invoices and real competition transactions were not exercised in this
 - The release run exposed a Windows fixture teardown race while a mode switch was still saving settings. The main-branch matrix at the same head passed, but the duplicate tag run was cancelled for diagnosis.
 - Shutdown now waits for an in-progress mode change and never starts a quota monitor after closure. A gated regression checks this without timing assumptions.
 - Workflow tests await mode changes directly. Shared fixtures stop apps/workers and close HTTP connections before removing temporary homes, with bounded Windows file-sharing retries.
+
+## Active subagents and reload alias (0.2.12)
+
+- Finished subagents disappear from the footer immediately, making room for other active workers. Saved records, report delivery and follow-up reuse remain intact. Rendering tests cover overflow, completion, failure, cancellation and follow-up activation.
+- `/reload` and `/refresh` share the same runtime rebuild. Tests verify disk settings, preserved context/directories/queue/draft, and cancellation or confirmation during inference and independent worker activity.
