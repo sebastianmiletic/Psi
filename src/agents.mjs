@@ -36,7 +36,8 @@ export class Agents {
   if(!['running','queued'].includes(job.status)){
    const active=await Promise.all((await this.records()).map(a=>this.app.jobs.get(a.jobId)));if(active.filter(j=>['running','queued'].includes(j.status)).length>=this.app.engine.config.subagentConcurrency)throw new Error('Await an existing worker before restarting this one.');
    const child=await Session.load(r.sessionId,this.home);await child.event({type:'state',state:{directories:await this.app.tools.policy.roots()}});
-   const path=join(dir,'worker.json'),spec=await readJSON(path,null);spec.prompt=prompt;spec.config.agentMode=this.app.engine.config.agentMode==='plan'?'plan':spec.config.agentMode;await atomicJSON(path,spec);
+   const path=join(dir,'worker.json'),spec=await readJSON(path,null);spec.prompt=prompt;spec.config.agentMode=this.app.engine.config.agentMode==='plan'?'plan':spec.config.agentMode;
+   await child.event({type:'state',state:{settings:{...child.state.settings,agentMode:spec.config.agentMode}}});await atomicJSON(path,spec);
    const workerArgv=[process.execPath,fileURLToPath(new URL('./agent-worker.mjs',import.meta.url)),path];
    const next=await this.app.jobs.start(shellCommand(workerArgv),this.session.meta.cwd,{label:`agent:${r.name}`,infrastructure:workerArgv,graceful_stop_ms:360000});
    await this.session.event({type:'state',state:{agents:(await this.records()).map(a=>a.id===id?{...a,jobId:next.id}:a)}});return{id,restarted:true};

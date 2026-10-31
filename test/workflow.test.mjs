@@ -75,3 +75,22 @@ test('plan-mode parent forces read-only workers and completed workers can receiv
 test('isolated Python alias and zsh heredoc use private scratch instead of /tmp',{skip:process.platform!=='darwin'},async t=>{
  const f=await fixture(t,()=>({text:'unused'}));const r=await call(f,'bash',{command:"python - <<'PY'\nprint('heredoc-ok')\nPY",yield_ms:2000});assert.equal(r.isError,false,r.content[0].text);assert.match(r.content[0].text,/heredoc-ok/);
 });
+
+test('administrative CLI commands construct workspace policy without creating a conversation session',async t=>{
+ const f=await fixture(t,()=>({text:'unused'}));const {spawn}=await import('node:child_process'),{fileURLToPath}=await import('node:url');
+ for(const args of [['accounts','list'],['doctor'],['providers','codex']]){
+  const result=await new Promise((resolve,reject)=>{const p=spawn(process.execPath,[fileURLToPath(new URL('../bin/psi.mjs',import.meta.url)),...args,'--json'],{env:{...process.env,PSI_HOME:f.session.home},stdio:['ignore','pipe','pipe']});let out='',err='';p.stdout.on('data',c=>out+=c);p.stderr.on('data',c=>err+=c);p.on('error',reject);p.on('close',code=>resolve({code,out,err}));});
+  if(args[0]==='doctor')assert.ok([0,1].includes(result.code),result.err);else assert.equal(result.code,0,result.err);assert.doesNotThrow(()=>JSON.parse(result.out));
+ }
+});
+
+test('a previously executing worker resumes read-only when its parent switches to plan',async t=>{
+ const f=await fixture(t,(_p,n)=>n===1?{text:'Initial worker finished.'}:n===2?{call:{name:'write',args:{path:'forbidden-resume.txt',content:'no'}}}:{text:'Read-only follow-up completed.'});
+ await f.app.update({overkill:true,agents:[{id:'worker',name:'Worker',job:'Follow the assigned mode',model:'fixture/test',effort:'off',mode:'execute',maxSteps:10}]});
+ const r=await f.app.agents.spawn({profile:'worker',prompt:'Inspect the task.'});await f.app.agents.wait(r.id);await f.app.setMode('plan');await f.app.agents.send(r.id,'Inspect again in plan mode.');await f.app.agents.wait(r.id);await assert.rejects(readFile(join(f.root,'forbidden-resume.txt')));assert.equal(f.session.totals.requests,3);
+});
+
+test('source updater refuses local changes before fetching or overwriting the checkout',async t=>{
+ const f=await fixture(t,()=>({text:'unused'}));const {run,updateInstallation}=await import('../src/updates.mjs');const root=join(f.root,'source');await mkdir(root);await run('git',['init'],root);await run('git',['remote','add','origin','https://github.com/sebastianmiletic/Psi.git'],root);await writeFile(join(root,'local.txt'),'preserve this');
+ await assert.rejects(updateInstallation(f.session.home,{root,release:{available:true,latest:'9.0.0',assets:[]}}),/Local changes/);assert.equal(await readFile(join(root,'local.txt'),'utf8'),'preserve this');
+});

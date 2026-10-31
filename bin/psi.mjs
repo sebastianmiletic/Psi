@@ -92,7 +92,7 @@ try {
     // Explicit invocation flags override saved session settings.
     if(v.mode)session.state.settings={...session.state.settings,agentMode:v.mode};if(v.overkill)session.state.settings={...session.state.settings,overkill:true};
     for (const [flag, key] of [['model', 'model'], ['effort', 'effort'], ['budget', 'budget'], ['max-steps', 'maxSteps'], ['tokens', 'maxOutputTokens'], ['profile', 'profile']]) if (v[flag] !== undefined) session.state.settings = { ...session.state.settings, [key]: config[key] };
-  } else session = { meta: { id: 'administration', cwd }, state: {} };
+  } else session = { home,dir:join(home,'administration'),meta: { id: 'administration', cwd }, state: {} };
   let outputOpen = false;
   const app = new App(config, session, { home, onEvent: event => {
     if (v.json) console.log(JSON.stringify(event));

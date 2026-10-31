@@ -15,9 +15,9 @@ export function run(command,args,cwd){return new Promise((res,rej)=>{
 });}
 export async function checkUpdate(home,{force=false,fetchImpl=fetch}={}){
  const cache=join(home,'update-check.json'),old=await readJSON(cache,null);
- if(!force&&old&&Date.now()-old.checkedAt<21600000)return old;
+ if(!force&&old&&Date.now()-old.checkedAt<21600000)return{...old,available:newer(old.latest,version)};
  const response=await fetchImpl(`https://api.github.com/repos/${repository}/releases/latest`,{headers:{Accept:'application/vnd.github+json','User-Agent':'Psi-updater'},signal:AbortSignal.timeout(6000)});
- if(response.status===404)return{checkedAt:Date.now(),latest:version,available:false};if(!response.ok)throw new Error(`GitHub update check: HTTP ${response.status}`);
+ if(response.status===404){const result={checkedAt:Date.now(),latest:version,available:false};await atomicJSON(cache,result);return result;}if(!response.ok)throw new Error(`GitHub update check: HTTP ${response.status}`);
  const release=await response.json(),latest=release.tag_name?.replace(/^v/,'');
  if(!/^\d+\.\d+\.\d+$/.test(latest))throw new Error('Invalid release version');
  const result={checkedAt:Date.now(),latest,available:newer(latest,version),url:release.html_url,assets:release.assets.map(a=>({name:a.name,url:a.browser_download_url,digest:a.digest}))};await atomicJSON(cache,result);return result;

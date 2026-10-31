@@ -190,7 +190,7 @@ export class App {
     }
     const match = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()); const command = match?.[1]; const arg = match?.[2] || '';
     if (this.authController && !['quit', 'help'].includes(command)) throw new Error('Finish or cancel account sign-in first.');
-    if (this.engine.busy && !this.engine.waiting && !['settings','agents','directory','update','logo','usage','tools','project','experiments','cost','status','help','quit'].includes(command)) throw new Error('Press Escape twice to stop, or enter a message to queue it at the next tool boundary.');
+    if (this.engine.busy && !this.engine.waiting && !['effort','settings','agents','directory','update','logo','usage','tools','project','experiments','cost','status','help','quit'].includes(command)) throw new Error('Press Escape twice to stop, or enter a message to queue it at the next tool boundary.');
     if(['continue','stop','jobs','budget','limit','tokens'].includes(command))throw new Error(`/${command} was removed. Use /settings for limits, /agents for workers, or Escape twice to stop.`);
     if(command==='settings')return this.settingsMenu();
     if(command==='agents')return this.agentsMenu();
@@ -249,7 +249,7 @@ export class App {
     if (command === 'export') { const path = resolve(this.session.meta.cwd, arg || `psi-${this.session.meta.id}.md`); await writeFile(path, this.exportMarkdown(), { mode: 0o600 }); this.ui.note(`Exported: ${path}`); return; }
     throw new Error(`Unknown command: /${command}. Use /help.`);
   }
-  async setMode(mode){await this.update({agentMode:mode});this.ui?.note(`${mode==='plan'?'Plan mode: inspect and prepare a plan.':'Execute mode: work within the allowed directories.'}`);}
+  async setMode(mode){if(mode==='plan')await this.agents.stopAll({wait:true});await this.update({agentMode:mode});this.ui?.note(`${mode==='plan'?'Plan mode: inspect and prepare a plan.':'Execute mode: work within the allowed directories.'}`);}
   async directoryCommand(arg){
     const match=/^(add|remove)(?:\s+([\s\S]+))?$/.exec(arg.trim());
     if(!arg.trim()){this.ui.note('Allowed directories:\n'+(await this.tools.policy.roots()).join('\n')+'\n/directory add <path> · /directory remove <path>');return;}
