@@ -71,7 +71,7 @@ test('reload also asks before interrupting an independently running subagent',as
  const f=await fixture(t,async()=>{ready();await gate;return{text:'Worker finished'};});t.after(()=>release());
  const terminal=new MemoryTerminal(100,32),ui=new TerminalUI(f.app,{terminal});f.app.ui=ui;t.after(()=>ui.stop());ui.start();
  await f.app.update({overkill:true,agents:[{id:'one',name:'One',job:'Inspect',model:'fixture/test',effort:'off',mode:'plan',maxSteps:5}]});
- const worker=await f.app.agents.spawn({profile:'one',prompt:'Inspect'});await started;assert.equal(f.app.engine.busy,false);
+ const worker=await f.app.agents.spawn({profile:'one',name:'Inspect active task',prompt:'Inspect'});await started;assert.equal(f.app.engine.busy,false);
  try{
   const reload=f.app.submit('/refresh');for(let i=0;i<100&&!ui.pending;i++)await delay(10);assert.ok(ui.pending);terminal.input('\x1b');assert.equal(await reload,false);assert.equal((await f.app.agents.status(worker.id)).status,'running');
  }finally{release();await f.app.agents.stopAll({wait:true});}

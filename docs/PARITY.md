@@ -1,6 +1,6 @@
 # Pi, Codex and Psi
 
-Compared against the current primary documentation on 2026-10-31 and Psi 0.2.14 source. These are first-class product features; calling an external CLI through Psi's shell is different from providing its own integration.
+Compared against the current primary documentation on 2026-10-31 and Psi 0.2.15 source. These are first-class product features; calling an external CLI through Psi's shell is different from providing its own integration.
 
 | Feature | Available in | Psi today |
 | --- | --- | --- |

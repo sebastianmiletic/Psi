@@ -44,7 +44,7 @@ test('Tab in /effort toggles OVERKILL without changing the selected thinking lev
 test('independent subagent uses its configured model, writes within the inherited workspace and accounts usage exactly once',async t=>{
  const f=await fixture(t,(_p,n)=>n===1?{call:{name:'write',args:{path:'worker-result.txt',content:'verified child output'}}}:{text:'Worker completed the assigned file.'});
  await f.app.update({overkill:true,agents:[{id:'worker',name:'Worker',job:'Write the assigned file',model:'fixture/test',effort:'off',mode:'execute',maxSteps:10}]});
- const r=await f.app.agents.spawn({profile:'worker',prompt:'Write worker-result.txt and report evidence.'});const result=await f.app.agents.wait(r.id);assert.equal(result.status,'completed');assert.equal(await readFile(join(f.root,'worker-result.txt'),'utf8'),'verified child output');assert.equal(f.session.totals.requests,2);await f.app.agents.wait(r.id);assert.equal(f.session.totals.requests,2);assert.equal(f.requests.length,2);
+ const r=await f.app.agents.spawn({profile:'worker',name:'Write verified output',prompt:'Write worker-result.txt and report evidence.'});const result=await f.app.agents.wait(r.id);assert.equal(result.status,'completed');assert.equal(await readFile(join(f.root,'worker-result.txt'),'utf8'),'verified child output');assert.equal(f.session.totals.requests,2);await f.app.agents.wait(r.id);assert.equal(f.session.totals.requests,2);assert.equal(f.requests.length,2);
 });
 test('Pi import is idempotent and shares refreshed credentials under the Pi file lock without changing selection',async t=>{
  const f=await fixture(t,()=>({text:'unused'})),path=join(f.root,'pi-accounts.json'),credential={type:'oauth',access:'test-private-access',refresh:'test-private-refresh',expires:9999999999999,accountId:'test-account'};
@@ -69,7 +69,7 @@ test('switching to plan during inference prevents the first returned mutation',a
 test('plan-mode parent forces read-only workers and completed workers can receive a new task',async t=>{
  const f=await fixture(t,(_p,n)=>n===1?{call:{name:'write',args:{path:'forbidden-child.txt',content:'no'}}}:{text:'Read-only worker response.'});
  await f.app.update({agentMode:'plan',overkill:true,agents:[{id:'worker',name:'Worker',job:'Inspect the task',model:'fixture/test',effort:'off',mode:'execute',maxSteps:10}]});
- const r=await f.app.agents.spawn({profile:'worker',prompt:'Inspect without changing files.'});await f.app.agents.wait(r.id);await assert.rejects(readFile(join(f.root,'forbidden-child.txt')));await f.app.agents.send(r.id,'Review the previous result again.');const result=await f.app.agents.wait(r.id);const diagnostic=await readFile(join(f.app.jobs.path(result.jobId),'worker.log'),'utf8').catch(()=> '');assert.equal(result.status,'completed',JSON.stringify(result)+'\n'+diagnostic);assert.equal(f.session.totals.requests,3);
+ const r=await f.app.agents.spawn({profile:'worker',name:'Inspect project evidence',prompt:'Inspect without changing files.'});await f.app.agents.wait(r.id);await assert.rejects(readFile(join(f.root,'forbidden-child.txt')));await f.app.agents.send(r.id,'Review the previous result again.');const result=await f.app.agents.wait(r.id);const diagnostic=await readFile(join(f.app.jobs.path(result.jobId),'worker.log'),'utf8').catch(()=> '');assert.equal(result.status,'completed',JSON.stringify(result)+'\n'+diagnostic);assert.equal(f.session.totals.requests,3);
 });
 
 test('isolated Python alias and zsh heredoc use private scratch instead of /tmp',{skip:process.platform!=='darwin'},async t=>{
@@ -87,7 +87,7 @@ test('administrative CLI commands construct workspace policy without creating a 
 test('a previously executing worker resumes read-only when its parent switches to plan',async t=>{
  const f=await fixture(t,(_p,n)=>n===1?{text:'Initial worker finished.'}:n===2?{call:{name:'write',args:{path:'forbidden-resume.txt',content:'no'}}}:{text:'Read-only follow-up completed.'});
  await f.app.update({overkill:true,agents:[{id:'worker',name:'Worker',job:'Follow the assigned mode',model:'fixture/test',effort:'off',mode:'execute',maxSteps:10}]});
- const r=await f.app.agents.spawn({profile:'worker',prompt:'Inspect the task.'});await f.app.agents.wait(r.id);await f.app.setMode('plan');await f.app.agents.send(r.id,'Inspect again in plan mode.');await f.app.agents.wait(r.id);await assert.rejects(readFile(join(f.root,'forbidden-resume.txt')));assert.equal(f.session.totals.requests,3);
+ const r=await f.app.agents.spawn({profile:'worker',name:'Inspect project task',prompt:'Inspect the task.'});await f.app.agents.wait(r.id);await f.app.setMode('plan');await f.app.agents.send(r.id,'Inspect again in plan mode.');await f.app.agents.wait(r.id);await assert.rejects(readFile(join(f.root,'forbidden-resume.txt')));assert.equal(f.session.totals.requests,3);
 });
 
 test('source updater refuses local changes before fetching or overwriting the checkout',async t=>{
@@ -104,7 +104,7 @@ test('job completion committed during the exit check is preserved instead of ove
 test('stopping a running subagent waits for its cancellation record on every OS',{timeout:15000},async t=>{
  let arrived,release;const ready=new Promise(r=>arrived=r),gate=new Promise(r=>release=r);t.after(()=>release());const f=await fixture(t,async()=>{arrived();await gate;return{text:'late response'};});
  await f.app.update({overkill:true,agents:[{id:'worker',name:'Worker',job:'Do the assigned task',model:'fixture/test',effort:'off',mode:'plan',maxSteps:10}]});
- const r=await f.app.agents.spawn({profile:'worker',prompt:'Inspect the task.'});await ready;
+ const r=await f.app.agents.spawn({profile:'worker',name:'Inspect project task',prompt:'Inspect the task.'});await ready;
  try{await f.app.agents.stopAll({wait:true});const result=await f.app.agents.status(r.id);assert.equal(result.status,'cancelled');assert.equal(result.result.status,'stopped');}finally{release();}
 });
 

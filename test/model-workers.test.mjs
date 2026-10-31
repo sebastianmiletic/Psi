@@ -38,57 +38,62 @@ test('OVERKILL is right aligned on the effort line, clickable, and keeps its key
  terminal.input('\t');assert.equal(ui.effortPreview.overkill,false);terminal.input('\x1b');await menu;
 });
 
-test('OVERKILL starts bounded task-named workers automatically and integrates reports before the final response',async t=>{
- let parentBeforeReports=0,parentAfterReports=0,workers=0;
- const f=await setup(t,p=>{
-  const child=p.messages.some(m=>typeof m.content==='string'&&m.content.includes('Automatic advisory task.'));
-  if(child){workers++;return{text:'Check bounds and preserve the baseline; fixture evidence verified.'};}
-  if(p.messages.some(m=>typeof m.content==='string'&&m.content.startsWith('Subagent reports ('))){parentAfterReports++;return{text:'Integrated the worker evidence into the final result.'};}
-  parentBeforeReports++;return{text:'Initial inspection complete.'};
- });
- await f.app.update({overkill:true,subagentConcurrency:2,agents:[{id:'research',name:'Research',job:'Inspect code',model:'fixture/test',effort:'off',mode:'plan',maxSteps:5},{id:'review',name:'Review',job:'Review risks',model:'fixture/test',effort:'off',mode:'execute',maxSteps:5},{id:'extra',name:'Extra',job:'Extra check',effort:'off',mode:'plan',maxSteps:5}]});
- await f.app.engine.run('Inspect baseline behaviour');const records=await f.app.agents.records();assert.equal(records.length,2);assert.equal(workers,2);assert.equal(parentAfterReports,1);assert.ok(parentBeforeReports<=1);assert.equal(f.session.totals.requests,workers+parentAfterReports+parentBeforeReports);
- assert.equal(f.session.state.workerDeliveries.length,2);assert.equal(f.session.messages.filter(m=>typeof m.content==='string'&&m.content.startsWith('Subagent reports (')).length,1);
- for(const r of records){assert.match(r.name,/Inspect baseline behaviour/);assert.equal(r.automatic,true);const spec=JSON.parse(await readFile(join(f.app.home,'sessions',r.sessionId,'worker.json')));assert.equal(spec.config.agentMode,'plan');assert.equal(spec.config.overkill,false);assert.equal(spec.config.subagentDepth,1);assert.equal((await f.app.agents.status(r.id)).status,'completed');}
- const lines=frame(f.ui),editor=lines.findIndex(l=>l.includes('EXECUTE'));assert.equal(f.ui.subagentBar.render(100).length,0);assert.doesNotMatch(lines.slice(editor+1).join('\n'),/Inspect baseline behaviour|completed/);assert.doesNotMatch(lines.slice(editor+1).join('\n'),/fixture\//);
- const count=f.session.totals.requests;await f.app.agents.reports({wait:true});assert.equal(f.session.totals.requests,count);
+test('OVERKILL waits for model delegation, uses distinct task names, and integrates executing worker reports',async t=>{
+ let release,arrived;const gate=new Promise(r=>release=r),ready=new Promise(r=>arrived=r);let parents=0,workers=0;const turns=new Map();
+ const f=await setup(t,async p=>{
+  const task=p.messages.find(m=>typeof m.content==='string'&&m.content.startsWith('Task from parent:'))?.content;
+  if(task){workers++;const file=task.includes('counter.txt')?'counter.txt':'schema.txt',n=(turns.get(file)||0)+1;turns.set(file,n);return n===1?{call:{name:'write',args:{path:file,content:'verified '+file}}}:{text:'Implemented and verified '+file};}
+  if(++parents===1){arrived();await gate;return{calls:[{name:'agent',args:{action:'spawn',profile:'preset',mode:'execute',name:'Build counter parser',prompt:'Implement counter.txt and verify it.'}},{name:'agent',args:{action:'spawn',profile:'preset',mode:'execute',name:'Fix replay schema',prompt:'Implement schema.txt and verify it.'}}]};}
+  return{text:p.messages.some(m=>typeof m.content==='string'&&m.content.startsWith('Subagent reports ('))?'Integrated worker evidence.':'Continue while workers finish.'};
+ });t.after(()=>release());
+ await f.app.update({overkill:true,subagentConcurrency:2,agents:[{id:'preset',name:'Researcher',job:'Read existing evidence only.',model:'fixture/test',effort:'off',mode:'plan',maxSteps:5}]});
+ const running=f.app.engine.run('Implement counter and schema changes');await ready;assert.equal((await f.app.agents.records()).length,0);assert.equal(f.ui.workerRows.size,0);release();await running;
+ const records=await f.app.agents.records();assert.deepEqual(records.map(r=>r.name),['Build counter parser','Fix replay schema']);assert.equal(workers,4);assert.equal(f.session.state.workerDeliveries.length,2);assert.equal(f.session.totals.requests,workers+parents);assert.ok(f.session.messages.some(m=>typeof m.content==='string'&&m.content.startsWith('Subagent reports (')));
+ for(const r of records){assert.ok(r.name.split(/\s+/).length<6);const spec=JSON.parse(await readFile(join(f.app.home,'sessions',r.sessionId,'worker.json')));assert.equal(JSON.parse(await readFile(join(f.app.home,'sessions',r.sessionId,'meta.json'))).title,r.name);assert.equal(spec.config.agentMode,'execute');assert.equal(spec.config.overkill,false);assert.equal(spec.config.subagentDepth,1);assert.doesNotMatch(spec.prompt,/Assigned role|advisory|Read existing evidence only/);}
+ assert.equal(await readFile(join(f.root,'counter.txt'),'utf8'),'verified counter.txt');assert.equal(await readFile(join(f.root,'schema.txt'),'utf8'),'verified schema.txt');assert.equal(f.ui.subagentBar.render(100).length,0);const count=f.session.totals.requests;await f.app.agents.reports({wait:true});assert.equal(f.session.totals.requests,count);
 });
 
-test('automatic subagents cannot write project files, and a loop cannot finish before their reports',async t=>{
- let childTurns=0,finishAttempts=0;
- const f=await fixture(t,p=>{
-  const child=p.messages.some(m=>typeof m.content==='string'&&m.content.includes('Automatic advisory task.'));
-  if(child)return ++childTurns===1?{call:{name:'write',args:{path:'forbidden.txt',content:'wrong'}}}:{text:'Write was denied; inspected the plan.'};
-  finishAttempts++;return {call:{name:'finish',args:{summary:'Verified after advisory review',evidence:['evidence.txt']}}};
+test('a delegated plan worker stays read-only and a goal cannot finish before its report',async t=>{
+ let children=0,parents=0,release;const gate=new Promise(r=>release=r);t.after(()=>release());
+ const f=await fixture(t,async p=>{
+  if(p.messages.some(m=>typeof m.content==='string'&&m.content.startsWith('Task from parent:'))){if(++children===1){await gate;return{call:{name:'write',args:{path:'forbidden.txt',content:'wrong'}}};}return{text:'Write denied; evidence inspected.'};}
+  if(++parents===1)return{call:{name:'agent',args:{action:'spawn',name:'Verify completion evidence',mode:'plan',prompt:'Inspect evidence without changing files.'}}};
+  release();return{call:{name:'finish',args:{summary:'Verified with worker evidence',evidence:['evidence.txt']}}};
  });
- const {writeFile}=await import('node:fs/promises');await writeFile(join(f.root,'evidence.txt'),'verified');
- await f.app.update({overkill:true,subagentConcurrency:1,agents:[{id:'one',name:'Reviewer',job:'Inspect changes',mode:'execute',effort:'off',maxSteps:5}]});await f.app.engine.run('Review evidence',{loop:true});
- await assert.rejects(readFile(join(f.root,'forbidden.txt')));assert.equal(f.session.state.loopStatus,'complete');assert.equal(f.session.state.workerDeliveries.length,1);assert.ok(finishAttempts>=1);const finish=f.session.messages.findLast(m=>m.role==='toolResult'&&m.toolName==='finish');assert.equal(finish.isError,false);
+ const {writeFile}=await import('node:fs/promises');await writeFile(join(f.root,'evidence.txt'),'verified');await f.app.update({overkill:true,agents:[]});await f.app.engine.run('Verify the evidence',{loop:true});
+ await assert.rejects(readFile(join(f.root,'forbidden.txt')));assert.equal(f.session.state.loopStatus,'complete');assert.equal(f.session.state.workerDeliveries.length,1);assert.ok(f.session.messages.some(m=>m.role==='toolResult'&&m.toolName==='finish'&&m.isError));assert.equal(f.session.messages.findLast(m=>m.role==='toolResult'&&m.toolName==='finish').isError,false);
 });
 
-test('double Escape stops automatic workers and new worker activity appears below the input',async t=>{
+test('double Escape stops model-delegated workers and active task names appear below usage',async t=>{
  let release;const gate=new Promise(r=>release=r);let started=0;
- const f=await setup(t,async()=>{started++;await gate;return{text:'Done'};});t.after(()=>release());
- await f.app.update({overkill:true,subagentConcurrency:1,agents:[{id:'one',name:'Research',job:'Read the project',mode:'plan',effort:'off',maxSteps:5}]});
- const running=f.app.engine.run('Inspect cancellation paths');await until(async()=>started>=2);
- const records=await f.app.agents.records();assert.equal(records.length,1);await until(()=>[...f.ui.workerRows.values()].some(r=>r.activity==='reasoning'));
+ const f=await setup(t,async p=>{
+  if(!p.messages.some(m=>typeof m.content==='string'&&m.content.startsWith('Task from parent:'))&&!p.messages.some(m=>m.role==='tool'))return{call:{name:'agent',args:{action:'spawn',name:'Audit cancellation paths',prompt:'Inspect cancellation paths.'}}};
+  started++;await gate;return{text:'Done'};
+ });t.after(()=>release());await f.app.update({overkill:true,subagentConcurrency:1});const running=f.app.engine.run('Inspect cancellation paths');await until(()=>started>=2);
+ const records=await f.app.agents.records();assert.equal(records.length,1);await until(()=>[...f.ui.workerRows.values()].some(r=>r.activity==='reasoning'));const lines=frame(f.ui);assert.ok(lines.findLastIndex(l=>l.includes('Audit cancellation paths'))>lines.findIndex(l=>l.includes('% left')));
  f.terminal.input('\x1b');f.terminal.input('\x1b');await running;await f.app.agents.stopAll({wait:true});assert.equal(f.app.engine.busy,false);assert.equal((await f.app.agents.status(records[0].id)).status,'cancelled');release();
 });
 
-test('enabling OVERKILL during inference starts subagents before the turn can finish',async t=>{
- let release,arrived;const gate=new Promise(r=>release=r),ready=new Promise(r=>arrived=r);let workerCalls=0,parentCalls=0;
- const f=await fixture(t,async p=>{
-  if(p.messages.some(m=>typeof m.content==='string'&&m.content.includes('Automatic advisory task.'))){workerCalls++;return{text:'Checked the task.'};}
-  if(++parentCalls===1){arrived();await gate;}return{text:'Parent response.'};
- });t.after(()=>release());
- await f.app.update({agents:[{id:'one',name:'Research',job:'Inspect task',mode:'plan',effort:'off',maxSteps:5}]});
+test('enabling OVERKILL during inference exposes delegation without starting unassigned workers',async t=>{
+ let release,arrived;const gate=new Promise(r=>release=r),ready=new Promise(r=>arrived=r);
+ const f=await fixture(t,async()=>{arrived();await gate;return{text:'Parent response.'};});t.after(()=>release());
  const running=f.app.engine.run('Check settings boundary');await ready;await f.app.engine.settings({overkill:true});release();await running;
- assert.equal(workerCalls,1);assert.equal((await f.app.agents.records()).length,1);assert.equal(f.session.state.workerDeliveries.length,1);assert.equal(parentCalls,2);
+ assert.equal((await f.app.agents.records()).length,0);assert.equal(f.requests.length,1);assert.ok(f.app.tools.entries.has('agent'));assert.equal(f.session.state.workerDeliveries,undefined);
 });
 
 test('completed worker findings and exact-once accounting survive a resumed parent session',async t=>{
  const f=await fixture(t,()=>({text:'Durable findings.'}));await f.app.update({overkill:true,agents:[{id:'one',name:'Research',job:'Read',mode:'plan',effort:'off',maxSteps:5}]});
- const r=await f.app.agents.spawn({profile:'one',prompt:'Inspect saved evidence',automatic:true,runId:'saved'});await f.app.agents.wait(r.id);
+ const r=await f.app.agents.spawn({profile:'one',name:'Inspect saved evidence',prompt:'Inspect saved evidence'});await f.app.agents.wait(r.id);
  const {Session}=await import('../src/session.mjs');const resumed=await Session.load(f.session.meta.id,f.app.home);await f.app.changeSession(resumed);
  const rows=await f.app.agents.reports({wait:true});assert.equal(rows.length,1);assert.match(rows[0].summary,/Durable findings/);assert.equal(resumed.totals.requests,1);await f.app.agents.delivered(rows);assert.deepEqual(await f.app.agents.reports({wait:true}),[]);assert.equal(resumed.totals.requests,1);
+});
+
+
+test('worker names must describe distinct tasks in fewer than six words, including concurrent spawn requests',async t=>{
+ const f=await fixture(t,()=>({text:'Task completed.'}));await f.app.update({overkill:true,agents:[],subagentConcurrency:2});
+ for(const name of[undefined,'','worker','Reviewer 2','one two three four five six','***'])await assert.rejects(f.app.agents.spawn({name,prompt:'Inspect evidence.'}),/name|Name|words/);
+ assert.equal((await f.app.agents.records()).length,0);
+ const results=await Promise.allSettled([f.app.agents.spawn({name:'Build replay explorer',prompt:'Build a replay explorer.'}),f.app.agents.spawn({name:'build replay explorer',prompt:'Duplicate task.'})]);assert.equal(results[0].status,'fulfilled');assert.equal(results[1].status,'rejected');assert.match(results[1].reason.message,/already named/);
+ await f.app.agents.wait(results[0].value.id);await assert.rejects(f.app.agents.spawn({name:'Build replay explorer!',prompt:'Reuse a completed name.'}),/already named/);
+ const next=await f.app.agents.spawn({name:'Fix fixture parser',prompt:'Fix the fixture parser.'});await f.app.agents.wait(next.id);assert.equal(next.profile,null);assert.equal(next.model,'fixture/test');assert.equal((await f.app.agents.records()).length,2);
 });

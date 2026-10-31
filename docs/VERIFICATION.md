@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **119 passing tests**.
+- `npm run verify`: syntax checks and **120 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -145,3 +145,9 @@ Actual API invoices and real competition transactions were not exercised in this
 
 - `/directory <path>` is the sole directory command; switching rebuilds tools and replaces the previous workspace grant after stopping active session processes. Existing symlink isolation, saved-directory resume and reload checks cover the change.
 - Header labels use `~/` plus the home-relative path with forward slashes. A regression check excludes sibling homes from tilde shortening. Paths outside the home retain their absolute identity.
+
+## Model-directed OVERKILL delegation (0.2.15)
+
+- OVERKILL no longer starts workers before inference or when enabled mid-request. Real local inference fixtures verify zero initial workers, then explicit model assignments, distinct task names, execution through a legacy read-only preset, file changes, result integration and exact-once usage.
+- Workers can use the main model without a preset or select configured model/effort/limit presets. Parent plan mode remains read-only. Finish/report gating, double-Escape cancellation and resume recovery retain coverage.
+- Required names contain one to five words and describe a task. Generic roles and duplicate names (including case/punctuation variants) are rejected before launch, even when requests arrive concurrently. Child sessions persist the same task name.

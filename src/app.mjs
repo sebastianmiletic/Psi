@@ -36,7 +36,6 @@ export class App {
     this.engine = new Engine({ registry: this.registry, session: this.session, tools: this.tools, config: this.config, onEvent: e => this.event(e) });
     this.battlecode.config=this.engine.config;
     this.resets=new Resets(this);this.agents=new Agents(this);this.tools.stopAgents=()=>this.agents.stopAll();
-    this.tools.startSubagents=(task,runId,signal)=>this.agents.startAutomatic(task,runId,signal);
     this.tools.subagentReports=options=>this.agents.reports(options);
     this.tools.subagentsUnreported=()=>this.agents.unreported();
     this.tools.subagentsDelivered=rows=>this.agents.delivered(rows);
@@ -307,7 +306,7 @@ export class App {
       if(action==='enabled'){await this.update({overkill:!c.overkill});continue;}
       if(action==='concurrency'){const text=await this.ui.ask({type:'text',message:'Concurrent workers (1–16)',placeholder:String(c.subagentConcurrency)});if(text!==null)try{await this.update({subagentConcurrency:Number(text)});}catch(e){this.ui.note(e.message,true);}continue;}
       if(action.startsWith('run:')){const r=await this.agents.status(action.slice(4));const choice=await this.ui.choose(r.name,[{value:'status',label:'Show status and result'},{value:'send',label:'Send a follow-up'},{value:'stop',label:'Stop this worker'}]);if(choice==='status')this.ui.note(JSON.stringify(r,null,2));if(choice==='stop')await this.jobs.stop(r.jobId);if(choice==='send'){const prompt=await this.ui.ask({type:'text',message:'Follow-up task'});if(prompt){const entry=this.tools.entries.get('agent');if(entry)await entry.execute({action:'send',id:r.id,prompt});}}continue;}
-      const profiles=c.agents.map(p=>({...p}));let profile=action==='add'?{id:randomUUID(),name:'Worker',job:'Complete the assigned task and report evidence.',model:null,effort:'medium',mode:'plan',maxSteps:80,budget:0}:profiles.find(p=>p.id===action.slice(8));
+      const profiles=c.agents.map(p=>({...p}));let profile=action==='add'?{id:randomUUID(),name:'Worker',job:'Complete the assigned task and report evidence.',model:null,effort:'medium',mode:'execute',maxSteps:80,budget:0}:profiles.find(p=>p.id===action.slice(8));
       if(action==='add')profiles.push(profile);
       while(true){const field=await this.ui.choose(profile.name,[...['name','job','model','effort','mode','maxSteps','budget'].map(k=>({value:k,label:k,description:k==='model'&&profile[k]?modelLabel(profile[k]):String(profile[k]??'main model')})),{value:'remove',label:'Remove this profile'},{value:'save',label:'Save worker'}]);if(!field)break;if(field==='remove'){await this.update({agents:profiles.filter(p=>p.id!==profile.id)});break;}if(field==='save'){try{await this.update({agents:profiles});}catch(e){this.ui.note(e.message,true);continue;}break;}
         let value;if(field==='mode')value=await this.ui.choose('Worker mode',['plan','execute'].map(value=>({value,label:value})));else if(field==='effort'){const model=profile.model?this.registry.find(profile.model):this.engine.model;value=await this.ui.choose('Worker thinking',getSupportedThinkingLevels(model).map(value=>({value,label:value})));}else{value=await this.ui.ask({type:'text',message:field,placeholder:String(profile[field]??'same')});if(value!==null){if(['maxSteps','budget'].includes(field))value=Number(value);if(field==='model'&&(!value||value==='same'))value=null;}}

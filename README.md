@@ -20,7 +20,7 @@ Psi connects models, project files, build tools, browser research and experiment
 | :--- | :--- |
 | **Persistent goals** | Recover through provider failures and quota waits. Resume the journal after an interruption. |
 | **Accounts that travel with the task** | Multiple providers and multiple accounts per provider, reported quotas and optional failover. |
-| **Subagents on demand** | Task-named workers start automatically with OVERKILL. Independent roles, models and effort. |
+| **Subagents on demand** | The AI delegates concrete tasks with OVERKILL. Distinct task names, models and effort. |
 | **Tools in your workspace** | Read, edit, search, run builds, extract websites, browse and launch detached benchmarks. |
 | **Battlecode evidence** | Isolated candidates, durable experiments, replay checks and fresh-fixture confirmation. |
 
@@ -73,7 +73,7 @@ The Ψ header stays visible above compact bottom menus. Chat names sit above the
 | `/name [title]` | Rename the current session |
 | `/help` | Every command |
 
-With **OVERKILL** on, each task starts advisory subagents up to your configured concurrency. Their task names, activity and model appear below the usage bar while active; finished workers hide automatically, with results retained in `/subagents`. Reports return to the main agent before it finishes; implementation can then be delegated with explicit ownership. Subagents use their configured models and selected provider accounts and consume normal provider usage.
+With **OVERKILL** on, the main AI decides when useful independent work should be delegated, up to your configured concurrency. Sending a prompt does not launch workers. Every worker has a unique task name of one to five words and can implement, debug, test, benchmark or research. Their task names, activity and model appear below the usage bar while active; finished workers hide automatically, with results retained in `/subagents`. Reports return to the main agent before it finishes; each assignment includes clear ownership. Subagents use their configured models and selected provider accounts and consume normal provider usage.
 
 Answers use clean Markdown without repeated assistant headings. Reads and searches group under **Exploring / Explored**; commands use **Running / Ran** with indented output. **Ctrl+T** expands tool details.
 

@@ -218,14 +218,13 @@ export class Engine {
         await this.session.event({ type: 'status', status: 'running' });
         await this.session.event({type:'state',state:{loopStatus:this.session.state.loopGoal?'active':null}});
         this.onEvent({ type: 'run_start' });
-        let stalls = 0,autoStarted=false;const runId=randomUUID(),task=text||this.session.state.loopGoal||'Continue the saved task';this.awaitWorkers=false;
+        let stalls = 0;this.awaitWorkers=false;
         while (true) {
           this.controller.signal.throwIfAborted();
           try {
           if(Object.keys(this.pendingSettings).length){const patch={...this.pendingSettings};this.pendingSettings={};await this.settings(patch,true);await this.session.event({type:'state',state:{pendingSettings:{}}});}
           while (this.queue.length) await this.session.message({ role: 'user', content: this.queue.shift(), timestamp: Date.now() });
           if(this.session.state.queuedMessages?.length)await this.session.event({type:'state',state:{queuedMessages:[]}});
-          if(this.config.overkill&&!autoStarted){await this.tools.startSubagents?.(task,runId,this.controller.signal);autoStarted=true;}
           await this.receiveSubagentReports(this.awaitWorkers);this.awaitWorkers=false;
           await this.compact();
           let result;
@@ -236,7 +235,6 @@ export class Engine {
           }
           await this.session.message(result);
           if(Object.keys(this.pendingSettings).length){const patch={...this.pendingSettings};this.pendingSettings={};await this.settings(patch,true);await this.session.event({type:'state',state:{pendingSettings:{}}});}
-          if(this.config.overkill&&!autoStarted){await this.tools.startSubagents?.(task,runId,this.controller.signal);autoStarted=true;}
           const calls = result.content.filter(c => c.type === 'toolCall');
           if (calls.length) {
             stalls = 0;
