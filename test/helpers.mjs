@@ -29,7 +29,7 @@ export async function fixture(t, respond) {
     } catch (e) { res.destroy(e); }
   });
   await new Promise(res => server.listen(0, '127.0.0.1', res));
-  t.after(() => new Promise(res => server.close(res)));
+  t.after(() => {server.closeAllConnections();return new Promise(res => server.close(res));});
   const config = { ...defaults, effort: 'off', debug: false, model: 'fixture/test', retries: 1, customProviders: [{ id: 'fixture', baseUrl: `http://127.0.0.1:${server.address().port}/v1`, keyless: true, models: [{ id: 'test', contextWindow: 128000, cost: { input: 0.1, output: 0.2, cacheRead: 0.01, cacheWrite: 0 } }] }] };
   const session = await Session.create(root, join(root, 'home'));
   const events = [];

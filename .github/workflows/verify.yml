@@ -2,6 +2,7 @@ name: Verify
 on: [push, pull_request, workflow_dispatch]
 jobs:
   test:
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -28,7 +29,7 @@ jobs:
         run: npm test
       - name: Portable core and workflow tests
         if: runner.os != 'macOS'
-        run: node --test test/usage.test.mjs test/workflow.test.mjs
+        run: node --test --test-timeout=30000 test/usage.test.mjs test/workflow.test.mjs
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: test
