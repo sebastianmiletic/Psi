@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defaults } from '../src/storage.mjs';
@@ -8,7 +9,6 @@ import { App } from '../src/app.mjs';
 
 export async function fixture(t, respond) {
   const root = await mkdtemp(join(tmpdir(), 'psi-test-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
   const requests = [], requestHeaders = [];
   const server = createServer(async (req, res) => {
     if (req.url === '/page') { res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html><head><title>Fixture</title></head><body><main><h1>Published results</h1><p>24 games, 18 wins.</p><script>untrusted()</script><a href="/data">Data</a></main></body></html>'); return; }
@@ -29,11 +29,15 @@ export async function fixture(t, respond) {
     } catch (e) { res.destroy(e); }
   });
   await new Promise(res => server.listen(0, '127.0.0.1', res));
-  t.after(() => {server.closeAllConnections();return new Promise(res => server.close(res));});
   const config = { ...defaults, effort: 'off', debug: false, model: 'fixture/test', retries: 1, customProviders: [{ id: 'fixture', baseUrl: `http://127.0.0.1:${server.address().port}/v1`, keyless: true, models: [{ id: 'test', contextWindow: 128000, cost: { input: 0.1, output: 0.2, cacheRead: 0.01, cacheWrite: 0 } }] }] };
   const session = await Session.create(root, join(root, 'home'));
   const events = [];
   const app = new App(config, session, { home: join(root, 'home'), onEvent: e => events.push(e) });
-  t.after(() => app.close());
+  t.after(async()=>{
+    await app.close();await app.agents.stopAll({wait:true});
+    for(let i=0;app.engine.busy&&i<250;i++)await delay(20);
+    server.closeAllConnections();await new Promise(resolve=>server.close(resolve));
+    await rm(root,{recursive:true,force:true,maxRetries:5,retryDelay:50});
+  },{timeout:15000});
   return { root, config, session, app, requests, requestHeaders, events, server };
 }

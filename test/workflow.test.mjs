@@ -33,7 +33,7 @@ test('plan mode blocks mutations and shell commands while recording a durable pl
 test('double Escape stops, Shift+Tab changes mode, and removed slash commands are absent',async t=>{
  const f=await fixture(t,()=>({text:'unused'})),terminal=new MemoryTerminal(100,28),ui=new TerminalUI(f.app,{terminal});f.app.ui=ui;ui.start();t.after(()=>ui.stop());
  let stopped=0;f.app.engine.busy=true;const original=f.app.engine.stop.bind(f.app.engine);f.app.engine.stop=()=>{stopped++;original();};terminal.input('\x1b');assert.equal(stopped,0);terminal.input('\x1b');assert.equal(stopped,1);f.app.engine.busy=false;
- terminal.input('\x1b[Z');await delay(40);assert.equal(f.app.engine.config.agentMode,'plan');
+ terminal.input('\x1b[Z');await ui.modeSwitch;assert.equal(f.app.engine.config.agentMode,'plan');
  for(const name of ['continue','stop','jobs','budget','limit','tokens']){assert.ok(!commands.some(c=>c.name===name));await assert.rejects(f.app.submit('/'+name),/removed/);}
  assert.doesNotMatch(ui.tui.getScreenLines().join('\n'),/Build, research, benchmark|Tools run with full access/);
 });

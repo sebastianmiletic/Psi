@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **111 passing tests**.
+- `npm run verify`: syntax checks and **112 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -123,3 +123,9 @@ Actual API invoices and real competition transactions were not exercised in this
 - `/name` is verified while busy, through session list/resume, with cancellation, invalid titles and an explicitly named “New session” that cannot be overwritten by later prompts. Context and unfinished objectives remain intact.
 - Presentation follows the public Codex [message](https://github.com/openai/codex/blob/main/codex-rs/tui/src/history_cell/messages.rs) and [execution-cell](https://github.com/openai/codex/blob/main/codex-rs/tui/src/exec_cell/render.rs) conventions: bullet responses, grouped exploration and indented command output. Psi retains its renderer, logo, tools and account features; this is not a copy of the Codex implementation.
 - The conversation screenshot uses actual rendered frames with illustrative checks, not a live competition result.
+
+## Shutdown ordering (0.2.11)
+
+- The release run exposed a Windows fixture teardown race while a mode switch was still saving settings. The main-branch matrix at the same head passed, but the duplicate tag run was cancelled for diagnosis.
+- Shutdown now waits for an in-progress mode change and never starts a quota monitor after closure. A gated regression checks this without timing assumptions.
+- Workflow tests await mode changes directly. Shared fixtures stop apps/workers and close HTTP connections before removing temporary homes, with bounded Windows file-sharing retries.

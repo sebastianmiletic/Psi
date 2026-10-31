@@ -79,7 +79,7 @@ export class App {
     }
   }
   startUsageMonitor() {
-    clearInterval(this.quotaTimer);this.quotaController?.abort();this.quotaController=new AbortController();
+    clearInterval(this.quotaTimer);this.quotaController?.abort();if(this.closing)return;this.quotaController=new AbortController();
     if(this.activeAccount?.type!=='oauth')return;
     const poll=()=>{if(!this.closing)void this.refreshAccount({live:true}).catch(()=>{});};poll();
     this.quotaTimer=setInterval(poll,Math.max(60,this.engine.config.quotaRefreshSeconds||120)*1000);this.quotaTimer.unref();
@@ -308,6 +308,6 @@ export class App {
   }
   async close() {
     if (this.closing) return; this.closing = true;
-    clearInterval(this.quotaTimer);this.quotaController?.abort();this.authController?.abort(); this.engine.stop();await this.agents.dispose(); this.ui?.stop(); await this.tools.close(); this.options.onClose?.();
+    clearInterval(this.quotaTimer);this.quotaController?.abort();this.authController?.abort(); this.engine.stop();this.ui?.stop();await this.ui?.modeSwitch;await this.agents.dispose();await this.tools.close(); this.options.onClose?.();
   }
 }

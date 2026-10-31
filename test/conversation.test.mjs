@@ -59,3 +59,8 @@ test('/name prompts without an argument; cancellation and invalid names preserve
  let prompt=app.submit('/name');assert.ok(ui.pending);terminal.input('\x1b');await prompt;assert.equal(session.meta.title,original);
  prompt=app.submit('/name');terminal.input('Benchmark study');terminal.input('\r');await prompt;assert.match(session.meta.title,/Benchmark.*study/);await assert.rejects(session.rename('  '),/Enter/);await assert.rejects(session.rename('x'.repeat(121)),/120/);
 });
+
+test('closing waits for a mode change to settle and does not restart quota monitoring afterward',async t=>{
+ const {app,ui}=await setup(t);let release;const gate=new Promise(r=>release=r);t.after(()=>release());const update=app.update.bind(app);app.update=async patch=>{await gate;return update(patch);};
+ ui.toggleMode();let closed=false;const closing=app.close().then(()=>closed=true);await new Promise(r=>setTimeout(r,10));assert.equal(closed,false);assert.equal(ui.closed,true);release();await closing;assert.equal(closed,true);assert.equal(ui.modeSwitch,null);assert.equal(ui.motionTimer,null);assert.ok(!app.quotaTimer);assert.equal(app.engine.config.agentMode,'plan');
+});
