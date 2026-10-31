@@ -67,10 +67,14 @@ export class Jobs {
     const job = await this.get(id);
     if (job.status === 'queued' && !job.pid) throw new Error('Job is starting. Try stop again in a moment.');
     if (!['running', 'queued'].includes(job.status)) return job;
-    try { process.kill(-job.pid, 'SIGTERM'); } catch (e) { if (e.code !== 'ESRCH') throw e; }
+    if(process.platform==='win32')await atomicJSON(join(this.path(id),'stop-request.json'),{reason:'cancelled'});
+    else try { process.kill(-job.pid, 'SIGTERM'); } catch (e) { if (e.code !== 'ESRCH') throw e; }
     const timer = setTimeout(async () => {
       const current=await this.get(id).catch(()=>null);
-      if(current?.pid===job.pid&&['running','queued'].includes(current.status))try { process.kill(-job.pid, 'SIGKILL'); } catch {}
+      if(current?.pid===job.pid&&['running','queued'].includes(current.status)){
+        if(process.platform==='win32'){const killer=spawn('taskkill',['/pid',String(job.pid),'/t','/f'],{stdio:'ignore',windowsHide:true});killer.on('error',()=>{});killer.unref();}
+        else try { process.kill(-job.pid, 'SIGKILL'); } catch {}
+      }
     }, job.graceful_stop_ms || 2000); timer.unref();
     return this.wait(id, 1500);
   }

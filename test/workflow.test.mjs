@@ -100,3 +100,10 @@ test('job completion committed during the exit check is preserved instead of ove
  const {writeFileSync}=await import('node:fs');f.app.jobs.isAlive=()=>{writeFileSync(path,JSON.stringify({id,pid:123456,status:'completed',sessionId:f.session.meta.id}));return false;};
  assert.equal((await f.app.jobs.get(id)).status,'completed');assert.equal(JSON.parse(await readFile(path)).status,'completed');
 });
+
+test('stopping a running subagent waits for its cancellation record on every OS',{timeout:15000},async t=>{
+ let arrived,release;const ready=new Promise(r=>arrived=r),gate=new Promise(r=>release=r);const f=await fixture(t,async()=>{arrived();await gate;return{text:'late response'};});
+ await f.app.update({overkill:true,agents:[{id:'worker',name:'Worker',job:'Do the assigned task',model:'fixture/test',effort:'off',mode:'plan',maxSteps:10}]});
+ const r=await f.app.agents.spawn({profile:'worker',prompt:'Inspect the task.'});await ready;
+ try{await f.app.agents.stopAll({wait:true});const result=await f.app.agents.status(r.id);assert.equal(result.status,'cancelled');assert.equal(result.result.status,'stopped');}finally{release();}
+});
