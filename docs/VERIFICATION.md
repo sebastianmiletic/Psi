@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **89 passing tests**.
+- `npm run verify`: syntax checks and **90 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -93,3 +93,5 @@ Actual API invoices and real competition transactions were not exercised in this
 - Removed slash commands are rejected, without hidden aliases. The tool list is a paged name grid. Compaction model selection remains in Settings; account/provider capability remains intact.
 - Real local HTTP and worker fixtures verify reload cancellation, stopping on confirmation, confirmation for a worker still running after its parent, rebuilt registries/tools, and preserved session identity, context, directories, queued messages and draft. Reload performs no replacement inference call.
 - `npm run preview:ui` renders actual terminal frames with illustrative activity; `npm run preview:brand` renders the code-native vectors without external image/font services or paid model calls.
+
+- Visible labels and values both filter correctly, including Motion and Compaction model whose stored setting keys differ.

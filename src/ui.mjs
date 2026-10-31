@@ -200,8 +200,8 @@ export class TerminalUI {
     if(!items.length){this.note('No items');return null;}
     return this.interact('',({resolve,cancel})=>{
       const input=new Input({prompt:'  › ',placeholder:'filter'});input.focused=true;
-      const list=new SelectList(items,6,this.selectionTheme,{minPrimaryColumnWidth:18,maxPrimaryColumnWidth:42});
-      list.onSelect=item=>resolve(item.value);list.onCancel=cancel;
+      const makeList=source=>{const list=new SelectList(source,6,this.selectionTheme,{minPrimaryColumnWidth:18,maxPrimaryColumnWidth:42});list.onSelect=item=>resolve(item.value);list.onCancel=cancel;return list;};
+      let list=makeList(items);
       const component={focused:true,invalidate(){input.invalidate();list.invalidate();},
         render:width=>{
           list.maxVisible=Math.max(1,Math.min(7,this.panelRows()-4));
@@ -210,7 +210,7 @@ export class TerminalUI {
         handleInput:data=>{
           if(matchesKey(data,'tab')&&options.onTab){void options.onTab().then(()=>this.render()).catch(e=>this.note(e.message,true));return;}
           if(['up','down','enter','escape','pageUp','pageDown'].some(k=>matchesKey(data,k)))list.handleInput(data);
-          else{input.handleInput(data);list.setFilter(input.getValue());}this.render();
+          else{input.handleInput(data);const query=input.getValue().toLowerCase();list=makeList(items.filter(item=>`${item.label} ${item.value} ${item.description||''}`.toLowerCase().includes(query)));}this.render();
         }
       };return component;
     });

@@ -76,3 +76,10 @@ test('reload also asks before interrupting an independently running subagent',as
   const reload=f.app.submit('/refresh');for(let i=0;i<100&&!ui.pending;i++)await delay(10);assert.ok(ui.pending);terminal.input('\x1b');assert.equal(await reload,false);assert.equal((await f.app.agents.status(worker.id)).status,'running');
  }finally{release();await f.app.agents.stopAll({wait:true});}
 });
+
+test('compact pickers search the visible label as well as the stored setting key',async t=>{
+ const {ui,terminal}=await setup(t),items=[{value:'summaryModel',label:'Compaction model'},{value:'animations',label:'Motion'}];
+ for(const [query,value]of[['compaction','summaryModel'],['motion','animations']]){
+  const menu=ui.choose('Settings',items);terminal.input(query);const screen=frame(ui).join('\n');assert.doesNotMatch(screen,/No matching/);assert.match(screen,new RegExp(items.find(i=>i.value===value).label));terminal.input('\r');assert.equal(await menu,value);
+ }
+});
