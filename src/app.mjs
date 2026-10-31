@@ -79,7 +79,7 @@ export class App {
   async settingsMenu() {
     while(true){
       const c={...this.engine.config,...this.engine.pendingSettings};
-      const selected=await this.ui.choose('Settings',settingItems.map(item=>({value:item.id,label:item.label,description:`${item.special==='prices'?'configure':Array.isArray(c[item.id])?c[item.id].join(', ')||'none':typeof c[item.id]==='boolean'?(c[item.id]?'on':'off'):c[item.id]??'default'}${item.description?' · '+item.description:''}`})));
+      const selected=await this.ui.choose('Settings',settingItems.map(item=>({value:item.id,label:item.label,description:`${item.special==='prices'?'configure':item.special==='agents'?`${c.agents.length} profiles`:Array.isArray(c[item.id])?c[item.id].join(', ')||'none':typeof c[item.id]==='boolean'?(c[item.id]?'on':'off'):c[item.id]??'default'}${item.description?' · '+item.description:''}`})));
       if(!selected)return;
       const item=settingItems.find(i=>i.id===selected);let value;
       if(item.special==='agents'){await this.agentsMenu();continue;}

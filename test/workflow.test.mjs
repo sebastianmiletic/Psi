@@ -71,3 +71,7 @@ test('plan-mode parent forces read-only workers and completed workers can receiv
  await f.app.update({agentMode:'plan',overkill:true,agents:[{id:'worker',name:'Worker',job:'Inspect the task',model:'fixture/test',effort:'off',mode:'execute',maxSteps:10}]});
  const r=await f.app.agents.spawn({profile:'worker',prompt:'Inspect without changing files.'});await f.app.agents.wait(r.id);await assert.rejects(readFile(join(f.root,'forbidden-child.txt')));await f.app.agents.send(r.id,'Review the previous result again.');const result=await f.app.agents.wait(r.id);assert.equal(result.status,'completed');assert.equal(f.session.totals.requests,3);
 });
+
+test('isolated Python alias and zsh heredoc use private scratch instead of /tmp',{skip:process.platform!=='darwin'},async t=>{
+ const f=await fixture(t,()=>({text:'unused'}));const r=await call(f,'bash',{command:"python - <<'PY'\nprint('heredoc-ok')\nPY",yield_ms:2000});assert.equal(r.isError,false,r.content[0].text);assert.match(r.content[0].text,/heredoc-ok/);
+});

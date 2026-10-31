@@ -46,7 +46,7 @@ export class Tools {
   constructor({ session, jobs, config, onEvent = () => {} }) {
     this.session = session; this.jobs = jobs; this.config = config; this.onEvent = onEvent;
     this.cwd = session.meta.cwd; this.browser = null; this.page = null;
-    this.policy=new Directories(session);this.jobs.policy=this.policy;
+    this.policy=new Directories(session,this.config);this.jobs.policy=this.policy;
     this.entries = new Map();
     this.add('read', 'Read text with line numbers, or an image. Page large files using offset and limit.', {
       path: str('Absolute or workspace-relative path'), offset: opt(num(1, 1e9, 'First line, starting at 1')), limit: opt(num(1, 2000, 'Number of lines; default 200')),

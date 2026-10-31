@@ -10,6 +10,7 @@ import { parseArgs } from 'node:util';
 import { Accounts } from '../src/accounts.mjs';
 import { importPi } from '../src/pi-import.mjs';
 import { version,run } from '../src/updates.mjs';
+import { atomicJSON } from '../src/storage.mjs';
 const {values:v}=parseArgs({options:{suite:{type:'string'},out:{type:'string'},task:{type:'string',multiple:true},account:{type:'string'},model:{type:'string'},python:{type:'string'}}});
 const suite=resolve(v.suite||join(homedir(),'.cache/psi/harness-bench')),root=fileURLToPath(new URL('..',import.meta.url)),out=resolve(v.out||join(root,'benchmarks/artifacts',new Date().toISOString().replaceAll(':','-'))),model=v.model||'openai-codex/gpt-5.6-sol',python=v.python||'/opt/homebrew/opt/python@3.12/bin/python3.12';
 await mkdir(out,{recursive:true,mode:0o700});const names=await readdir(join(suite,'tasks')),chosen=(v.task||['009','010','028']).map(id=>names.find(n=>n===id||n.startsWith(id+'-')));if(chosen.some(x=>!x))throw new Error('Unknown task ID');
@@ -17,6 +18,7 @@ const sourceCommit=await run('git',['rev-parse','HEAD'],suite),psiCommit=await r
 for(const id of chosen){
  const dir=join(out,id),workspace=join(dir,'workspace'),home=join(dir,'psi-home');await mkdir(dir,{recursive:true});await cp(join(suite,'tasks',id,'workspace'),workspace,{recursive:true,errorOnExist:true,force:false});
  if(v.account)await importPi(new Accounts(home),join(homedir(),'.pi/agent/pi-accounts.json'),[v.account]);
+ await atomicJSON(join(home,'config.json'),{python,checkForUpdates:false});
  const instruction=(await readFile(join(suite,'tasks',id,'instruction.md'),'utf8')).replaceAll('$WORKSPACE',workspace);
  const prompt=instruction+'\n\nWork only in this workspace. Do not access the benchmark source, hidden tests, reference solutions or graders. Complete the requested artifacts and report actual verification and limitations.';
  const start=Date.now(),trace=join(dir,'psi-events.jsonl');console.log(`Starting ${id} with ${model}`);
