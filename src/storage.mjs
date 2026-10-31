@@ -10,10 +10,17 @@ export async function readJSON(path, fallback) {
   try { return JSON.parse(await readFile(path, 'utf8')); }
   catch (e) { if (e.code === 'ENOENT') return fallback; throw new Error(`Cannot read ${path}: ${e.message}`); }
 }
-export async function atomicJSON(path, value) {
+export async function atomicJSON(path, value, {renameImpl=rename,retrySharingViolations=process.platform==='win32'}={}) {
   await privateDir(dirname(path));
   const tmp = `${path}.${process.pid}.${randomUUID()}.tmp`;
-  try { await writeFile(tmp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 }); await rename(tmp, path); }
+  try {
+    await writeFile(tmp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
+    for(let attempt=0;;attempt++)try{await renameImpl(tmp,path);break;}catch(e){
+      if(!retrySharingViolations||!['EPERM','EACCES','EBUSY'].includes(e.code)||attempt>=20)throw e;
+      // Windows readers and antivirus can briefly deny replacement. Keep the old snapshot intact.
+      await delay(Math.min(250,10*2**attempt));
+    }
+  }
   finally { await unlink(tmp).catch(() => {}); }
 }
 export function alive(pid) {

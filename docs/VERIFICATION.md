@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **70 passing tests**.
+- `npm run verify`: syntax checks and **71 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -62,3 +62,5 @@ Actual API invoices and real competition transactions were not exercised in this
 - Pi import tests cover idempotency, unchanged source selection and shared refresh locking. Two existing Codex accounts were imported locally; import preserved the original Pi file byte-for-byte, and no browser sign-in was requested. Account credentials are excluded from Git.
 - The real Harness-Bench smoke subset scored 1.0, 0.0 and 1.0 on tasks 009, 010 and 028. This is reported separately from unit tests and retains the failed task.
 - Native Windows shell execution intentionally fails closed; WSL2 with bubblewrap is required. Windows file/research tools and model workers are exercised by the portable CI suite. POSIX permission assertions apply only on POSIX hosts.
+
+- Windows CI exposed transient file-sharing violations during atomic snapshot replacement. Writes now retry those bounded errors while preserving the prior committed file; a fault-injection test covers the behavior. Worker completion/exit races and cross-platform graceful cancellation also have explicit tests.

@@ -107,3 +107,9 @@ test('stopping a running subagent waits for its cancellation record on every OS'
  const r=await f.app.agents.spawn({profile:'worker',prompt:'Inspect the task.'});await ready;
  try{await f.app.agents.stopAll({wait:true});const result=await f.app.agents.status(r.id);assert.equal(result.status,'cancelled');assert.equal(result.result.status,'stopped');}finally{release();}
 });
+
+test('atomic snapshots retry Windows sharing violations while preserving the previous committed file',async t=>{
+ const f=await fixture(t,()=>({text:'unused'})),path=join(f.root,'atomic.json');await writeFile(path,JSON.stringify({revision:1}));const {atomicJSON}=await import('../src/storage.mjs'),{rename}=await import('node:fs/promises');let attempts=0;
+ await atomicJSON(path,{revision:2},{retrySharingViolations:true,renameImpl:async(from,to)=>{attempts++;assert.equal(JSON.parse(await readFile(path)).revision,1);if(attempts<4){const e=new Error('sharing violation');e.code='EPERM';throw e;}await rename(from,to);}});
+ assert.equal(attempts,4);assert.equal(JSON.parse(await readFile(path)).revision,2);
+});
