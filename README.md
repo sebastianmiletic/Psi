@@ -53,7 +53,7 @@ Installers verify GitHub's archive digest and preserve accounts/settings under `
 
 ## Less text. More control.
 
-The Ψ header stays visible above compact bottom menus. Effort is a slider. Statistics are a heatmap. Quotas sit beside your account as **percent left**. OVERKILL makes the prompt, meter and terminal logo flow in your chosen accent.
+The Ψ header stays visible above compact bottom menus. Effort is a slider. Statistics are a heatmap. Weekly quota sits beside your account as **percent left**; the bottom meter prioritizes the five-hour window. OVERKILL makes the prompt, meter and terminal logo flow in your chosen accent.
 
 <table>
 <tr><td><a href="docs/effort.png"><img src="docs/effort.png" alt="Minimal effort slider and OVERKILL switch"></a></td><td><a href="docs/stats.png"><img src="docs/stats.png" alt="Compact statistics panel with a calendar heatmap"></a></td></tr>
@@ -68,10 +68,15 @@ The Ψ header stays visible above compact bottom menus. Effort is a slider. Stat
 | `/loop` | Give Psi a persistent objective |
 | `/directory` | Add or remove working directories |
 | `/stats` · `/tools` | Activity and available tools |
+| `/reset` | Reset times and available account resets |
 | `/settings` · `/refresh` | Configure Psi or reload disk settings |
 | `/help` | Every command |
 
 **Shift+Tab** switches plan/execute. **Escape** closes menus; **double Escape** stops the AI. Enter a message during work to queue it at the next tool boundary. Tools run without approval dialogs inside the directories you grant.
+
+`/reset` shows reported five-hour and weekly reset times, a countdown, and account-specific reset options. Codex banked resets can be redeemed through a current Codex CLI on PATH, using in-memory authentication for the selected Psi account. Claude offers open the provider’s Usage page for redemption. [Reset details →](docs/RESETS.md)
+
+Budget, request limits, output tokens and **Compaction model** stay in `/settings`.
 
 Screenshots contain illustrative data from the real terminal renderer. `/stats` covers saved Psi activity, not usage from other clients. Goal percentages are estimates; account quotas are shown only when reported by the provider.
 

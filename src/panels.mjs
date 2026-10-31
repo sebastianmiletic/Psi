@@ -101,3 +101,69 @@ export class ToolsPanel {
  }
  handleInput(data){if(matchesKey(data,'escape')||matchesKey(data,'enter'))this.cancel();else if(matchesKey(data,'right')||matchesKey(data,'tab'))this.page=(this.page+1)%(this.pages||1);else if(matchesKey(data,'left'))this.page=(this.page+(this.pages||1)-1)%(this.pages||1);this.ui.render();}
 }
+
+export function resetTime(seconds,now=Date.now(),compact=false){
+ if(!Number.isFinite(seconds)||seconds<=0)return 'time not reported';
+ const left=seconds*1000-now;if(left<=0)return 'refresh due';
+ const minutes=Math.ceil(left/60000),hours=Math.floor(minutes/60),days=Math.floor(hours/24);
+ const countdown=days?`${days}d ${hours%24}h`:hours?`${hours}h ${minutes%60}m`:`${minutes}m`;
+ const date=new Intl.DateTimeFormat(undefined,{weekday:'short',hour:'2-digit',minute:'2-digit',...(compact?{}:{month:'short',day:'numeric',timeZoneName:'short'})}).format(new Date(seconds*1000));
+ return `${date} · ${countdown}`;
+}
+export class ResetPanel {
+ focused=true;
+ constructor(ui,{account,read,use,onUsage=()=>{},resolve,cancel,now=()=>Date.now()}){
+  Object.assign(this,{ui,account,read,use,onUsage,resolve,cancel,now});this.controller=new AbortController();this.loading=false;this.confirm=false;this.closed=false;
+  this.timer=setInterval(()=>{if(!this.closed)this.ui.render();},15000);this.timer.unref();void this.load();
+ }
+ dispose(){this.closed=true;clearInterval(this.timer);this.controller.abort();}
+ invalidate(){}
+ async load(){if(this.loading||this.closed)return;this.loading=true;this.confirm=false;this.error=null;try{const data=await this.read(this.controller.signal);if(!this.closed){this.data=data;this.onUsage(data);}}catch{if(!this.closed)this.error='Usage unavailable';}finally{this.loading=false;if(!this.closed)this.ui.render();}}
+ async redeem(){
+  if(this.loading||this.closed)return;this.loading=true;this.confirm=false;this.error=null;this.ui.render();
+  try{const data=await this.use(this.controller.signal);if(!this.closed){this.data=data;this.onUsage(data);this.notice={reset:'Reset used',alreadyRedeemed:'Reset already used',nothingToReset:'No eligible limit',noCredit:'No resets available'}[data.outcome]||'';}}
+  catch{if(!this.closed){this.error='Reset unconfirmed · r to check';await this.loadAfterFailure();}}
+  finally{this.loading=false;if(!this.closed)this.ui.render();}
+ }
+ async loadAfterFailure(){try{const data=await this.read(this.controller.signal);if(!this.closed){this.data=data;this.onUsage(data);}}catch{/* Pending intent remains available for the next read. */}}
+ render(width){
+  const paint=this.ui.paint,compact=width<72,budget=this.ui.panelRows(),data=this.data;
+  const lines=[bold('Reset')+' · '+safe(this.account.name||this.account.provider)];
+  if(!data){lines.push(dim(this.error||'…'),dim('a accounts · esc'));return lines.map(s=>row(s,width));}
+  const windows=(data.usage?.limits||[]).filter(l=>l.kind==='quota').sort((a,b)=>(a.label==='5h'?0:1)-(b.label==='5h'?0:1));
+  for(const l of windows.slice(0,3)){
+   const label=['7d','1w','weekly'].includes(l.label)?'Week':safe(l.label),expired=l.resetAt&&l.resetAt*1000<=this.now();
+   const pct=expired?'—':`${100-Math.round(l.usedPercent)}%`;
+   lines.push(`${paint(label.padEnd(5))}${bold(pct)} · ${dim(resetTime(l.resetAt,this.now(),compact))}`);
+  }
+  if(!windows.length)lines.push(dim(data.mode==='none'?'No subscription limits':'Limits not reported'));
+  if(data.mode==='codex'){
+   lines.push(`Resets ${data.credits?bold(String(data.credits.availableCount)):dim('not reported')}`);
+   const expiry=(data.credits?.credits||[]).filter(c=>c.status==='available'&&c.expiresAt&&c.expiresAt*1000>this.now()).sort((a,b)=>a.expiresAt-b.expiresAt)[0]?.expiresAt;
+   if(expiry&&budget>=8)lines.push(dim('Expires '+resetTime(expiry,this.now(),compact)));
+  }
+  const canUse=data.mode==='codex'&&(data.pending||data.credits?.availableCount>0)&&!data.error;
+  // A saved uncertain redemption can be retried with its original idempotency key.
+  const canRetry=data.mode==='codex'&&data.pending;
+  const actionIndex=lines.length;
+  if(this.confirm)lines.push(paint(bold('Use 1 reset? ↵ confirm')));
+  else if(canUse||canRetry)lines.push(paint(bold(data.pending?'↵ Retry pending reset':'↵ Use 1 reset')));
+  else if(data.mode==='claude')lines.push(paint('o Redeem on Claude Usage'));
+  else if(data.mode==='codex'&&data.error)lines.push(dim(safe(data.error)));
+  else if(data.mode==='codex')lines.push(dim('No available reset'));
+  if(this.notice||this.error)lines.push(dim(this.notice||this.error));
+  lines.push(dim(this.loading?'…':compact?'r ↻ · a · o · esc':data.mode==='none'?'r ↻ · a accounts · esc':'r ↻ · a accounts · o web · esc'));
+  const body=lines.length>budget?[...lines.slice(0,budget-2),lines[actionIndex]||'',lines.at(-1)]:lines;return body.map(s=>row(s,width));
+ }
+ handleInput(data){
+  if(matchesKey(data,'escape')){this.cancel();return;}
+  if(this.loading)return;
+  if(data==='a'){this.resolve('accounts');return;}
+  if(data==='o'&&['codex','claude'].includes(this.data?.mode)){this.resolve('web');return;}
+  if(data==='r'){void this.load();return;}
+  if(matchesKey(data,'enter')&&this.data?.mode==='codex'&&(this.data.pending||this.data.credits?.availableCount>0)){
+   if(this.confirm)void this.redeem();else this.confirm=true;
+  }
+  this.ui.render();
+ }
+}

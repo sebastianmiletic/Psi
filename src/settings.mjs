@@ -22,6 +22,7 @@ export const settingItems = [
   {id:'budget',label:'Session budget',number:[0,100000],description:'Zero is unlimited. A reached limit keeps a goal waiting for a settings change.'},
   {id:'maxSteps',label:'Run limit',number:[0,1000000],description:'Zero is unlimited'},
   {id:'customPrices',label:'API rates',special:'prices',description:'USD per million input/output/cache tokens; used when provider billing is unavailable'},
+  {id:'codexCli',label:'Codex CLI path'},
   {id:'battlecodeCli',label:'Battlecode CLI path',description:'Pinned compiler/CLI executable for the project adapter'},
   {id:'profile',label:'Agent profile',values:['battlecode','general']},{id:'debug',label:'Debug logs',boolean:true},
 ];

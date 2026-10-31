@@ -5,7 +5,7 @@ import {
 } from '@earendil-works/pi-tui';
 import { accentText,accentBadge } from './theme.mjs';
 import { usageLabel,applicableQuota } from './usage.mjs';
-import { EffortPanel,StatsPanel,ToolsPanel } from './panels.mjs';
+import { EffortPanel,StatsPanel,ToolsPanel,ResetPanel } from './panels.mjs';
 import { PsiHeader, PsiAnimation } from './logo.mjs';
 import { Composer,flowAccent,UserMessage,AssistantMessage,ToolMessage } from './message-ui.mjs';
 import { cleanTerminal, redact } from './storage.mjs';
@@ -24,7 +24,7 @@ const markdownTheme = {
 };
 export const commands = [
  ['model','Model'],['effort','Effort + OVERKILL'],['accounts','Accounts'],['directory','Working directories'],['settings','Settings'],['subagents','Subagents'],
- ['loop','Persistent goal'],['stats','Activity'],['tools','Tools'],['usage','Account usage'],['cost','Session cost'],['new','New session'],['resume','Resume'],
+ ['loop','Persistent goal'],['stats','Activity'],['tools','Tools'],['usage','Account usage'],['reset','Quota resets'],['cost','Session cost'],['new','New session'],['resume','Resume'],
  ['refresh','Reload Psi'],['compact','Compact context'],['project','Battlecode project'],['experiments','Experiments'],['profile','Agent profile'],
  ['logo','3D logo'],['update','Update Psi'],['status','Session status'],['export','Export session'],['help','Commands'],['quit','Quit']
 ].map(([name,description])=>({name,description}));
@@ -70,7 +70,7 @@ export class TerminalUI {
       const rightWidth=visibleWidth(right)+(state.overkill?2:0);
       const left = truncateToWidth(`  ${model}`, Math.max(0,width-rightWidth-3));
       const gap = Math.max(1,width-visibleWidth(left)-rightWidth-1);
-      return [left+' '.repeat(gap)+(state.overkill?accentBadge(' '+right+' ',c):dim(right)), ...(app.engine.config.showUsage===false?[]:[truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage,{sessionCost:app.session.meteredCost,costKnown:app.session.meteredCostKnown,remaining:true,compact:true}))),width)])];
+      return [left+' '.repeat(gap)+(state.overkill?accentBadge(' '+right+' ',c):dim(right)), ...(app.engine.config.showUsage===false?[]:[truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage,{sessionCost:app.session.meteredCost,costKnown:app.session.meteredCostKnown,remaining:true,compact:true,weeklyOnly:true}))),width)])];
     } };
     this.progressBar={invalidate(){},render:width=>{
       const quota=applicableQuota(app.activeUsage),state=app.session.state.progress;
@@ -220,6 +220,7 @@ export class TerminalUI {
     finally{this.effortPreview=null;this.syncMotion();this.render();}
   }
   async statsMenu(refresh){return this.interact('',({cancel})=>new StatsPanel(this,{cancel,refresh}));}
+  async resetMenu(options){return this.interact('',({resolve,cancel})=>new ResetPanel(this,{...options,resolve,cancel}));}
   async toolsMenu(tools){return this.interact('',({cancel})=>new ToolsPanel(this,{tools,cancel}));}
   async ask(prompt) {
     if (prompt.type === 'select') return this.choose(prompt.message, prompt.options.map(o => ({ value: o.id, label: o.label, description: o.description })));
@@ -233,14 +234,14 @@ export class TerminalUI {
     if (this.pending) throw new Error('Finish the current selection first.');
     if (signal?.aborted) return Promise.resolve(null);
     return new Promise(resolve => {
-      let settled=false,handle;
+      let settled=false,handle,component;
       const finish = value => {
-        if(settled)return;settled=true;handle?.hide();signal?.removeEventListener('abort', cancel); this.pending = null; this.panel.clear(); this.editor.disableSubmit = false; this.tui.setFocus(this.editor); this.render(); resolve(value);
+        if(settled)return;settled=true;component?.dispose?.();handle?.hide();signal?.removeEventListener('abort', cancel); this.pending = null; this.panel.clear(); this.editor.disableSubmit = false; this.tui.setFocus(this.editor); this.render(); resolve(value);
       };
       const cancel = () => finish(null);
       this.pending = { cancel }; signal?.addEventListener('abort', cancel, { once: true });
       if(title)this.panel.addChild(new Text(`  ${bold(safe(title))}`, 0, 0));
-      const component = make({ resolve: finish, cancel });
+      component = make({ resolve: finish, cancel });
       if(overlay)handle=this.tui.showOverlay(component,{width:'100%',maxHeight:'100%',row:0,col:0,margin:0});else this.panel.addChild(component);
       this.editor.disableSubmit = true; this.tui.setFocus(component); this.render();
     });

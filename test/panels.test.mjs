@@ -23,10 +23,10 @@ test('OVERKILL flows in the chosen accent without moving slash commands, and res
  f.app.engine.config.animations=false;ui.syncMotion();frame(ui);const stable=ui.tui.getScreenLines();f.time(1000);frame(ui);assert.deepEqual(stable,ui.tui.getScreenLines());assert.equal(ui.motionTimer,null);
  await f.app.setMode('plan');assert.equal(ui.transcript.children.length,0);lines=frame(ui);assert.equal(lines.find(l=>l.includes('/model')).indexOf('/model'),1);
 });
-test('the accent quota bar shows remaining capacity with all windows beside the account',async t=>{
+test('the accent quota bar shows five-hour capacity with only weekly quota beside the account',async t=>{
  const f=await setup(t),{ui}=f;f.app.engine.config.accent='rose';f.app.activeAccount={name:'Personal',type:'oauth',billingMode:'subscription'};
  f.app.activeUsage={limitsAt:new Date().toISOString(),limits:[{kind:'quota',label:'7d',usedPercent:40,resetAt:9999999999},{kind:'quota',label:'5h',usedPercent:25,resetAt:9999999999}]};
- let bar=ui.progressBar.render(100)[0];const c=accentColor({accent:'rose'});assert.ok(bar.includes(`\x1b[38;2;${c.r};${c.g};${c.b}m`));assert.match(stripTerminalSequences(bar),/75% left/);assert.match(stripTerminalSequences(ui.footer.render(100)[1]),/7d 60% left/);assert.match(stripTerminalSequences(ui.footer.render(100)[1]),/Personal · 5h 75% left/);assert.doesNotMatch(stripTerminalSequences(bar),/5h|7d|used/);
+ let bar=ui.progressBar.render(100)[0];const c=accentColor({accent:'rose'});assert.ok(bar.includes(`\x1b[38;2;${c.r};${c.g};${c.b}m`));assert.match(stripTerminalSequences(bar),/75% left/);assert.match(stripTerminalSequences(ui.footer.render(100)[1]),/7d 60% left/);assert.match(stripTerminalSequences(ui.footer.render(100)[1]),/Personal · 7d 60% left/);assert.doesNotMatch(stripTerminalSequences(ui.footer.render(100)[1]),/5h|75%/);assert.doesNotMatch(stripTerminalSequences(bar),/5h|7d|used/);
  f.app.activeUsage.limits[1].usedPercent=100;assert.doesNotMatch(stripTerminalSequences(ui.progressBar.render(100)[0]),/█/);assert.match(stripTerminalSequences(ui.progressBar.render(100)[0]),/0% left/);f.app.activeUsage.limits[1].usedPercent=0;assert.match(stripTerminalSequences(ui.progressBar.render(100)[0]),/█{30}.*100% left/);
  f.app.activeUsage.limits[1].resetAt=1;assert.match(stripTerminalSequences(ui.progressBar.render(100)[0]),/60% left/);f.app.activeUsage.limits=[];assert.match(stripTerminalSequences(ui.progressBar.render(100)[0]),/Goal/);assert.equal(applicableQuota(null),null);
 });

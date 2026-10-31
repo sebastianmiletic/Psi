@@ -60,12 +60,12 @@ export function applicableQuota(usage={},now=Date.now()){
  const limits=(usage.limits||[]).filter(l=>l.kind==='quota'&&Number.isFinite(l.usedPercent)&&l.usedPercent>=0&&l.usedPercent<=100&&(l.resetAt?l.resetAt*1000>now:now-Date.parse(l.reportedAt||usage.limitsAt||'')<300000));
  return limits.find(l=>l.label==='5h')||limits.find(l=>['7d','1w','weekly'].includes(l.label))||limits[0]||null;
 }
-export function usageLabel(account, usage = {}, { sessionCost, costKnown=true,omitQuota,remaining=false,compact=false } = {}) {
+export function usageLabel(account, usage = {}, { sessionCost, costKnown=true,omitQuota,remaining=false,compact=false,weeklyOnly=false } = {}) {
   if (!account) return 'No account connected · /accounts';
   const prefix = account.name || 'Environment / local';
   const now = Date.now()/1000;
   const rank=l=>l.label==='5h'?0:['7d','1w','weekly'].includes(l.label)?1:2;
-  const quota=(usage.limits || []).filter(l=>l.kind==='quota' && l.label!==omitQuota && (l.resetAt ? l.resetAt>now : Date.now()-Date.parse(l.reportedAt||usage.limitsAt||'')<300000)).sort((a,b)=>rank(a)-rank(b));
+  const quota=(usage.limits || []).filter(l=>l.kind==='quota' && (!weeklyOnly||['7d','1w','weekly'].includes(l.label)) && l.label!==omitQuota && (l.resetAt ? l.resetAt>now : Date.now()-Date.parse(l.reportedAt||usage.limitsAt||'')<300000)).sort((a,b)=>rank(a)-rank(b));
   if(account.billingMode==='subscription'||(account.billingMode===undefined&&account.type==='oauth')) return prefix+(quota.length?' · '+quota.map(l=>`${l.label} ${remaining?100-Math.round(l.usedPercent):Math.round(l.usedPercent)}% ${remaining?'left':'used'}`).join(' · '):'');
   if(sessionCost!==undefined) return `${prefix} · session ${costKnown?'$'+sessionCost.toFixed(4):'cost unavailable'}${compact?'':' · '+compactCount(usage.totalTokens || 0)+' tokens'}`;
   return `${prefix} · ${compactCount(usage.totalTokens || 0)} tokens · ${usage.requests || 0} calls in Psi`;

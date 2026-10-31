@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { existsSync } from 'node:fs';
 import { Agents } from './agents.mjs';
+import { Resets } from './resets.mjs';
 import { Statistics } from './stats.mjs';
 import { registerProgress } from './progress.mjs';
 import { checkUpdate,updateInstallation } from './updates.mjs';
@@ -32,7 +33,7 @@ export class App {
     this.battlecode=new Battlecode({session:this.session,jobs:this.jobs,config:this.config,home:this.home});this.tools.projectAdapter=this.battlecode;
     this.engine = new Engine({ registry: this.registry, session: this.session, tools: this.tools, config: this.config, onEvent: e => this.event(e) });
     this.battlecode.config=this.engine.config;
-    this.agents=new Agents(this);this.tools.stopAgents=()=>this.agents.stopAll();
+    this.resets=new Resets(this);this.agents=new Agents(this);this.tools.stopAgents=()=>this.agents.stopAll();
     registerProgress(this.tools,this.session,e=>this.event(e));
     this.syncProjectTools();
   }
@@ -177,9 +178,10 @@ export class App {
     }
     const match = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()); const command = match?.[1]; const arg = match?.[2] || '';
     if (this.authController && !['quit', 'help'].includes(command)) throw new Error('Finish or cancel account sign-in first.');
-    if (this.engine.busy && !this.engine.waiting && !['stats','effort','settings','subagents','refresh','directory','update','logo','usage','tools','project','experiments','cost','status','help','quit'].includes(command)) throw new Error('Press Escape twice to stop, or enter a message to queue it at the next tool boundary.');
+    if (this.engine.busy && !this.engine.waiting && !['reset','stats','effort','settings','subagents','refresh','directory','update','logo','usage','tools','project','experiments','cost','status','help','quit'].includes(command)) throw new Error('Press Escape twice to stop, or enter a message to queue it at the next tool boundary.');
     if(['continue','stop','jobs','budget','limit','tokens','agents','provider','cd','summary-model','checkpoint'].includes(command))throw new Error(`/${command} was removed. Use /settings for limits, /subagents for workers, or Escape twice to stop.`);
     if(command==='settings')return this.settingsMenu();
+    if(command==='reset')return this.resetMenu();
     if(command==='stats')return this.ui.statsMenu(()=>this.statistics.read());
     if(command==='subagents')return this.agentsMenu();
     if(command==='directory')return this.directoryCommand(arg);
@@ -220,6 +222,21 @@ export class App {
     if (command === 'refresh') return this.reload();
     if (command === 'export') { const path = resolve(this.session.meta.cwd, arg || `psi-${this.session.meta.id}.md`); await writeFile(path, this.exportMarkdown(), { mode: 0o600 }); this.ui.note(`Exported: ${path}`); return; }
     throw new Error(`Unknown command: /${command}. Use /help.`);
+  }
+  async resetMenu(){
+    let account=this.activeAccount;
+    while(!this.closing){
+      if(!account){const accounts=await this.registry.accounts.list();const id=await this.ui.choose('Reset account',accounts.map(a=>({value:a.id,label:a.name,description:`${a.provider} · ${a.id.slice(0,6)}`})));if(!id)return;account=accounts.find(a=>a.id===id);}
+      const selected=account;
+      const action=await this.ui.resetMenu({account:selected,read:signal=>this.resets.read(selected,{signal}),use:signal=>this.resets.consume(selected,{signal}),onUsage:data=>{if(this.activeAccount?.id===selected.id){this.activeUsage=data.usage;this.ui.render();}}});
+      if(action==='accounts'){account=null;continue;}
+      if(action==='web'){
+        const url=selected.provider==='anthropic'?'https://claude.ai/settings/usage':'https://chatgpt.com/codex/settings/usage';
+        this.ui.note(`Open ${url} · ${selected.name}`);
+        if(!process.env.PSI_NO_BROWSER){const child=spawn(process.platform==='darwin'?'open':process.platform==='win32'?'cmd':'xdg-open',process.platform==='win32'?['/c','start','',url]:[url],{stdio:'ignore'});child.on('error',()=>{});child.unref();}continue;
+      }
+      return;
+    }
   }
   async reload(){
     if(this.reloading)return false;

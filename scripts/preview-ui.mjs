@@ -34,8 +34,9 @@ try {
   browser=await chromium.launch({executablePath:process.env.PSI_CHROME_PATH||'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',headless:true});
   const page=await browser.newPage({viewport:{width:1040,height:744},deviceScaleFactor:2});
   await mkdir(new URL('../docs/',import.meta.url),{recursive:true});
-  for (const [name,animation] of [['terminal',false],['logo-3d',true],['settings',false],['conversation',false],['effort',false],['stats',false],['tools',false],['subagents',false],['overkill',false]]) {
+  for (const [name,animation] of [['terminal',false],['logo-3d',true],['settings',false],['conversation',false],['effort',false],['stats',false],['reset',false],['tools',false],['subagents',false],['overkill',false]]) {
     let settings;
+    if(name==='reset'){ui.clear();const now=Date.now();const data={account:{id:'preview',name:'Personal',provider:'openai-codex',type:'oauth'},mode:'codex',credits:{availableCount:2,credits:[{status:'available',expiresAt:now/1000+10*86400}]},usage:{limits:[{kind:'quota',label:'5h',usedPercent:91,resetAt:now/1000+5400},{kind:'quota',label:'7d',usedPercent:17,resetAt:now/1000+3*86400}]}};settings=ui.resetMenu({account:data.account,read:async()=>data,use:async()=>data,onUsage:d=>{app.activeAccount=d.account;app.activeUsage=d.usage;}});await new Promise(r=>setTimeout(r,0));}
     if(name==='tools'){ui.clear();settings=ui.toolsMenu(app.tools.definitions());}
     if(name==='subagents'){ui.clear();settings=app.agentsMenu();await new Promise(r=>setTimeout(r,5));}
     if(name==='effort'){ui.clear();settings=ui.effortMenu({levels:['off','low','medium','high','xhigh','max'],effort:'medium',overkill:true});}

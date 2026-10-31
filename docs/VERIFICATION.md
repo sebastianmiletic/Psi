@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **90 passing tests**.
+- `npm run verify`: syntax checks and **96 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -95,3 +95,10 @@ Actual API invoices and real competition transactions were not exercised in this
 - `npm run preview:ui` renders actual terminal frames with illustrative activity; `npm run preview:brand` renders the code-native vectors without external image/font services or paid model calls.
 
 - Visible labels and values both filter correctly, including Motion and Compaction model whose stored setting keys differ.
+
+## Account resets (0.2.7)
+
+- Six new reset tests cover account-pinned discovery, quota and credit parsing, idempotent recovery after an uncertain redemption, zero/unsupported/foreign-account rejection, compact UI confirmation and cancellation, Claude web routing, and stdio authentication preflight/process cleanup.
+- A read-only check against the existing selected Codex account returned quota windows and credit metadata. The saved Codex login hash was unchanged. No real credit was redeemed and no paid inference was used.
+- The account footer omits five-hour quota and keeps weekly percent left. The bottom meter retains five-hour-first behavior. Budget/request/token limits and Compaction model remain in Settings.
+- Linux and Windows CI include the reset tests using a local protocol fixture; the installed Codex binary is optional and not required by the test suite.

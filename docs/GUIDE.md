@@ -61,7 +61,7 @@ Click the mode control on the top input border, or press **Shift+Tab**, for **PL
 
 Open `/effort` for a compact slider: **←/→** adjust effort, **Tab** stages **OVERKILL**, **Enter** applies and **Escape** cancels. OVERKILL adds a flowing glow in your selected accent around the input bar. Disable Motion for a static accent. Use `/subagents` or the worker entry in `/settings` to set concurrency and edit each worker's name, job, model, thinking, plan/execute mode, request limit and budget independently. Workers inherit the approved directories, use separate durable model sessions, and cannot create nested workers. A plan-mode parent always forces read-only workers. The AI can spawn, send follow-ups, inspect, await and stop them through `agent`; completed workers can resume for follow-up tasks. Returned worker usage is included exactly once in parent session accounting. Per-worker budgets are capped to a share of the parent's remaining configured budget when a worker starts.
 
-Tool names, brief result previews, model updates and worker lifecycle events appear in the conversation. The mode control sits at the right edge of the top input border, leaving drafts and slash commands at full width. Mode changes stay out of the chat. The solid accent-coloured bottom bar shows **remaining** capacity: 100% is unused, 0% is exhausted. Reported **5h** and weekly percentages stay beside the account name. With no quota, the bar shows explicitly estimated goal work remaining. This percentage is not an independently measured guarantee of goal achievement. A verified loop finish still requires evidence.
+Tool names, brief result previews, model updates and worker lifecycle events appear in the conversation. The mode control sits at the right edge of the top input border, leaving drafts and slash commands at full width. Mode changes stay out of the chat. The solid accent-coloured bottom bar shows **remaining** capacity: 100% is unused, 0% is exhausted. Only the reported weekly percentage stays beside the account name; the meter prioritizes five-hour quota. With no quota, the bar shows explicitly estimated goal work remaining. This percentage is not an independently measured guarantee of goal achievement. A verified loop finish still requires evidence.
 
 ## Providers and accounts
 
@@ -119,6 +119,7 @@ Custom endpoint prices default to unknown. Use `/settings` → **API rates** to 
 | `/project` | Inspect the documented baseline and existing Battlecode controllers |
 | `/experiments [id]` | List durable experiments or reconcile one experiment |
 | `/usage` | Active account usage and provider-reported limits |
+| `/reset` | Reset times, banked resets and provider Usage access |
 | `/stats` | Tabbed week, month and all-time tokens, active time and activity |
 | `/tools` | List the actual tools available to the AI |
 | `/cost` | Usage, cache reads and estimated cost |
@@ -130,7 +131,7 @@ Custom endpoint prices default to unknown. Use `/settings` → **API rates** to 
 | `/export [path]` | Export the current session context as Markdown |
 | `/status`, `/help`, `/quit` | Inspect state, see commands or exit |
 
-The prompt stays pinned to the bottom of the terminal while the conversation scrolls above it. Its footer shows the model on the left and the effort value (such as `medium`) aligned to the right, without a provider label or “thinking” prefix. The next row shows the selected account: subscription accounts display only reported usage windows as percent left; metered API accounts display the current session cost. No provider label appears in either footer row.
+The prompt stays pinned to the bottom of the terminal while the conversation scrolls above it. Its footer shows the model on the left and the effort value (such as `medium`) aligned to the right, without a provider label or “thinking” prefix. The next row shows the selected account: subscription accounts display only the weekly window as percent left; metered API accounts display the current session cost. No provider label appears in either footer row.
 
 Click the compact shaded Ψ mark to expand it into a shaded, rotating 3D mesh. Click again or press Escape to return to your unchanged prompt. `/logo` provides the same interaction from the keyboard. The 3D animation renders only while open and adds no dependencies.
 
@@ -158,7 +159,7 @@ An incremental private cache stores counters and timestamps, without copying pro
 
 Use `/accounts` → **Login new account** repeatedly to add any number of named accounts, including several from the same provider. Saved credentials are separate; connecting another account does not overwrite the first. Use **Switch accounts** to select from the flat cross-provider list. Short account IDs distinguish duplicate names.
 
-Subscription accounts show their provider-reported **5h** and **7d** usage windows when supplied. Codex and Claude OAuth accounts refresh on startup, before inference and periodically while the UI is open (default 120 seconds; minimum 60). Absent, unlimited or expired windows are omitted. `/usage` includes the snapshot timestamp and reset data. Polling uses the usage endpoint, not paid inference, and backs off when the service rate-limits it. These endpoints may be unavailable for some accounts or change independently of Psi; unavailable data is never inferred from tokens.
+Subscription accounts show their provider-reported **7d** quota beside the account, and the **5h** quota in the bottom meter when supplied. `/reset` shows both reset times and countdowns. Codex and Claude OAuth accounts refresh on startup, before inference and periodically while the UI is open (default 120 seconds; minimum 60). Absent, unlimited or expired windows are omitted. `/usage` includes the snapshot timestamp and reset data. Polling uses the usage endpoint, not paid inference, and backs off when the service rate-limits it. These endpoints may be unavailable for some accounts or change independently of Psi; unavailable data is never inferred from tokens.
 
 Metered API accounts show **session $…** below the prompt. Psi uses billed USD returned by a provider when available; otherwise it calculates cost from actual returned token usage at the configured model rates. Unknown pricing shows **cost unavailable**. This is not an invoice guarantee: provider pricing tiers, discounts and reporting can differ. The session total includes metered requests across accounts/models and survives resume; `/new` starts a fresh total. Subscription activity is excluded from that monetary total.
 
@@ -273,3 +274,7 @@ Transport and terminal rendering: [Pi](https://github.com/earendil-works/pi). Ad
 `/refresh` reloads disk settings, provider/model registrations, accounts, tools and the UI configuration. It retains the session journal, allowed directories, queued messages, objectives and draft. Global disk settings take precedence over previous session settings. If inference is active, select **Reload** to stop it and rebuild, or cancel to continue uninterrupted. Reload does not start another model request; unfinished work stays saved. Detached standalone jobs remain managed by their existing job records. Installed source code changes still require a process restart.
 
 The compaction model remains in `/settings`. Custom provider setup remains available through `psi provider add`. See [removed commands and recommendations](COMMAND_CHANGES.md).
+
+## Account resets
+
+See [Reset details](RESETS.md) for banked Codex resets, provider reset schedules, account selection, optional CLI setup and Claude’s web redemption flow. Budget, request and output ceilings remain in Settings; the context-summary route is labelled **Compaction model**.
