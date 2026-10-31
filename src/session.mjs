@@ -10,6 +10,7 @@ export class Session {
     this.home = home; this.meta = meta; this.dir = join(home, 'sessions', meta.id);
     this.messages = []; this.totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, requests: 0 };
     this.accountTotals = {}; this.meteredCost = 0; this.meteredCostKnown = true;
+    this.seenUsage=new Set();
     this.state = {}; this.status = 'idle'; this.journalSize = 0; this.writeChain=Promise.resolve();
   }
   static async create(cwd, home = psiHome()) {
@@ -61,6 +62,8 @@ export class Session {
     if (event.type === 'message') this.messages.push(event.message);
     if (event.type === 'compact') this.messages = event.messages;
     if (event.type === 'usage') {
+      if(event.requestId&&this.seenUsage.has(event.requestId))return;
+      if(event.requestId)this.seenUsage.add(event.requestId);
       if(event.accountId) {
         const a=this.accountTotals[event.accountId] ||= {cost:0,requests:0,tokens:0};a.cost+=event.usage.cost?.total||0;a.requests++;a.tokens+=event.usage.totalTokens||0;
       }

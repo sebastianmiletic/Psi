@@ -1,5 +1,11 @@
 import { validAccent, accents } from './theme.mjs';
 export const settingItems = [
+  {id:'agentMode',label:'Plan / execute mode',special:'mode'},
+  {id:'overkill',label:'OVERKILL mode',boolean:true},
+  {id:'agents',label:'OVERKILL worker profiles',special:'agents',description:'Independent jobs, models, thinking and limits'},
+  {id:'subagentConcurrency',label:'Concurrent subagents',number:[1,16]},
+  {id:'checkForUpdates',label:'Check GitHub on startup',boolean:true},
+  {id:'autoUpdate',label:'Install updates automatically',boolean:true,description:'Managed releases or clean source checkouts; restart to apply'},
   {id:'accent',label:'Accent colour',values:[...Object.keys(accents),'custom'],description:'Selection, links and the 3D Psi mark'},
   {id:'showLogo',label:'Show logo',boolean:true},{id:'animations',label:'Animate logo',boolean:true},{id:'showUsage',label:'Show account usage',boolean:true},
   {id:'autoSwitchAccounts',label:'Automatic account switching',boolean:true,description:'Try another saved account when quota is exhausted'},
@@ -27,6 +33,11 @@ export function validateSettings(patch, registry) {
     if(item?.number&&(!Number.isFinite(value)||value<item.number[0]||value>item.number[1]||(key!=='budget'&&!Number.isInteger(value))))throw new Error(`${item.label} must be ${item.number[0]}–${item.number[1]}`);
     if(item?.values&&key!=='accent'&&!item.values.includes(value))throw new Error(`Invalid ${item.label}`);
     if(key==='fallbackModels') {if(!Array.isArray(value)||value.some(x=>typeof x!=='string'))throw new Error('Fallbacks must be provider/model names');for(const m of value)registry?.find(m);}
+    if(key==='agentMode'&&!['plan','execute'].includes(value))throw new Error('Choose plan or execute mode.');
+    if(key==='agents'){
+      if(!Array.isArray(value)||value.length>32||new Set(value.map(a=>a.id)).size!==value.length)throw new Error('Use up to 32 distinct worker profiles.');
+      for(const a of value){if(!a.id||!a.name?.trim()||!a.job?.trim()||!['plan','execute'].includes(a.mode))throw new Error('Every worker needs a name, job and mode.');if(a.model)registry?.find(a.model);if(!Number.isInteger(a.maxSteps)||a.maxSteps<1||a.maxSteps>100000)throw new Error('Worker request limits must be 1–100000.');if(a.budget!==undefined&&(!Number.isFinite(a.budget)||a.budget<0))throw new Error('Worker budgets must be nonnegative.');}
+    }
     if(key==='customPrices')for(const [model,prices]of Object.entries(value||{})){registry?.find(model);for(const n of Object.values(prices))if(!Number.isFinite(n)||n<0)throw new Error('Prices must be nonnegative USD per million tokens');}
   }
   return patch;

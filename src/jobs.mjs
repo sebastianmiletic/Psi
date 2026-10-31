@@ -10,10 +10,11 @@ import { atomicJSON, readJSON, alive, psiHome, privateDir } from './storage.mjs'
 export class Jobs {
   constructor(home = psiHome(), sessionId) { this.home = home; this.sessionId = sessionId; this.dir = join(home, 'jobs'); }
   path(id) { if (!/^[\w-]+$/.test(id)) throw new Error('Invalid job ID.'); return join(this.dir, id); }
-  async start(command, cwd, { timeout_ms = 0, label = 'shell', max_log_bytes = 128 * 1024 * 1024, graceful_stop_ms = 2000 } = {}) {
+  async start(command, cwd, { timeout_ms = 0, label = 'shell', max_log_bytes = 128 * 1024 * 1024, graceful_stop_ms = 2000, infrastructure = false } = {}) {
+    const sandbox=this.policy&&!infrastructure?await this.policy.sandbox(command,cwd):null;
     const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     const dir = this.path(id); await privateDir(dir);
-    const job = { id, sessionId: this.sessionId, label, command, cwd: resolve(cwd), status: 'queued', createdAt: new Date().toISOString(), timeout_ms, max_log_bytes, graceful_stop_ms, log: join(dir, 'output.log') };
+    const job = { id, sessionId: this.sessionId, label, command, cwd: resolve(cwd), sandbox, infrastructureArgv:Array.isArray(infrastructure)?infrastructure:undefined, status: 'queued', createdAt: new Date().toISOString(), timeout_ms, max_log_bytes, graceful_stop_ms, log: join(dir, 'output.log') };
     await atomicJSON(join(dir, 'job.json'), job);
     const child = spawn(process.execPath, [fileURLToPath(new URL('./job-worker.mjs', import.meta.url)), dir], { detached: true, stdio: 'ignore', env: process.env });
     await new Promise((res, rej) => { child.once('spawn', res); child.once('error', rej); });

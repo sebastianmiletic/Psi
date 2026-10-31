@@ -21,15 +21,11 @@ const markdownTheme = {
   bold, italic: t => `\x1b[3m${t}\x1b[23m`, strikethrough: t => `\x1b[9m${t}\x1b[29m`, underline: t => `\x1b[4m${t}\x1b[24m`,
 };
 export const commands = [
-  ['project', 'Discover the current Battlecode baseline and controller'], ['settings', 'Appearance, accounts, loop and resource settings'], ['experiments', 'Inspect durable Battlecode experiments'], ['logo', 'Animate the Psi logo'], ['model', 'Choose a provider and model'], ['effort', 'Set reasoning effort'], ['accounts', 'Login, switch or remove accounts'],
-  ['provider', 'Add a custom API endpoint'], ['loop', 'Work autonomously toward an objective'], ['stop', 'Stop generation and the active tool wait'],
-  ['continue', 'Continue this session'], ['new', 'Start a fresh session'], ['resume', 'Resume a saved session'], ['cd', 'Open another workspace'],
-  ['jobs', 'Inspect or stop background jobs'], ['budget', 'Set estimated session cost ceiling, 0 = unlimited'],
-  ['limit', 'Set requests per run, 0 = unlimited'], ['tokens', 'Set maximum output tokens'], ['usage', 'Show active account usage and reported limits'], ['tools', 'Show tools available to the AI'], ['cost', 'Show token and estimated cost totals'],
-  ['summary-model', 'Choose a cheaper model for compaction'], ['compact', 'Summarize older context'], ['checkpoint', 'Read or write a durable progress note'], ['profile', 'battlecode or general'],
-  ['refresh', 'Refresh a provider model catalog'], ['status', 'Show workspace and run settings'], ['export', 'Export this session as Markdown'],
-  ['help', 'Show commands'], ['quit', 'Exit Psi; background jobs keep running'],
-].map(([name, description]) => ({ name, description }));
+ ['directory','Manage allowed working directories'],['settings','Appearance, accounts, workers and execution'],['agents','Configure and inspect OVERKILL workers'],['update','Install the latest GitHub release'],
+ ['project','Inspect the Battlecode baseline and controller'],['experiments','Inspect durable experiments'],['logo','Open the Psi logo'],['model','Choose a model'],['effort','Thinking effort; Tab toggles OVERKILL'],['accounts','Login, switch or remove accounts'],
+ ['provider','Add a custom endpoint'],['loop','Set a persistent objective'],['new','Start a fresh session'],['resume','Resume a saved session'],['cd','Start in another workspace'],['usage','Reported account usage'],['tools','Available AI tools'],['cost','Session token and cost totals'],
+ ['summary-model','Choose the compaction model'],['compact','Summarize earlier context'],['checkpoint','Read or write the progress note'],['profile','Battlecode or general guidance'],['refresh','Refresh model catalog'],['status','Workspace and run state'],['export','Export session Markdown'],['help','Commands and keyboard shortcuts'],['quit','Exit Psi']
+].map(([name,description])=>({name,description}));
 
 class Transcript extends Container {
   addChild(child) { super.addChild(child); if (this.children.length > 100) this.children.splice(0, this.children.length - 100); }
@@ -66,11 +62,16 @@ export class TerminalUI {
       const c = app.engine.config;
       const slash = c.model.indexOf('/');
       const model = safe(slash >= 0 ? c.model.slice(slash + 1) : c.model);
-      const right = truncateToWidth(`thinking ${safe(c.effort)}`, Math.max(0,width-3));
+      const right = truncateToWidth(`thinking ${safe(c.effort)}${c.overkill?' · OVERKILL':''}`, Math.max(0,width-3));
       const left = truncateToWidth(`  ${model}`, Math.max(0,width-visibleWidth(right)-3));
       const gap = Math.max(1,width-visibleWidth(left)-visibleWidth(right)-1);
       return [left+' '.repeat(gap)+dim(right), ...(app.engine.config.showUsage===false?[]:[truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage,{sessionCost:app.session.meteredCost,costKnown:app.session.meteredCostKnown}))),width)])];
     } };
+    this.progressBar={invalidate(){},render:width=>{
+      const state=app.session.state.progress,pct=Math.max(0,Math.min(100,state?.percent||0)),mode=(app.engine.pendingSettings.agentMode||app.engine.config.agentMode||'execute').toUpperCase();
+      const label=`${mode}  ${pct}% est.`,available=Math.max(0,width-visibleWidth(label)-6),size=Math.min(30,available),filled=Math.round(size*pct/100);
+      return[truncateToWidth('  '+this.paint('━'.repeat(filled))+dim('─'.repeat(size-filled))+'  '+dim(label),width)];
+    }};
     this.scroll = new ScrollView(this.transcript, { follow: 'end', primary: true, scrollbar: 'auto' });
     this.panelScroll = new ScrollView(this.panel, { follow: 'end', scrollbar: 'auto' });
     this.layout = new VStack([
@@ -79,6 +80,7 @@ export class TerminalUI {
       { component: this.panelScroll, basis: 'auto', shrink: 1, minSize: 0 },
       { component: this.editor, basis: 'auto', shrink: 1, minSize: 3 },
       { component: this.footer, basis: 'auto', shrink: 0, minSize: 1 },
+      { component: this.progressBar, basis: 1, shrink: 0, minSize: 1 },
     ]);
     this.tui.setLayoutRoot(this.layout);
     this.tui.setFocus(this.editor);
@@ -91,13 +93,13 @@ export class TerminalUI {
         else void app.close();
         return { consume: true };
       }
-      if (matchesKey(data, 'escape') && !this.pending && app.engine.busy) { app.engine.stop(); return { consume: true }; }
+      if(matchesKey(data,'shift+tab')&&!this.pending){void app.setMode((app.engine.pendingSettings.agentMode||app.engine.config.agentMode)==='plan'?'execute':'plan').catch(e=>this.note(e.message,true));return{consume:true};}
+      if(matchesKey(data,'escape')&&!this.pending&&app.engine.busy){const now=Date.now();if(now-(this.lastEscape||0)<600){this.lastEscape=0;app.engine.stop();}else this.lastEscape=now;return{consume:true};}
       if (matchesKey(data, 'ctrl+d') && !this.pending && !this.editor.getText()) { void app.close(); return { consume: true }; }
     });
   }
   start() {
     this.closed=false;
-    this.note('Build, research, benchmark. Pick a model with /model, connect an account with /accounts.\nTools run with full access. /help shows every command.');
     this.tui.start();
   }
   stop() { this.closed=true; this.hideLogo(); clearTimeout(this.renderTimer); this.pending?.cancel(); clearTimeout(this.renderTimer); this.tui.stop(); }
@@ -126,7 +128,7 @@ export class TerminalUI {
     if(this.closed)return;
     if(event.type==='settings_queued')this.note('Settings saved for the next model/tool boundary.');
     if(event.type==='settings'){this.tui.invalidate();this.tui.requestRender(true);}
-    if(event.type==='waiting')this.note(event.reason+' · /stop ends the loop; /settings or /accounts can resolve the wait.');
+    if(event.type==='waiting')this.note(event.reason+' · Escape twice to stop; /settings or /accounts can resolve the wait.');
     if(event.type==='account_switched')this.note(`Switched account: ${event.previous} → ${event.account.name}`);
     if(event.type==='model_fallback')this.note(`Using configured fallback: ${event.model}`);
     if(event.type==='account_exhausted')this.note(`${event.account.name}: checking another configured account.`);
@@ -156,13 +158,16 @@ export class TerminalUI {
     if (event.type === 'retry') this.note(`Provider retry ${event.attempt} in ${(event.delay / 1000).toFixed(1)}s: ${event.error}`, true);
     if (event.type === 'compacted') this.note(`Context compacted: ~${event.before} → ~${event.after} tokens. Full history saved.`);
     if (event.type === 'queued') this.note('Message queued for the next tool boundary.');
-    if (event.type === 'stopped') this.note('Stopped. Background jobs continue; use /jobs to stop them.');
+    if (event.type === 'stopped') this.note('Stopped. Queued messages and unfinished goals are saved.');
+    if(event.type==='progress'){this.note(event.update);if(this.app.engine.config.agentMode==='plan')this.markdown(event.steps.map((s,i)=>`${i+1}. ${s.title}`).join('\n'),false);}
+    if(event.type==='agent_started')this.note(`Worker started: ${event.agent.name} · ${event.agent.model}`);
+    if(event.type==='agent_finished')this.note(`Worker ${event.agent.name}: ${event.agent.status}`);
     if (event.type === 'error') this.note(event.error, true);
     if (event.type === 'goal_complete') this.note(`Objective complete. ${event.summary}`);
     if (event.type === 'run_end') { this.activity = ''; this.stream = null; }
     this.render();
   }
-  async choose(title, items) {
+  async choose(title, items, options={}) {
     if (!items.length) { this.note('No items available.'); return null; }
     return this.interact(title, ({ resolve, cancel }) => {
       const input = new Input({ prompt: '  Search: ', placeholder: 'type to filter' });
@@ -171,8 +176,9 @@ export class TerminalUI {
       list.onSelect = item => resolve(item.value); list.onCancel = cancel;
       const component = {
         focused: true, invalidate() { input.invalidate(); list.invalidate(); },
-        render: width => [...input.render(width), '', ...list.render(width), '', dim('  ↑ ↓ choose   enter select   esc back')],
+        render: width => [...(options.status?[dim('  '+options.status()),'']:[]),...input.render(width), '', ...list.render(width), '', dim('  ↑ ↓ choose   enter select   esc back')],
         handleInput: data => {
+          if(matchesKey(data,'tab')&&options.onTab){void options.onTab().then(()=>this.render()).catch(e=>this.note(e.message,true));return;}
           if (matchesKey(data, 'up') || matchesKey(data, 'down') || matchesKey(data, 'enter') || matchesKey(data, 'escape') || matchesKey(data, 'pageUp') || matchesKey(data, 'pageDown')) list.handleInput(data);
           else { input.handleInput(data); list.setFilter(input.getValue()); }
           this.render();

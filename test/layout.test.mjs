@@ -17,15 +17,15 @@ test('prompt stays at the bottom on startup, transcript growth, menus and termin
     terminal.resize(columns,rows);
     const lines = frame(ui);
     assert.equal(lines.length, rows);
-    assert.match(lines[rows-4], /PROMPT-AT-BOTTOM/);
-    assert.match(lines[rows-2], /test/);
+    assert.match(lines[rows-5], /PROMPT-AT-BOTTOM/);
+    assert.match(lines[rows-3], /test/);
     assert.doesNotMatch(lines[rows-1], /\$|ready|working|commands|ctrl|requests|cost/);
     assert.ok(ui.tui.getScreenLines().every(line => visibleWidth(line) <= columns));
   }
   for (let i = 0; i < 30; i++) ui.note(`TRANSCRIPT-${i}`);
-  let lines = frame(ui); assert.match(lines[28], /PROMPT-AT-BOTTOM/); assert.ok(lines.some(l => l.includes('TRANSCRIPT-29')));
+  let lines = frame(ui); assert.match(lines[27], /PROMPT-AT-BOTTOM/); assert.ok(lines.some(l => l.includes('TRANSCRIPT-29')));
   const choice = ui.choose('Select an account', Array.from({length:20},(_,i)=>({value:String(i),label:`Account ${i}`})));
-  lines = frame(ui); assert.match(lines[28], /PROMPT-AT-BOTTOM/);
+  lines = frame(ui); assert.match(lines[27], /PROMPT-AT-BOTTOM/);
   terminal.input('\x1b'); await choice;
 });
 
@@ -53,7 +53,7 @@ test('SGR mouse click starts the 3D logo, Escape restores the draft and all anim
   terminal.input('\x1b');
   assert.equal(ui.logoAnimation,null); assert.equal(ui.logoTimer,null); assert.equal(ui.tui.hasOverlay(),false);
   assert.equal(ui.editor.getText(),'preserve my draft');
-  assert.match(frame(ui)[28], /preserve my draft/);
+  assert.match(frame(ui)[27], /preserve my draft/);
   ui.showLogo(); ui.stop(); assert.equal(ui.logoTimer,null);
 });
 

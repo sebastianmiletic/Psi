@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+import { version,updateInstallation,checkUpdate } from '../src/updates.mjs';
+import { importPi } from '../src/pi-import.mjs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { parseArgs } from 'node:util';
 import { stat, access } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -7,7 +11,7 @@ import { loadConfig, saveConfig, psiHome, cleanTerminal, redact } from '../src/s
 import { Session } from '../src/session.mjs';
 import { App } from '../src/app.mjs';
 
-const help = `Ψ  Psi 0.1.0
+const help = `Ψ  Psi ${version}
 
 Usage: psi [options] [prompt]
        psi models [filter]
@@ -18,6 +22,8 @@ Usage: psi [options] [prompt]
        psi sessions
        psi jobs [id] | psi jobs stop <id>
        psi bench <manifest.json>
+       psi update [--check]
+       psi accounts import-pi --account <name> [--account <name>]
        psi doctor
 
   -C, --cwd <path>           Workspace (default: current directory)
@@ -27,7 +33,9 @@ Usage: psi [options] [prompt]
       --budget <dollars>    Estimated session cost ceiling; 0 = unlimited
       --max-steps <count>   Requests per run; 0 = unlimited
       --tokens <count>      Maximum output tokens per request
-      --loop <objective>    Continue autonomously until finish, stop or a limit
+      --loop <objective>    Persist until completion or user stop
+      --mode <plan|execute> Read-only planning or execution
+      --overkill            Enable configured subagent workflow
       --resume <id>         Resume a saved session
       --continue           Resume the latest session in this workspace
       --profile <name>      battlecode (default) or general
@@ -36,8 +44,9 @@ Usage: psi [options] [prompt]
   -h, --help                Show help
   -v, --version             Show version
 
-Interactive: /model /effort /accounts /loop /jobs /budget /compact /help
-Tools run with full host access and no approval prompts.
+Interactive: /model /effort /accounts /directory /settings /agents /loop /help
+Shift+Tab: plan/execute. Escape twice: stop. Enter while busy: queue.
+Tools stay within approved directories, without approval prompts.
 Settings and credentials: PSI_HOME (default ~/.psi)
 `;
 try {
@@ -45,12 +54,15 @@ try {
     help: { type: 'boolean', short: 'h' }, version: { type: 'boolean', short: 'v' }, cwd: { type: 'string', short: 'C' },
     print: { type: 'string', short: 'p' }, model: { type: 'string', short: 'm' }, effort: { type: 'string' }, budget: { type: 'string' },
     'max-steps': { type: 'string' }, tokens: { type: 'string' }, loop: { type: 'string' }, resume: { type: 'string' }, continue: { type: 'boolean' },
+    mode:{type:'string'},overkill:{type:'boolean'},check:{type:'boolean'},account:{type:'string',multiple:true},'pi-file':{type:'string'},
     profile: { type: 'string' }, json: { type: 'boolean' }, 'no-debug': { type: 'boolean' },
     provider: { type: 'string' }, name: { type: 'string' }, 'key-env': { type: 'string' }, id: { type: 'string' }, url: { type: 'string' }, api: { type: 'string' }, keyless: { type: 'boolean' },
   } });
   if (v.help) { console.log(help); process.exit(0); }
-  if (v.version) { console.log('Ψ Psi 0.1.0'); process.exit(0); }
+  if (v.version) { console.log('Ψ Psi '+version); process.exit(0); }
   const home = psiHome(); const config = await loadConfig(home);
+  if(positionals[0]==='update'){console.log(v.check?JSON.stringify(await checkUpdate(home,{force:true}),null,2):(await updateInstallation(home)).message);process.exit(0);}
+  if(v.mode){if(!['plan','execute'].includes(v.mode))throw new Error('Use --mode plan or --mode execute.');config.agentMode=v.mode;}if(v.overkill)config.overkill=true;
   for (const [flag, setting] of [['budget', 'budget'], ['max-steps', 'maxSteps'], ['tokens', 'maxOutputTokens']]) {
     if (v[flag] !== undefined) {
       const n = Number(v[flag]);
@@ -78,6 +90,7 @@ try {
     else if (v.continue) { const latest = (await Session.list(home)).find(s => s.cwd === cwd); session = latest ? await Session.load(latest.id, home) : await Session.create(cwd, home); }
     else session = await Session.create(cwd, home);
     // Explicit invocation flags override saved session settings.
+    if(v.mode)session.state.settings={...session.state.settings,agentMode:v.mode};if(v.overkill)session.state.settings={...session.state.settings,overkill:true};
     for (const [flag, key] of [['model', 'model'], ['effort', 'effort'], ['budget', 'budget'], ['max-steps', 'maxSteps'], ['tokens', 'maxOutputTokens'], ['profile', 'profile']]) if (v[flag] !== undefined) session.state.settings = { ...session.state.settings, [key]: config[key] };
   } else session = { meta: { id: 'administration', cwd }, state: {} };
   let outputOpen = false;
@@ -99,7 +112,8 @@ try {
   }
   if (command === 'accounts') {
     const action = positionals[1] || 'list';
-    if (action === 'list') { const list = await app.registry.accounts.list(); console.log(v.json ? JSON.stringify(list) : list.map(a => `${a.active ? '✓' : ' '} ${a.provider} · ${a.name} (${a.type})  ${a.id}`).join('\n') || 'No saved accounts. Run psi and use /accounts.'); }
+    if(action==='import-pi'){const imported=await importPi(app.registry.accounts,v['pi-file']||join(homedir(),'.pi/agent/pi-accounts.json'),v.account);console.log(JSON.stringify(imported,null,2));}
+    else if (action === 'list') { const list = await app.registry.accounts.list(); console.log(v.json ? JSON.stringify(list) : list.map(a => `${a.active ? '✓' : ' '} ${a.provider} · ${a.name} (${a.type})  ${a.id}`).join('\n') || 'No saved accounts. Run psi and use /accounts.'); }
     else if (action === 'use' || action === 'remove') { if (!positionals[2]) throw new Error('Account ID required.'); const provider = await app.registry.accounts[action](positionals[2]); if (provider) { const m = app.registry.models.getModels(provider)[0]; if (m) await saveConfig({ model: `${provider}/${m.id}` }, home); } console.log(action === 'use' ? 'Account switched.' : 'Account removed.'); }
     else if (action === 'add') {
       if (!v.provider || !v.name || !v['key-env']) throw new Error('Use --provider, --name and --key-env.');
@@ -123,7 +137,7 @@ try {
   if (command === 'doctor') {
     const candidates = [process.env.PSI_CHROME_PATH, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', '/usr/bin/chromium'].filter(Boolean);
     let chrome; for (const path of candidates) if (await access(path).then(() => true, () => false)) { chrome = path; break; }
-    const report = { version: '0.1.0', node: process.version, home, providers: app.registry.models.getProviders().length, models: app.registry.all().length, catalogDate: app.registry.catalogDate, defaultModel: config.model, accounts: (await app.registry.accounts.list()).map(({ name, provider, type, active }) => ({ name, provider, type, active })), ripgrep: spawnSync('rg', ['--version'], { encoding: 'utf8' }).status === 0, browser: chrome || 'Set PSI_CHROME_PATH to enable browser', permissions: 'full host access; no approval prompts', debug: config.debug };
+    const report = { version, node: process.version, home, providers: app.registry.models.getProviders().length, models: app.registry.all().length, catalogDate: app.registry.catalogDate, defaultModel: config.model, accounts: (await app.registry.accounts.list()).map(({ name, provider, type, active }) => ({ name, provider, type, active })), ripgrep: spawnSync('rg', ['--version'], { encoding: 'utf8' }).status === 0, browser: chrome || 'Set PSI_CHROME_PATH to enable browser', permissions:'approved directories; OS-isolated shell; no approval prompts',shellIsolation:process.platform==='darwin'?'macOS Seatbelt':process.platform==='linux'?'bubblewrap required':'Use WSL2 + bubblewrap for shell tools', debug: config.debug };
     console.log(JSON.stringify(report, null, 2)); process.exit(report.ripgrep ? 0 : 1);
   }
   // Validate model and effort before entering raw terminal mode.

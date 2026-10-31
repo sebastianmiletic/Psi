@@ -21,9 +21,10 @@ export async function fixture(t, respond) {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', ...(answer.headers || {}) });
       const send = data => res.write(`data: ${JSON.stringify({ id: `chat-${requests.length}`, object: 'chat.completion.chunk', created: 1, model: 'fixture', ...data })}\n\n`);
       send({ choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] });
-      if (answer.call) send({ choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: `call-${requests.length}`, type: 'function', function: { name: answer.call.name, arguments: JSON.stringify(answer.call.args) } }] }, finish_reason: null }] });
+      const calls=answer.calls || (answer.call?[answer.call]:[]);
+      for(const [i,call]of calls.entries())send({ choices: [{ index: 0, delta: { tool_calls: [{ index:i, id: `call-${requests.length}-${i}`, type: 'function', function: { name: call.name, arguments: JSON.stringify(call.args) } }] }, finish_reason: null }] });
       if (answer.text) send({ choices: [{ index: 0, delta: { content: answer.text }, finish_reason: null }] });
-      send({ choices: [{ index: 0, delta: {}, finish_reason: answer.call ? 'tool_calls' : 'stop' }], usage: { ...(answer.billedCost!==undefined?{cost:answer.billedCost}:{}), prompt_tokens: 100, completion_tokens: 20, total_tokens: 120, prompt_tokens_details: { cached_tokens: 30 } } });
+      send({ choices: [{ index: 0, delta: {}, finish_reason: calls.length ? 'tool_calls' : 'stop' }], usage: { ...(answer.billedCost!==undefined?{cost:answer.billedCost}:{}), prompt_tokens: 100, completion_tokens: 20, total_tokens: 120, prompt_tokens_details: { cached_tokens: 30 } } });
       res.end('data: [DONE]\n\n');
     } catch (e) { res.destroy(e); }
   });

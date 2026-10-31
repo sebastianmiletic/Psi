@@ -10,3 +10,5 @@ coverage/
 *.pem
 *.key
 /AGENTS.md
+dist/
+benchmarks/artifacts/

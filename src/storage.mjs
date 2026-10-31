@@ -50,6 +50,10 @@ export const defaults = {
   debug: true, customProviders: [], accent: 'sage', showLogo: true, animations: true,
   autoSwitchAccounts: false, accountSwitchThreshold: 100, quotaRefreshSeconds: 120,
   fallbackModels: [], loopRetrySeconds: 30, showUsage: true, customPrices: {},
+  agentMode:'execute', overkill:false, subagentConcurrency:3, subagentDepth:0, checkForUpdates:true, autoUpdate:false,
+  agents:[{id:'researcher',name:'Researcher',job:'Investigate sources and existing code; report evidence and useful options.',model:null,effort:'medium',mode:'plan',maxSteps:80},
+    {id:'builder',name:'Builder',job:'Implement the assigned change and verify it. Coordinate file ownership with the parent.',model:null,effort:'high',mode:'execute',maxSteps:150},
+    {id:'reviewer',name:'Reviewer',job:'Review evidence, identify defects and check the proposed result without editing.',model:null,effort:'high',mode:'plan',maxSteps:80}],
 };
 export async function loadConfig(home = psiHome()) { return { ...defaults, ...await readJSON(join(home, 'config.json'), {}) }; }
 export async function saveConfig(patch, home = psiHome()) {

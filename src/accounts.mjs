@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { readJSON, atomicJSON, withLock, psiHome } from './storage.mjs';
+import { sourceCredential } from './pi-import.mjs';
 
 export class Accounts {
   constructor(home = psiHome()) { this.home = home; this.path = join(home, 'accounts.json'); }
@@ -42,11 +43,11 @@ export class Accounts {
   store(pinned) {
     const target = (data, provider) => pinned?.provider === provider ? (pinned.type === 'ambient' ? null : pinned.id) : data.active[provider];
     return {
-      read: async (provider) => { const d = await this.data(); const a = d.accounts.find(a => a.id === target(d, provider) && a.provider === provider); if (pinned?.provider === provider && pinned.type !== 'ambient' && !a) throw new Error('The account selected for this request was removed.'); return a?.credential; },
+      read: async (provider) => { const d = await this.data(); const a = d.accounts.find(a => a.id === target(d, provider) && a.provider === provider); if (pinned?.provider === provider && pinned.type !== 'ambient' && !a) throw new Error('The account selected for this request was removed.'); return a?.piSource?sourceCredential(a.piSource):a?.credential; },
       list: async () => (await this.list()).filter(a => a.active).map(a => ({ providerId: a.provider, type: a.type })),
       modify: async (provider, fn, options) => this.mutate(async d => {
         const a = d.accounts.find(a => a.id === target(d, provider) && a.provider === provider);
-        const next = await fn(a?.credential);
+        const next = a?.piSource ? await sourceCredential(a.piSource,fn) : await fn(a?.credential);
         if (next && a) a.credential = next;
         else if (next) throw new Error('Add a named account before saving credentials.');
         return next || a?.credential;

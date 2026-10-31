@@ -11,7 +11,8 @@ job.pid = process.pid; job.status = 'running'; job.startedAt = new Date().toISOS
 await atomicJSON(path, job);
 const log = createWriteStream(job.log, { flags: 'a', mode: 0o600 });
 let bytes = 0, capped = false, reason, timer, escalation;
-const child = spawn(process.env.SHELL || '/bin/sh', ['-lc', job.command], { cwd: job.cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
+const argv=job.sandbox?.argv||job.infrastructureArgv;
+const child = spawn(argv?.[0] || process.env.SHELL || (process.platform==='win32'?process.env.COMSPEC||'cmd.exe':'/bin/sh'), argv?argv.slice(1):process.platform==='win32'?['/d','/s','/c',job.command]:['-lc', job.command], { cwd: job.cwd, env: job.sandbox?.env || process.env, stdio: ['ignore', 'pipe', 'pipe'] });
 job.childPid = child.pid; await atomicJSON(path, job);
 function output(chunk) {
   if (capped) return;

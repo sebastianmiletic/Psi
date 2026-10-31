@@ -39,12 +39,13 @@ export class Engine {
     this.accountUsage = new AccountUsage(session.home);
     this.router=new AccountRouter(registry,this.accountUsage,this.config);this.quota=new QuotaMonitor(registry,this.config,session.home);
     this.pendingSettings={...session.state.pendingSettings};
-    this.busy = false; this.queue = []; this.controller = null;
+    this.busy = false; this.queue = [...session.state.queuedMessages||[]]; this.controller = null;
     tools.add('finish', 'Mark the current autonomous objective complete. Provide the verified outcome and evidence paths. Use only when the objective has actually been achieved.', { summary: Type.String({minLength:1}), evidence: Type.Array(Type.String(),{minItems:1}), experiment_id:Type.Optional(Type.String()) }, async args => {
-      for(const path of args.evidence)await stat(resolve(session.meta.cwd,path)).catch(()=>{throw new Error(`Completion evidence does not exist: ${path}`);});
+      for(const path of args.evidence){await this.tools.policy?.check(path);await stat(resolve(session.meta.cwd,path)).catch(()=>{throw new Error(`Completion evidence does not exist: ${path}`);});}
       if(args.experiment_id){const exp=await tools.projectAdapter?.validateQualification(args.experiment_id);if(exp?.phase!=='qualified_for_review')throw new Error('The experiment has not passed fresh-fixture confirmation');}
 
       await session.event({ type: 'state', state: { loopGoal: null, loopStatus: 'complete', completed: args } });
+      await session.event({type:'state',state:{progress:{...session.state.progress,percent:100,update:args.summary,verified:true}}});
       this.onEvent({ type: 'goal_complete', ...args }); return args;
     });
   }
@@ -57,7 +58,7 @@ export class Engine {
     }
     if (patch.summaryModel) this.registry.find(patch.summaryModel);
     if (patch.effort && !getSupportedThinkingLevels(patch.model ? this.registry.find(patch.model) : this.model).includes(patch.effort)) throw new Error(`Supported efforts: ${getSupportedThinkingLevels(this.model).join(', ')}`);
-    const visual=Object.keys(patch).every(k=>['accent','showLogo','animations','showUsage','debug'].includes(k));
+    const visual=Object.keys(patch).every(k=>['accent','showLogo','animations','showUsage','debug','checkForUpdates','autoUpdate'].includes(k));
     if(this.busy&&!this.waiting&&!immediate&&!visual){
       Object.assign(this.pendingSettings,patch);await this.session.event({type:'state',state:{pendingSettings:this.pendingSettings}});
       this.onEvent({type:'settings_queued',settings:this.pendingSettings});return;
@@ -67,21 +68,21 @@ export class Engine {
       await this.session.event({ type:'state',state:{settings:{...this.session.state.settings,...patch}} });
       Object.assign(this.config,patch);Object.assign(this.tools.config,patch);
       if(patch.customPrices)this.registry.applyPrices(patch.customPrices);
-      if(patch.profile&&this.prompt){const project=patch.profile==='battlecode'?await this.tools.projectAdapter?.inspect().catch(()=>null):null;this.prompt=await systemPrompt(this.session,this.config,project);}
+      if((patch.profile||patch.agentMode||patch.overkill!==undefined)&&this.prompt){const project=this.config.profile==='battlecode'?await this.tools.projectAdapter?.inspect().catch(()=>null):null;this.prompt=await systemPrompt(this.session,this.config,project);}
     };
     if(this.busy)await change();else await withLock(join(this.session.dir,'run.lock'),change,{timeout:500});
     this.wake?.();
     this.onEvent({ type: 'settings', settings: this.config });
   }
-  stop() { this.controller?.abort(new Error('Stopped by user')); }
-  steer(text) { this.queue.push(text); this.wake?.(); this.onEvent({ type: 'queued', text }); }
+  stop() { this.controller?.abort(new Error('Stopped by user'));void this.tools.stopAgents?.(); }
+  steer(text) { this.queue.push(text);const saved=this.session.event({type:'state',state:{queuedMessages:[...this.queue]}});void saved.catch(e=>this.onEvent({type:'error',error:e.message}));this.wake?.(); this.onEvent({ type: 'queued', text });return saved; }
   async request(messages, { maxTokens = this.config.maxOutputTokens, tools = true, summary = false, _routes = [] } = {}) {
     const model = summary && this.config.summaryModel ? this.registry.find(this.config.summaryModel) : this.model;
     const modelName = `${model.provider}/${model.id}`;
     maxTokens = Math.min(maxTokens, model.maxTokens);
     const inputEstimate = estimateTokens(messages) + Math.ceil(this.prompt.length / 3) + (tools ? 4000 : 0);
     const reserve = (inputEstimate * model.cost.input + maxTokens * model.cost.output) / 1e6;
-    if (this.config.budget > 0 && this.session.totals.cost + reserve > this.config.budget) throw new LimitError(`Budget reserve reached. Estimated next request: $${reserve.toFixed(4)}; session estimate: $${this.session.totals.cost.toFixed(4)}. Increase /budget or reduce /tokens.`);
+    if (this.config.budget > 0 && this.session.totals.cost + reserve > this.config.budget) throw new LimitError(`Budget reserve reached. Estimated next request: $${reserve.toFixed(4)}; session estimate: $${this.session.totals.cost.toFixed(4)}. Adjust budget or output tokens in /settings.`);
     const effort = clampThinkingLevel(model, this.config.effort);
     const excluded=[];
     for (let attempt = 0; ; attempt++) {
@@ -203,6 +204,7 @@ export class Engine {
         const project=this.config.profile==='battlecode'?await this.tools.projectAdapter?.inspect().catch(()=>null):null;
         this.prompt = await systemPrompt(this.session, this.config,project);
         if (loop) await this.session.event({ type: 'state', state: { loopGoal: text, loopStatus: 'active', completed: null } });
+        if(text&&(loop||!this.session.state.loopGoal))await this.session.event({type:'state',state:{progress:{percent:0,steps:[],update:'Starting',verified:false}}});
         if (text) await this.session.message({ role: 'user', content: text, timestamp: Date.now() });
         if (compactOnly) return await this.compact(true);
         await this.session.event({ type: 'status', status: 'running' });
@@ -214,6 +216,7 @@ export class Engine {
           try {
           if(Object.keys(this.pendingSettings).length){const patch={...this.pendingSettings};this.pendingSettings={};await this.settings(patch,true);await this.session.event({type:'state',state:{pendingSettings:{}}});}
           while (this.queue.length) await this.session.message({ role: 'user', content: this.queue.shift(), timestamp: Date.now() });
+          if(this.session.state.queuedMessages?.length)await this.session.event({type:'state',state:{queuedMessages:[]}});
           await this.compact();
           let result;
           try { result = await this.request(this.session.messages); }
@@ -222,6 +225,7 @@ export class Engine {
             else throw e;
           }
           await this.session.message(result);
+          if(Object.keys(this.pendingSettings).length){const patch={...this.pendingSettings};this.pendingSettings={};await this.settings(patch,true);await this.session.event({type:'state',state:{pendingSettings:{}}});}
           const calls = result.content.filter(c => c.type === 'toolCall');
           if (calls.length) {
             stalls = 0;
@@ -234,18 +238,20 @@ export class Engine {
                 const results = await Promise.all(batch.map(call => this.tools.call(call, this.controller.signal)));
                 for (const message of results) await this.session.message(message);
               } else { await this.session.message(await this.tools.call(calls[i++], this.controller.signal)); }
+              if(this.queue.length&&i<calls.length){for(const skipped of calls.slice(i))await this.session.message({role:'toolResult',toolCallId:skipped.id,toolName:skipped.name,content:[{type:'text',text:'Skipped pending tool call to apply the queued user message at this boundary.'}],isError:true,timestamp:Date.now()});break;}
             }
             // A finish result already contains the outcome; avoid another paid request just to restate it.
             if (calls.some(c => c.name === 'finish') && this.session.state.completed && !this.session.state.loopGoal) break;
+            if(this.config.agentMode==='plan'&&calls.some(c=>c.name==='progress')&&!this.queue.length){await this.session.event({type:'state',state:{loopStatus:this.session.state.loopGoal?'planned':null}});break;}
             continue;
           }
           if (this.queue.length) continue;
           if (result.stopReason === 'length') {
             await this.session.message({ role: 'user', content: 'Your response reached the output limit. Continue from where it stopped; use tools if work remains.', timestamp: Date.now() });
-            if (++stalls >= 3 && !this.session.state.loopGoal) throw new LimitError('Three consecutive output-limit responses. Increase /tokens before continuing.');
+            if (++stalls >= 3 && !this.session.state.loopGoal) throw new LimitError('Three consecutive output-limit responses. Increase output tokens in /settings before continuing.');
             continue;
           }
-          if (!this.session.state.loopGoal) break;
+          if (!this.session.state.loopGoal||this.config.agentMode==='plan') break;
           if (++stalls >= 3) await this.waitFor('The model is still working on the goal',Math.min(3,this.config.loopRetrySeconds||3));
           await this.session.message({ role: 'user', content: `Continue the autonomous objective: ${this.session.state.loopGoal}\nTake the next concrete action. Call finish with existing evidence paths only when the complete objective is achieved. A plain final response does not end this loop.`, timestamp: Date.now() });
           } catch(error) {
@@ -254,6 +260,7 @@ export class Engine {
             await this.waitFor(reason,error.retryAt?Math.max(1,(error.retryAt-Date.now())/1000):this.config.loopRetrySeconds);
           }
         }
+        if(!this.session.state.loopGoal&&this.config.agentMode!=='plan'&&!this.session.state.progress?.verified)await this.session.event({type:'state',state:{progress:{...this.session.state.progress,percent:100,update:'Response complete',verified:false}}});
         await this.session.event({ type: 'status', status: 'idle' });
       }, { signal: this.controller.signal, timeout: 500 });
     } catch (e) {

@@ -96,7 +96,7 @@ export class PsiHeader {
     if (this.cached?.key !== key) this.cached = { key, lines: renderPsi(logoWidth,logoRows,0,false,accent) };
     this.bounds = { x: 1, y: 1, width: logoWidth, height: logoRows };
     const path = this.app.session.meta.cwd.replace(process.env.HOME || '\0', '~');
-    const labels = width >= 48 ? { 0: this.format('P S I'), 1: this.subdued('long + intensive loops'), 3: this.subdued(path) } : {};
+    const labels = width >= 48 ? { 0: this.format('Ψ  Psi'), 3: this.subdued(path) } : {};
     return ['', ...this.cached.lines.map((line, i) => truncateToWidth(' '+line+'  '+(labels[i] || ''), width)), ''];
   }
   // Bound the click region to the mark, leaving workspace text selectable.
