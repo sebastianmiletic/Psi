@@ -157,7 +157,7 @@ An incremental private cache stores counters and timestamps, without copying pro
 
 ## Usage and multiple accounts
 
-Use `/accounts` → **Login new account** repeatedly to add any number of named accounts, including several from the same provider. Saved credentials are separate; connecting another account does not overwrite the first. Use **Switch accounts** to select from the flat cross-provider list. Short account IDs distinguish duplicate names.
+Use `/accounts` → **Login new account** repeatedly to add any number of named accounts, including several from the same provider. Saved credentials are separate; connecting another account does not overwrite the first. Use **Switch accounts** to select from the flat cross-provider list. Rows show only provider and account name; use distinct names for clarity.
 
 Subscription accounts show their provider-reported **7d** quota beside the account, and the **5h** quota in the bottom meter when supplied. `/reset` shows both reset times and countdowns. Codex and Claude OAuth accounts refresh on startup, before inference and periodically while the UI is open (default 120 seconds; minimum 60). Absent, unlimited or expired windows are omitted. `/usage` includes the snapshot timestamp and reset data. Polling uses the usage endpoint, not paid inference, and backs off when the service rate-limits it. These endpoints may be unavailable for some accounts or change independently of Psi; unavailable data is never inferred from tokens.
 

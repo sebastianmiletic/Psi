@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **96 passing tests**.
+- `npm run verify`: syntax checks and **97 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -102,3 +102,9 @@ Actual API invoices and real competition transactions were not exercised in this
 - A read-only check against the existing selected Codex account returned quota windows and credit metadata. The saved Codex login hash was unchanged. No real credit was redeemed and no paid inference was used.
 - The account footer omits five-hour quota and keeps weekly percent left. The bottom meter retains five-hour-first behavior. Budget/request/token limits and Compaction model remain in Settings.
 - Linux and Windows CI include the reset tests using a local protocol fixture; the installed Codex binary is optional and not required by the test suite.
+
+## Quieter bars and account rows (0.2.8)
+
+- Input and usage-bar waves move 35% slower, with a narrower brightness range. The existing reduced-motion and animation/timer checks pass; logo motion is unchanged.
+- Account switch/remove rows show only provider and account name. Codex is shortened to `codex`; active markers, authentication type, account IDs and usage details are omitted. A focused regression verifies the list still uses stable IDs internally.
+- Read-only inspection confirmed the unwanted entry was already absent from the local Psi store. The separate Pi source login was left intact. No account-removal code or personal account names were added to the product.

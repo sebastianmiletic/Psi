@@ -101,3 +101,10 @@ test('account login UI adds several accounts from the same provider and another 
   assert.equal(f.app.activeAccount.id,accounts[0].id);
   assert.doesNotMatch(notes.join('\n'),/test-api-key/);
 });
+
+test('account switch and remove rows contain only the short provider and account name',async t=>{
+ const f=await fixture(t,()=>({text:'Unused'}));
+ await f.app.registry.accounts.add('openai-codex','Personal',{type:'oauth',access:'private',refresh:'private',expires:9999999999999});await f.app.registry.accounts.add('anthropic','Team',{type:'api_key',key:'private'});
+ f.app.ui={choose:async(title,items)=>{assert.ok(['Switch accounts','Remove account'].includes(title));assert.deepEqual(items.map(({label,...rest})=>({label,keys:Object.keys(rest)})),[{label:'codex · Personal',keys:['value']},{label:'anthropic · Team',keys:['value']}]);return null;},stop(){}};
+ await f.app.accountMenu('switch');await f.app.accountMenu('remove');
+});

@@ -156,8 +156,7 @@ export class App {
       } finally { this.authController = null; }
     } else if (action === 'switch' || action === 'remove') {
       const accounts = await this.registry.accounts.list();
-      const usage = new Map(await Promise.all(accounts.map(async a => [a.id, await this.accountUsage.get(a.id)])));
-      const id = await this.ui.choose(action === 'switch' ? 'Switch accounts' : 'Remove account', accounts.map(a => ({ value: a.id, label: `${a.active ? '✓ ' : ''}${a.provider} · ${a.name}`, description: `${a.type === 'oauth' ? 'sign-in' : 'API key'} · ${a.id.slice(0,8)} · ${usage.get(a.id).requests} calls in Psi` })));
+      const id = await this.ui.choose(action === 'switch' ? 'Switch accounts' : 'Remove account', accounts.map(a => ({ value: a.id, label: `${a.provider==='openai-codex'?'codex':a.provider} · ${a.name}` })));
       if (!id) return;
       if (action === 'switch') { const provider = await this.registry.accounts.use(id); await this.useProvider(provider); this.ui.note('Account switched.'); }
       else { await this.registry.accounts.remove(id); await this.refreshAccount(); this.ui.note('Account removed.'); }
