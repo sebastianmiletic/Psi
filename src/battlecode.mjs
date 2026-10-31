@@ -27,6 +27,7 @@ const sideNumber=side=>side==='a'||side===0?0:side==='b'||side===1?1:null;
 export class Battlecode {
   constructor({session,jobs,config,home}) {this.session=session;this.root=session.meta.cwd;this.jobs=jobs;this.config=config;this.home=home||session.home;this.store=new Experiments(this.home);}
   async inspect() {
+    await this.jobs.policy?.check(this.root,{internal:false});
     const readme=await readFile(join(this.root,'README.md'),'utf8').catch(()=> '');
     const version=Number(readme.match(/VisionV\d+\s+(?:platform\s+)?v(\d+)/i)?.[1]);
     const bot=readme.match(/bots\/vision-v\d+(?=[/`\s;])/i)?.[0];
@@ -46,6 +47,7 @@ export class Battlecode {
       policy:'Local runs are correctness evidence; compare complete identity-checked live fixture groups and confirm on preselected fresh fixtures. Live trials upload/select only within a requested live objective; no automatic release.'};
   }
   async control(path,baselineVersion,teamId) {
+    await this.jobs.policy?.check(path);
     path=resolve(this.root,path);const receipt=await readJSON(join(path,'receipt.json'),null),rows=await readJSON(join(path,'results.json'),null);
     if(!receipt?.group_id||receipt.version!==baselineVersion||!Array.isArray(rows)||rows.length!==5)throw new Error('A control needs a complete five-game baseline receipt and results');
     const {maps,sides,opponent}=receipt.fixture||{};
@@ -75,7 +77,7 @@ export class Battlecode {
     if(!confirmation.length)throw new Error('Preselect at least one fresh confirmation control before discovery');
     const seen=new Set(discovery.keys);
     for(const c of confirmation)for(const key of c.keys){if(seen.has(key))throw new Error('Confirmation must use fresh opponent/map/side fixtures, without duplicates');seen.add(key);}
-    if(candidate) {candidate=resolve(this.root,candidate);if(inside(project.baseline,candidate)||inside(candidate,project.baseline))throw new Error('Candidate must be separate from the incumbent');await sourceHashes(join(candidate,'src'));if(await exists(join(candidate,'experiment.json')))throw new Error('Candidate already belongs to an experiment; use a new isolated copy');}
+    if(candidate) {candidate=resolve(this.root,candidate);await this.jobs.policy?.check(candidate,{write:true});if(inside(project.baseline,candidate)||inside(candidate,project.baseline))throw new Error('Candidate must be separate from the incumbent');await sourceHashes(join(candidate,'src'));if(await exists(join(candidate,'experiment.json')))throw new Error('Candidate already belongs to an experiment; use a new isolated copy');}
     let exp=await this.store.create({project:this.root,baseline:project.baseline,baselineVersion:project.baselineVersion,baselineHashes:project.baselineHashes,hypothesis,
       controls:{discovery,confirmation},marker:`PSI_${randomUUID().replaceAll('-','')}`,candidate:candidate||null});
     if(!candidate) {
@@ -94,7 +96,7 @@ export class Battlecode {
     if(!marker)throw new Error(`Add the identity marker to actual candidate source before freezing: ${exp.marker}`);
     return this.store.update(id,'source_frozen',d=>{d.source=source;d.phase='frozen';d.correctness=null;});
   }
-  async verifyCandidate(exp) {if(!exp.source)throw new Error('Freeze the candidate first');same(await sourceHashes(join(exp.candidate,'src')),exp.source,'Candidate source');await this.verifyBaseline(exp);}
+  async verifyCandidate(exp) {await this.jobs.policy?.check(exp.candidate);if(!exp.source)throw new Error('Freeze the candidate first');same(await sourceHashes(join(exp.candidate,'src')),exp.source,'Candidate source');await this.verifyBaseline(exp);}
   async startOperation(id,key,kind,spec) {
     return withLock(join(this.store.path(id),'launch.lock'),async()=>{
       let exp=await this.store.get(id);let op=exp.operations[key];

@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **53 passing tests**.
+- `npm run verify`: syntax checks and **65 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -14,7 +14,7 @@ Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary home
 - Installed and verified `~/.local/bin/psi`; `psi doctor` found ripgrep, Brave, 228 provider adapters and 7,068 model entries.
 - One provider-registry startup measurement: approximately 90 ms initialization, 92 MiB process RSS and 18 MiB JS heap. This is a local observation, not a performance guarantee or a full inference benchmark.
 
-No external provider accounts were signed in. Live authentication, paid inference and every third-party adapter have not been individually verified. No real Battlecode bot, live submission or competition result was modified or benchmarked.
+Unit/integration tests use fixtures. A separate real Codex Harness-Bench run reuses existing OAuth credentials; see [the results and limits](HARNESS_BENCH.md). Every third-party adapter has not been individually verified. No real Battlecode bot, live submission or competition result was modified or benchmarked.
 
 ## Terminal and logo update
 
@@ -51,4 +51,14 @@ No external provider accounts were signed in. Live authentication, paid inferenc
 - Read-only inspection of the real checkout confirmed the documented v248 manifest and 53 source identities. No live platform state was fetched as part of that inspection.
 - The Python archive-verification helper parses successfully. It hashes the archive and streams the actual own-team stdout member to verify the identity marker.
 
-External OAuth quota access, actual paid-provider charges and real competition transactions were not exercised in this verification. The adapter depends on the current project's scripts and decoder; it does not independently implement the game engine or establish a stronger bot from fixtures alone.
+Actual API invoices and real competition transactions were not exercised in this verification. The adapter depends on the current project's scripts and decoder; it does not independently implement the game engine or establish a stronger bot from fixtures alone.
+
+## Psi 0.2.0 workflow and distribution
+
+- Added approved-directory file checks, symlink resolution and OS-isolated shell execution. A real Python process is denied reads/writes outside a permitted sibling boundary; credential-like environment variables are omitted. Python aliases and zsh heredocs stay in private scratch.
+- Tests enforce plan-mode mutation denial, mode switches before returned tool execution, double Escape, Shift+Tab, OVERKILL via Tab in `/effort`, skipped stale calls after queued steering and persistent message delivery.
+- Real child processes exercise configured subagent models, inherited scope, plan-only children, follow-ups after completion and deduplicated parent usage accounting.
+- GitHub stable-release checks, cache timing and semantic version comparisons are covered. Release installers use verified archive digests and preserve source checkouts with local changes.
+- Pi import tests cover idempotency, unchanged source selection and shared refresh locking. Two existing Codex accounts were imported locally; import preserved the original Pi file byte-for-byte, and no browser sign-in was requested. Account credentials are excluded from Git.
+- The real Harness-Bench smoke subset scored 1.0, 0.0 and 1.0 on tasks 009, 010 and 028. This is reported separately from unit tests and retains the failed task.
+- Native Windows shell execution intentionally fails closed; WSL2 with bubblewrap is required. Windows file/research tools and model workers are exercised by the portable CI suite. POSIX permission assertions apply only on POSIX hosts.

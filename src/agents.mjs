@@ -30,7 +30,7 @@ export class Agents {
   const child=new Session(this.home,{id:r.sessionId});for await(const e of child.events())if(e.type==='usage')await this.session.event({...e,requestId:`agent:${r.id}:${e.requestId}`});
  }
  async wait(id,signal){const r=await this.get(id);await this.app.jobs.awaitCompletion(r.jobId,signal);await this.collect(r);const result=await this.status(id);this.app.event({type:'agent_finished',agent:result});return result;}
- async stopAll(){for(const r of await this.records())await this.app.jobs.stop(r.jobId).catch(()=>{});}
+ async stopAll({wait=false}={}){for(const r of await this.records()){await this.app.jobs.stop(r.jobId).catch(()=>{});if(wait){await this.app.jobs.awaitCompletion(r.jobId).catch(()=>{});await this.collect(r);}}}
  async send(id,prompt){
   const r=await this.get(id),job=await this.app.jobs.get(r.jobId),dir=join(this.home,'sessions',r.sessionId);
   if(!['running','queued'].includes(job.status)){

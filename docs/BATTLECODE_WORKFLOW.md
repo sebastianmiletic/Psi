@@ -10,7 +10,7 @@ psi -C "/Users/sebastianmiletic/Coding/Cambridge Battlecode 2026"
 
 Use `/project` for a read-only baseline/source/controller inspection, `/tools` for the current tool definitions, `/experiments` for saved experiment records, and `/settings` for execution/appearance controls. `/experiments ID` reconciles persisted jobs and receipts. No live operation runs merely by opening Psi or inspecting the project.
 
-Enter `/loop` and describe the objective when prompted. Include the measurable success condition and whether live experimentation is within the requested task. The goal persists through plain responses, provider failures, quota waits and context compaction. `/stop` preserves it; `/continue` resumes it. The goal finishes through `finish` with a summary and existing evidence paths. For competitive qualification, supply `experiment_id` so Psi recomputes discovery and fresh confirmation checks before completing.
+Enter `/loop` and describe the objective when prompted. Include the measurable success condition and whether live experimentation is within the requested task. The goal persists through plain responses, provider failures, quota waits and context compaction. Double Escape preserves it; another message or a resumed session continues it. The goal finishes through `finish` with a summary and existing evidence paths. For competitive qualification, supply `experiment_id` so Psi recomputes discovery and fresh confirmation checks before completing.
 
 The following JSON examples are **AI tool arguments**, not terminal slash commands. They illustrate the intended workflow; they were not run against the real platform during harness development.
 
@@ -73,7 +73,7 @@ This verifies frozen source, correctness and WASM identity, then invokes the exi
 
 Await and reconcile the trial job, then run `battlecode_collect` with the same ID/stage. Its worker invokes the existing collector until all five results are available. It reuses cached replay downloads and spends no model calls per queue poll. The committed collector result records hashes of receipts, group metadata, results, final platform readback and replay archives.
 
-Live operations can briefly affect the shared selector. Stopping a **live job** sends termination and allows up to six minutes for controller cleanup/restoration; do not expect an immediate hard kill. `/stop` stops the agent's waiting/inference, while detached jobs continue unless explicitly stopped with `/jobs stop ID`.
+Live operations can briefly affect the shared selector. Stopping a **live job** sends termination and allows up to six minutes for controller cleanup/restoration; do not expect an immediate hard kill. Double Escape stops the agent's waiting/inference, while detached jobs continue unless explicitly stopped with `psi jobs stop ID`.
 
 `battlecode_report` runs the project's existing report script over the experiment and immutable controls. Reports help diagnosis but cannot qualify a candidate by themselves.
 
@@ -110,4 +110,4 @@ Records live privately under `~/.psi/experiments/ID/`:
 
 Operation intent is persisted before spawning a uniquely labelled job. A repeated trial call returns the known operation instead of creating another paid group. After restart, reconciliation finds the original job/result by ID or label. An unknown live outcome becomes `needs_reconciliation`; it is never silently reissued. Inspect platform/controller state, restore the incumbent if necessary through the existing tools, and use `battlecode_experiment` action `recover_trial` only when the existing queue/restoration receipts are complete. Failed read-only collection can be retried. A machine reboot does not resume a running child process; saved records support deliberate recovery.
 
-Private files and local locks protect normal process coordination, not hostile code running as the same macOS user. Psi retains full host access and adds no approval dialogs.
+Private files and local locks protect normal process coordination, not hostile code running as the same macOS user. Psi enforces the user-approved working directories and adds no approval dialogs. Existing controller CLIs needing personal credentials must be configured within the granted scope.

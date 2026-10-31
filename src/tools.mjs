@@ -97,8 +97,9 @@ export class Tools {
       return { ...state, output: await this.jobs.tail(job.id, this.config.toolOutputChars) };
     });
     this.add('job', 'List, inspect, wait for, or stop durable background jobs. Use action=await to wait until completion without model polling. Wait instead of launching duplicate benchmarks.', { action: Type.Union(['list', 'status', 'wait', 'await', 'stop'].map(Type.Literal)), id: opt(str('Job ID')), wait_ms: opt(num(0, 60000, 'Wait up to this long; default 1000 ms')) }, async (a, signal) => {
-      if (a.action === 'list') return this.jobs.list();
+      if (a.action === 'list') return (await this.jobs.list()).filter(j=>j.sessionId===this.session.meta.id);
       if (!a.id) throw new Error('Job ID is required.');
+      if((await this.jobs.get(a.id)).sessionId!==this.session.meta.id)throw new Error('This job belongs to another session. Use the user CLI to manage it.');
       const job = a.action === 'await' ? await this.jobs.awaitCompletion(a.id,signal) : a.action === 'stop' ? await this.jobs.stop(a.id) : a.action === 'wait' ? await this.jobs.wait(a.id, a.wait_ms ?? 1000, signal) : await this.jobs.get(a.id);
       return { ...job, output: await this.jobs.tail(a.id, this.config.toolOutputChars) };
     });

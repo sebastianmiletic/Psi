@@ -42,7 +42,7 @@ test('same-provider accounts keep independent credentials and usage even if anot
   const loaded = new AccountUsage(f.session.home);
   assert.equal((await loaded.get(a)).totalTokens,120);
   const text = await readFile(ledger.path,'utf8'); assert.doesNotMatch(text,/test-account|test-claude|Bearer/);
-  assert.equal((await stat(ledger.path)).mode & 0o777,0o600);
+  if(process.platform!=='win32')assert.equal((await stat(ledger.path)).mode & 0o777,0o600);
 });
 
 test('usage updates are serialized and duplicate request receipts are not counted twice', async t => {

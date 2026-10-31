@@ -1,0 +1,252 @@
+{
+  "benchmark": "Qihoo360/harness-bench",
+  "sourceCommit": "b8d89634c6f445fcc68ceb6744a59bef6cdf4863",
+  "psiCommit": "209f50df8bd33b9f1b730f2438cc60b53f4f0c4f",
+  "psiVersion": "0.2.0",
+  "model": "openai-codex/gpt-5.6-sol",
+  "effort": "medium",
+  "trialsPerTask": 1,
+  "environment": "macOS native isolated workspaces; original unchanged oracles; complementary smoke subset, not standard Docker/ABI run",
+  "results": [
+    {
+      "task": "009-safe-archive-extraction",
+      "exitCode": 0,
+      "wallSeconds": 67.995,
+      "usage": {
+        "input": 46359,
+        "output": 5447,
+        "cacheRead": 164736,
+        "cacheWrite": 0,
+        "cost": 0.3602704,
+        "requests": 17
+      },
+      "outcomeScore": 1,
+      "taskSuccess": true,
+      "checks": [
+        {
+          "id": "case:safe_manifest_behavior",
+          "label": "Safe members preserve archive order and values",
+          "pass": true,
+          "weight": 0.4,
+          "core": true,
+          "gate": false,
+          "detail": null
+        },
+        {
+          "id": "case:fail_closed_security_edges",
+          "label": "Cross-platform namespace and resource violations reject the manifest",
+          "pass": true,
+          "weight": 0.3,
+          "core": true,
+          "gate": false,
+          "detail": null
+        },
+        {
+          "id": "case:visible_extraction_plan",
+          "label": "The supplied release has an exact auditable preflight plan",
+          "pass": true,
+          "weight": 0.1,
+          "core": true,
+          "gate": false,
+          "detail": null
+        },
+        {
+          "id": "case:verification_handoff",
+          "label": "The security repair has a truthful reviewer handoff",
+          "pass": true,
+          "weight": 0.2,
+          "core": false,
+          "gate": false,
+          "detail": null
+        },
+        {
+          "id": "case:source_and_workspace_boundary",
+          "label": "Immutable evidence and workspace integrity are preserved",
+          "pass": true,
+          "weight": 0,
+          "core": false,
+          "gate": true,
+          "detail": null
+        },
+        {
+          "id": "required_artifact_contract",
+          "label": "all declared required artifacts exist",
+          "pass": true,
+          "weight": 0,
+          "gate": false,
+          "diagnostic": true,
+          "detail": null
+        },
+        {
+          "id": "required_artifact_safety",
+          "label": "declared artifacts stay within the regular-file boundary",
+          "pass": true,
+          "weight": 0,
+          "gate": true,
+          "detail": null
+        }
+      ],
+      "gradeSha256": "5773f22879933fe55a52b500811fe219746e862e7fb3867494e63b9ff4dde639"
+    },
+    {
+      "task": "010-layered-config-resolution",
+      "exitCode": 0,
+      "wallSeconds": 71.029,
+      "usage": {
+        "input": 24143,
+        "output": 5742,
+        "cacheRead": 210688,
+        "cacheWrite": 0,
+        "cost": 0.29568719999999993,
+        "requests": 17
+      },
+      "outcomeScore": 0,
+      "taskSuccess": false,
+      "checks": [
+        {
+          "id": "case:typed_precedence_behavior",
+          "label": "Typed values resolve from the highest supplied layer",
+          "pass": false,
+          "weight": 0.45,
+          "core": true,
+          "gate": false,
+          "detail": "import outside pure subset"
+        },
+        {
+          "id": "case:fail_closed_config_edges",
+          "label": "Invalid winning values and schema defects fail closed",
+          "pass": false,
+          "weight": 0.25,
+          "core": true,
+          "gate": false,
+          "detail": "import outside pure subset"
+        },
+        {
+          "id": "case:redacted_visible_snapshot",
+          "label": "The visible resolved snapshot is exact and secret-safe",
+          "pass": false,
+          "weight": 0.1,
+          "core": true,
+          "gate": false,
+          "detail": "import outside pure subset"
+        },
+        {
+          "id": "case:verification_handoff",
+          "label": "The resolver has a truthful implementation handoff",
+          "pass": false,
+          "weight": 0.2,
+          "core": false,
+          "gate": false,
+          "detail": "decision, verification, or risk is incomplete"
+        },
+        {
+          "id": "case:source_and_workspace_boundary",
+          "label": "Immutable evidence and workspace integrity are preserved",
+          "pass": true,
+          "weight": 0,
+          "core": false,
+          "gate": true,
+          "detail": null
+        },
+        {
+          "id": "required_artifact_contract",
+          "label": "all declared required artifacts exist",
+          "pass": true,
+          "weight": 0,
+          "gate": false,
+          "diagnostic": true,
+          "detail": null
+        },
+        {
+          "id": "required_artifact_safety",
+          "label": "declared artifacts stay within the regular-file boundary",
+          "pass": true,
+          "weight": 0,
+          "gate": true,
+          "detail": null
+        }
+      ],
+      "gradeSha256": "8ef53ef5f28efd41609dd71809d67fe350ba62cf860806cb83528895f9677828"
+    },
+    {
+      "task": "028-excel-like-cleaning",
+      "exitCode": 0,
+      "wallSeconds": 53.96,
+      "usage": {
+        "input": 17301,
+        "output": 5224,
+        "cacheRead": 100480,
+        "cacheWrite": 0,
+        "cost": 0.21387599999999998,
+        "requests": 10
+      },
+      "outcomeScore": 1,
+      "taskSuccess": true,
+      "checks": [
+        {
+          "id": "case:canonical_clean_rows",
+          "label": "The cleaned ledger contains the exact normalized sales rows",
+          "pass": true,
+          "weight": 0.34,
+          "core": true,
+          "gate": false,
+          "detail": null
+        },
+        {
+          "id": "case:reject_accounting",
+          "label": "Rejected rows are complete, categorized, and reconciled",
+          "pass": true,
+          "weight": 0.25,
+          "core": true,
+          "gate": false,
+          "detail": null
+        },
+        {
+          "id": "case:cleaning_report",
+          "label": "The report explains every reject category and normalization rule",
+          "pass": true,
+          "weight": 0.21,
+          "core": true,
+          "gate": false,
+          "detail": null
+        },
+        {
+          "id": "case:output_integrity",
+          "label": "All structured outputs use the published schemas",
+          "pass": true,
+          "weight": 0.2,
+          "core": false,
+          "gate": false,
+          "detail": null
+        },
+        {
+          "id": "case:safety_and_input_integrity",
+          "label": "Source evidence and execution boundaries are preserved",
+          "pass": true,
+          "weight": 0,
+          "core": false,
+          "gate": true,
+          "detail": null
+        },
+        {
+          "id": "required_artifact_contract",
+          "label": "all declared required artifacts exist",
+          "pass": true,
+          "weight": 0,
+          "gate": false,
+          "diagnostic": true,
+          "detail": null
+        },
+        {
+          "id": "required_artifact_safety",
+          "label": "declared artifacts stay within the regular-file boundary",
+          "pass": true,
+          "weight": 0,
+          "gate": true,
+          "detail": null
+        }
+      ],
+      "gradeSha256": "881ce89bd6de035556efd4dc68e10bffffd376871d2ee1f297160911f79506cc"
+    }
+  ]
+}

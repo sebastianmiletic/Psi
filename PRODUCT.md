@@ -10,7 +10,7 @@ Sebastian and developers running extended AI coding and research loops for Battl
 
 ## Product Purpose
 
-A personal, lightweight AI harness with a clean terminal interface, multiple accounts across providers, persistent autonomous work, and unrestricted local tool execution. Useful progress, recoverable evidence and low overhead matter more than decorative presentation.
+A personal, lightweight AI harness with a clean terminal interface, multiple accounts across providers, persistent autonomous work, and tool execution within user-approved directories. Useful progress, recoverable evidence and low overhead matter more than decorative presentation.
 
 ## Brand Personality
 
@@ -26,7 +26,7 @@ Unrequested ambient animation, busy dashboards, oversized tool output, nested ac
 - Make active work, account choices and resource use understandable at a glance.
 - Keep full evidence on disk and show concise previews in the conversation.
 - Preserve progress through long runs and interruptions.
-- Execute authorized local tools without permission dialogs.
+- Execute tools within the selected directories without permission dialogs; only the user can expand access.
 
 ## Accessibility & Inclusion
 

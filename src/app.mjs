@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { existsSync } from 'node:fs';
 import { Agents } from './agents.mjs';
 import { registerProgress } from './progress.mjs';
@@ -254,8 +255,9 @@ export class App {
     if(!arg.trim()){this.ui.note('Allowed directories:\n'+(await this.tools.policy.roots()).join('\n')+'\n/directory add <path> · /directory remove <path>');return;}
     if(!match)throw new Error('Use /directory, /directory add <path> or /directory remove <path>.');
     // Existing sandboxes keep their original allowlist, so stop them before revoking access.
-    if(this.engine.busy)this.engine.stop();await this.agents.stopAll();
+    if(this.engine.busy)this.engine.stop();await this.agents.stopAll({wait:true});
     for(const job of await this.jobs.list())if(job.sessionId===this.session.meta.id&&['running','queued'].includes(job.status)){await this.jobs.stop(job.id);await this.jobs.awaitCompletion(job.id);}
+    while(this.engine.busy)await delay(25);
     const path=match[2]?.replace(/^(["'])(.*)\1$/,'$2');const roots=await this.tools.policy.change(match[1],path);this.ui.note('Allowed directories:\n'+roots.join('\n'));
   }
   async checkUpdates(){try{const update=await checkUpdate(this.home);if(!update.available||this.closing)return;if(this.engine.config.autoUpdate&&!this.engine.busy){this.ui.note((await updateInstallation(this.home,{release:update})).message);}else this.ui.note(`Psi ${update.latest} is available. Run /update or psi update, then restart.`);}catch{/* Offline startup remains quiet and fast. */}}
