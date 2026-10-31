@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **71 passing tests**.
+- `npm run verify`: syntax checks and **72 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -64,3 +64,5 @@ Actual API invoices and real competition transactions were not exercised in this
 - Native Windows shell execution intentionally fails closed; WSL2 with bubblewrap is required. Windows file/research tools and model workers are exercised by the portable CI suite. POSIX permission assertions apply only on POSIX hosts.
 
 - Windows CI exposed transient file-sharing violations during atomic snapshot replacement. Writes now retry those bounded errors while preserving the prior committed file; a fault-injection test covers the behavior. Worker completion/exit races and cross-platform graceful cancellation also have explicit tests.
+
+- A Linux watcher race could defer completed jobs until the 30-second backup check. Completion events arriving during an in-flight read now schedule a fresh read, with a deterministic regression test.

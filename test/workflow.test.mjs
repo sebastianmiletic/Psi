@@ -113,3 +113,9 @@ test('atomic snapshots retry Windows sharing violations while preserving the pre
  await atomicJSON(path,{revision:2},{retrySharingViolations:true,renameImpl:async(from,to)=>{attempts++;assert.equal(JSON.parse(await readFile(path)).revision,1);if(attempts<4){const e=new Error('sharing violation');e.code='EPERM';throw e;}await rename(from,to);}});
  assert.equal(attempts,4);assert.equal(JSON.parse(await readFile(path)).revision,2);
 });
+
+test('a completion event during an in-flight job read triggers another read without the backup polling delay',{timeout:5000},async t=>{
+ const f=await fixture(t,()=>({text:'unused'})),id='watch-race',path=join(f.app.jobs.path(id),'job.json');await mkdir(f.app.jobs.path(id),{recursive:true});await writeFile(path,JSON.stringify({id,status:'running'}));
+ const get=f.app.jobs.get.bind(f.app.jobs);let first=true,entered,release;const ready=new Promise(r=>entered=r),gate=new Promise(r=>release=r);f.app.jobs.get=async id=>{const result=await get(id);if(first){first=false;entered();await gate;}return result;};
+ const waiting=f.app.jobs.awaitCompletion(id);await ready;await writeFile(path,JSON.stringify({id,status:'completed'}));await delay(30);release();const result=await waiting;assert.equal(result.status,'completed');
+});

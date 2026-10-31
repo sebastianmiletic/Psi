@@ -55,10 +55,13 @@ export class Jobs {
   async awaitCompletion(id, signal) {
     signal?.throwIfAborted();
     return new Promise((resolve,reject)=>{
-      let watcher,timer,checking=false,done=false;
+      let watcher,timer,checking=false,checkAgain=false,done=false;
       const close=()=>{done=true;watcher?.close();clearInterval(timer);signal?.removeEventListener('abort',abort);};
       const abort=()=>{close();reject(signal.reason || new Error('Wait cancelled'));};
-      const check=async()=>{if(checking||done)return;checking=true;try{const job=await this.get(id);if(!['running','queued'].includes(job.status)){close();resolve(job);}}catch(e){close();reject(e);}finally{checking=false;}};
+      const check=async()=>{
+        if(done)return;if(checking){checkAgain=true;return;}checking=true;
+        try{do{checkAgain=false;const job=await this.get(id);if(!['running','queued'].includes(job.status)){close();resolve(job);}}while(checkAgain&&!done);}catch(e){close();reject(e);}finally{checking=false;}
+      };
       try{watcher=watch(this.path(id),()=>void check());watcher.on('error',e=>{close();reject(e);});}catch(e){reject(e);return;}
       timer=setInterval(()=>void check(),30000);signal?.addEventListener('abort',abort,{once:true});void check();
     });
