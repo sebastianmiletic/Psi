@@ -3,7 +3,6 @@ import { createModels, createProvider, envApiKeyAuth, lazyApi } from '@earendil-
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
 import { Accounts } from './accounts.mjs';
 
-const catalog = JSON.parse(readFileSync(new URL('../data/catalog.json', import.meta.url), 'utf8'));
 const apis = {
   'openai-completions': lazyApi(() => import('@earendil-works/pi-ai/api/openai-completions')),
   'openai-responses': lazyApi(() => import('@earendil-works/pi-ai/api/openai-responses')),
@@ -11,6 +10,7 @@ const apis = {
 };
 export class Registry {
   constructor(config, home) {
+    const catalog=JSON.parse(readFileSync(new URL('../data/catalog.json',import.meta.url),'utf8'));
     this.accounts = new Accounts(home);
     this.models = builtinModels({ credentials: this.accounts.store(), identity: { version: '0.1.0' } });
     this.config=config;

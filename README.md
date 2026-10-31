@@ -1,273 +1,88 @@
-# Ψ Psi
+<p align="center"><a href="https://github.com/sebastianmiletic/Psi/releases/latest"><img src="assets/hero.png" alt="Psi. Long loops. Small footprint. A sculpted Greek psi and geometric PSI wordmark." width="100%"></a></p>
 
-<p><img src="assets/psi-wordmark.svg" width="300" alt="Psi logo"></p>
+<p align="center">
+  <a href="https://github.com/sebastianmiletic/Psi/actions/workflows/verify.yml"><img src="https://github.com/sebastianmiletic/Psi/actions/workflows/verify.yml/badge.svg" alt="macOS, Linux and Windows checks"></a>
+  <a href="https://github.com/sebastianmiletic/Psi/releases/latest"><img src="https://img.shields.io/github/v/release/sebastianmiletic/Psi?color=65b68e&label=release" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/Node.js-22.19%2B-65b68e" alt="Node.js 22.19 or later">
+</p>
 
-**Lightweight AI harness made for long and intensive loops.**
+<p align="center"><strong>Lightweight AI harness made for long and intensive loops.</strong><br>Local execution. Multiple accounts. Durable progress.</p>
 
-![Psi terminal with the prompt pinned to the bottom](docs/terminal.png)
+<p align="center"><a href="https://github.com/sebastianmiletic/Psi/releases/latest">Download</a> · <a href="docs/GUIDE.md">Guide</a> · <a href="docs/BATTLECODE_WORKFLOW.md">Battlecode</a> · <a href="docs/HARNESS_BENCH.md">Benchmarks</a></p>
 
-A personal AI coding harness for long Battlecode development loops. A terminal UI, tools isolated to approved directories, persistent sessions, and a benchmark runner that spends no model tokens per game.
+## One terminal, the whole loop
 
-Built in JavaScript on Node.js with Pi's model transport and terminal renderer. No Electron, frontend build, local web server or bundled browser. The default model is `openai-codex/gpt-5.6-sol`; all supported providers remain selectable.
+Psi connects models, project files, build tools, browser research and experiments in one local terminal. Set an objective, choose how much reasoning to use, and keep the evidence across sessions.
 
-## Start
+![Psi running a coding task, with the prompt pinned to the bottom](docs/conversation.png)
 
-Download a release from [GitHub Releases](https://github.com/sebastianmiletic/Psi/releases/latest), or use the installer after installing Node.js 22.19+:
+| | |
+| :--- | :--- |
+| **Persistent goals** | Recover through provider failures and quota waits. Resume the journal after an interruption. |
+| **Accounts that travel with the task** | Multiple providers and multiple accounts per provider, reported quotas and optional failover. |
+| **Subagents on demand** | Independent roles, models and effort. Turn on OVERKILL from `/effort`. |
+| **Tools in your workspace** | Read, edit, search, run builds, extract websites, browse and launch detached benchmarks. |
+| **Battlecode evidence** | Isolated candidates, durable experiments, replay checks and fresh-fixture confirmation. |
 
-macOS and Linux:
+JavaScript on Node.js, using Pi's model transport and terminal renderer. No Electron, local web server or bundled browser. The bundled catalog contains 228 provider adapters; individual endpoints have not all been tested with live credentials.
+
+## Install
+
+Install [Node.js 22.19+](https://nodejs.org/), then:
+
+**macOS / Linux**
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/sebastianmiletic/Psi/main/scripts/install.sh | sh
 ```
 
-Windows PowerShell:
+**Windows PowerShell**
 
 ```powershell
 irm https://raw.githubusercontent.com/sebastianmiletic/Psi/main/scripts/install.ps1 | iex
 ```
 
-The installer verifies the release archive's GitHub SHA-256 digest, installs pinned dependencies and creates a launcher. macOS/Linux use `~/.local/bin`; Windows uses `%USERPROFILE%\.psi\bin`. Add the printed directory to PATH. Node.js is a prerequisite, not bundled. Native Windows supports the terminal, file/research tools and model workers. For isolated shell/build tools on Windows, run Psi inside **WSL2 with bubblewrap**. Linux also requires bubblewrap (`sudo apt install bubblewrap` on Debian/Ubuntu); unsupported isolation disables shell tools rather than running unrestricted commands. macOS uses its built-in Seatbelt sandbox.
+Open your project and run `psi`. Add an account with `/accounts`, choose a model with `/model`, then type your task.
 
-From source:
+```sh
+cd your-project
+psi
+```
+
+Installers verify GitHub's archive digest and preserve accounts/settings under `~/.psi`. Update with `psi update` or `/update`. Shell isolation uses macOS Seatbelt or Linux bubblewrap; native Windows shell tools require WSL2 with bubblewrap. [Setup details →](docs/GUIDE.md#start)
+
+## Less text. More control.
+
+The Ψ header stays visible above compact bottom menus. Effort is a slider. Statistics are a heatmap. Quotas sit beside your account as **percent left**. OVERKILL makes the prompt, meter and terminal logo flow in your chosen accent.
+
+<table>
+<tr><td><a href="docs/effort.png"><img src="docs/effort.png" alt="Minimal effort slider and OVERKILL switch"></a></td><td><a href="docs/stats.png"><img src="docs/stats.png" alt="Compact statistics panel with a calendar heatmap"></a></td></tr>
+<tr><td align="center">Effort + OVERKILL</td><td align="center">Your activity</td></tr>
+</table>
+
+| Command | |
+| :--- | :--- |
+| `/model` · `/effort` | Model, reasoning and OVERKILL |
+| `/accounts` | Add, switch or remove accounts |
+| `/subagents` | Roles, models, effort and concurrency |
+| `/loop` | Give Psi a persistent objective |
+| `/directory` | Add or remove working directories |
+| `/stats` · `/tools` | Activity and available tools |
+| `/settings` · `/refresh` | Configure Psi or reload disk settings |
+| `/help` | Every command |
+
+**Shift+Tab** switches plan/execute. **Escape** closes menus; **double Escape** stops the AI. Enter a message during work to queue it at the next tool boundary. Tools run without approval dialogs inside the directories you grant.
+
+Screenshots contain illustrative data from the real terminal renderer. `/stats` covers saved Psi activity, not usage from other clients. Goal percentages are estimates; account quotas are shown only when reported by the provider.
+
+## Build and explore
 
 ```sh
 git clone https://github.com/sebastianmiletic/Psi.git
 cd Psi
 npm ci --ignore-scripts
+npm run verify
 npm start
 ```
 
-The local `psi` launcher can be installed with `npm run install:local`. Then open any project:
-
-```sh
-psi -C "/Users/sebastianmiletic/Coding/Cambridge Battlecode 2026"
-```
-
-Use `/accounts` to connect an account, `/model` to choose a model, and type your task. The starting directory is granted automatically. Tools execute without approval prompts inside the approved directories; use `/directory add <path>` to grant another directory.
-
-Requirements: Node.js 22.19 or newer, `rg` for file search, and your normal build/competition tools. Browser tools use an installed Chromium-family browser, including Brave on this Mac. No browser download is required. Set `PSI_CHROME_PATH` for another installation.
-
-## Updates
-
-Interactive startup checks the latest stable GitHub release in the background, at most once every six hours. An available update appears with `/update` and `psi update` commands. Offline checks stay quiet. `/settings` can disable checks or enable automatic installation; restart Psi after an update.
-
-`psi update --check` shows the release metadata without installing. Managed installs download and verify the versioned archive, install dependencies in a new release directory, then atomically switch the launcher. Source checkouts verify the origin, refuse local changes, and fast-forward only to the release tag. Accounts, sessions and user settings stay under `~/.psi`.
-
-## Directories, planning and OVERKILL
-
-Psi grants the directory where the session starts. No AI tool can grant additional access. `/directory` lists the session's allowlist; `/directory add /path/to/project` and `/directory remove /path/to/project` change it. File tools resolve symlinks before access, and shell processes inherit an OS boundary. System executables/runtime libraries are available read-only; Psi manages its own scratch files, session artifacts and experiment evidence. Provider credentials and the real HOME are excluded from tool environments. The isolated shell HOME is a private scratch directory, so CLIs needing existing personal credentials require deliberate setup within the permitted directories.
-
-Click the mode control on the top input border, or press **Shift+Tab**, for **PLAN** mode. The model can inspect files/websites and record a plan, but cannot edit project files, run shell/build commands, evaluate arbitrary browser scripts or perform live transactions. It can use the conversation to request missing information. Switch back to **EXECUTE** to implement the agreed plan. A mode change during inference is enforced before the returned tool calls run.
-
-Open `/effort` for a dedicated slider: **←/→** adjust effort, **Tab** stages **OVERKILL**, **Enter** applies and **Escape** cancels. OVERKILL adds a flowing glow in your selected accent around the input bar. Disable UI animations for a static accent. Use `/agents` or the worker entry in `/settings` to set concurrency and edit each worker's name, job, model, thinking, plan/execute mode, request limit and budget independently. Workers inherit the approved directories, use separate durable model sessions, and cannot create nested workers. A plan-mode parent always forces read-only workers. The AI can spawn, send follow-ups, inspect, await and stop them through `agent`; completed workers can resume for follow-up tasks. Returned worker usage is included exactly once in parent session accounting. Per-worker budgets are capped to a share of the parent's remaining configured budget when a worker starts.
-
-Tool names, brief result previews, model updates and worker lifecycle events appear in the conversation. The mode control sits at the right edge of the top input border, leaving drafts and slash commands at full width. Mode changes stay out of the chat. The solid **blue** bottom bar shows the reported **5h** account limit first, falling back to weekly or another reported quota. With no applicable quota it shows clearly labelled **estimated goal** progress. This percentage is not an independently measured guarantee of goal achievement. A verified loop finish still requires evidence.
-
-## Providers and accounts
-
-The current bundled catalog registers **228 provider adapters and 7,068 tool-capable model entries**. This includes native transports plus compatible API endpoints from the models.dev snapshot. Counts can change when the catalog is updated. Individual third-party endpoints have not all been tested with live credentials.
-
-- Codex/OpenAI, Claude/Anthropic and several other native providers offer their supported sign-in flow.
-- Other providers accept API keys or their documented environment variables.
-- Store multiple named accounts per provider. `/accounts` directly exposes **Login new account**, **Switch accounts**, and **Remove account**. The switch list includes every saved provider/account.
-- Active accounts are selected independently per provider. Switching an account also selects that provider's matching model, or its first model if there is no match.
-- OAuth refresh is serialized across Psi processes. Normal sign-ins stay in Psi's own account store. Explicitly imported Pi accounts link to the existing source and share its refresh lock, so rotating tokens remain synchronized without changing Pi's active account.
-- `/provider` adds a custom OpenAI Chat Completions, Responses or Anthropic Messages endpoint. Local servers can use no-key mode. Multiple accounts still work for custom endpoints.
-
-Credentials and session files live under `~/.psi`, with private directory permissions and credential files set to mode `0600`. Credentials are stored as local JSON rather than the macOS Keychain. `PSI_HOME` selects another location, useful for testing. Never commit that folder.
-
-To reuse existing Pi Codex logins without signing in again:
-
-```sh
-psi accounts import-pi --account "First account" --account "Second account"
-```
-
-Imports are idempotent and preserve other accounts and metadata. Imported credentials are private, and Psi refreshes them under Pi's own file lock. Removing a Psi account does not remove the original Pi account.
-
-For automated API-key setup, pass the environment variable name rather than a secret in shell history:
-
-```sh
-psi accounts add --provider anthropic --name Personal --key-env ANTHROPIC_API_KEY
-psi accounts list
-psi providers
-psi models codex
-psi doctor
-```
-
-For a local server:
-
-```sh
-psi provider add --id local --url http://localhost:8000/v1 --model my-model --keyless
-psi -m local/my-model --effort off
-```
-
-Custom endpoint prices default to unknown. Use `/settings` → **API pricing for current model** to configure USD per million input/output/cache tokens. A missing price is shown as unavailable, rather than a free session.
-
-## Terminal commands
-
-| Command | Purpose |
-| --- | --- |
-| `/logo` | Open the rotating 3D Psi logo |
-| `/model [provider/model or search]` | Search and choose a model |
-| `/effort [level]` | Choose a model-supported reasoning effort |
-| `/accounts` | Login, switch or remove accounts |
-| `/provider` | Add a custom endpoint and model |
-| `/directory [add\|remove] <path>` | List, grant or revoke working directories |
-| `/agents` | Configure worker roles, independent models, thinking and limits |
-| `/update` | Install the latest GitHub release |
-| `/settings` | Searchable settings UI for appearance, accounts, models, limits and execution |
-| `/loop [objective]` | Ask for a goal, then work until verified completion or user stop |
-| `/project` | Inspect the documented baseline and existing Battlecode controllers |
-| `/experiments [id]` | List durable experiments or reconcile one experiment |
-| `/usage` | Active account usage and provider-reported limits |
-| `/stats` | Tabbed week, month and all-time tokens, active time and activity |
-| `/tools` | List the actual tools available to the AI |
-| `/cost` | Usage, cache reads and estimated cost |
-| `/compact` | Summarize older context while preserving the full journal |
-| `/summary-model provider/model` | Use a cheaper model for compaction; `same` restores the main model |
-| `/checkpoint [note]` | Read or replace the persistent progress note |
-| `/profile battlecode\|general` | Change system guidance |
-| `/new` | Start a fresh session |
-| `/resume [id]` | Search saved sessions |
-| `/cd <path>` | Start a session in another workspace |
-| `/refresh [provider]` | Refresh a supported dynamic provider catalog |
-| `/export [path]` | Export the current session context as Markdown |
-| `/status`, `/help`, `/quit` | Inspect state, see commands or exit |
-
-The prompt stays pinned to the bottom of the terminal while the conversation scrolls above it. Its footer shows the model on the left and the effort value (such as `medium`) aligned to the right, without a provider label or “thinking” prefix. The next row shows the selected account: subscription accounts display only reported usage windows; metered API accounts display the current session cost. No provider label appears in either footer row.
-
-Click the compact shaded Ψ mark to expand it into a shaded, rotating 3D mesh. Click again or press Escape to return to your unchanged prompt. `/logo` provides the same interaction from the keyboard. The 3D animation renders only while open and adds no dependencies.
-
-Type to filter pickers, use arrows to navigate and Enter to select. Tab completes slash commands and paths. Shift+Enter creates a newline. The clickable mode control sits on the input border without shifting draft text or slash commands. One Escape closes a submenu. Escape twice within 600 ms stops the current run. Shift+Tab toggles plan/execute mode. Ctrl+C cancels a prompt or run and exits when idle. A message entered during a run is saved and queued after the next tool boundary. Remaining stale calls in that response are skipped with recorded outcomes before the correction reaches the model.
-
-Stopping the AI also signals its subagents. Standalone detached jobs can continue; inspect them with `psi jobs` and terminate them with `psi jobs stop <id>`. Revoking a directory stops active session jobs before changing the allowlist. Live-controller cleanup can take several minutes.
-
-Messages use a brief eased send indicator and a compact **Ψ Psi** response header. Active model/tool work pulses subtly; text streams immediately. Tool rows update in place with their outcome, duration and a short preview, including background job IDs. Disable **UI animations** in `/settings` for static activity labels. Animation timers stop when work and send feedback settle, except while OVERKILL is explicitly enabled.
-
-![Psi conversation and inline mode control](docs/conversation.png)
-
-## Activity statistics
-
-`/stats` opens a keyboard UI with **This week**, **This month** and **All time** tabs. Use arrows or Tab to change periods, **r** to refresh and Escape to close. It shows tokens, model requests, active time, sessions/workers, tool calls, completed objectives, input/output/cache usage, provider distribution and daily token activity.
-
-Statistics come from saved **Psi** journals, including existing sessions. They do not include work performed directly in Pi, Codex or Claude Code. Weeks start Monday and months use calendar boundaries in your local timezone. Worker receipts are deduplicated; overlapping work counts once as active time, while summed agent time is shown separately. Quota/idle waits are excluded. Interrupted sessions count only observed activity, so historical time can be a lower bound. Undated legacy worker copies count only toward all-time totals when their original journal is missing. Deleting a saved session removes its statistics.
-
-An incremental private cache stores counters and timestamps, without copying prompts, messages or credentials. Opening statistics performs no model requests. See [feature gaps compared with Pi and Codex](docs/PARITY.md).
-
-![Psi effort slider](docs/effort.png)
-
-![Psi activity statistics, illustrative data](docs/stats.png)
-
-## Usage and multiple accounts
-
-Use `/accounts` → **Login new account** repeatedly to add any number of named accounts, including several from the same provider. Saved credentials are separate; connecting another account does not overwrite the first. Use **Switch accounts** to select from the flat cross-provider list. Short account IDs distinguish duplicate names.
-
-Subscription accounts show their provider-reported **5h** and **7d** usage windows when supplied. Codex and Claude OAuth accounts refresh on startup, before inference and periodically while the UI is open (default 120 seconds; minimum 60). Absent, unlimited or expired windows are omitted. `/usage` includes the snapshot timestamp and reset data. Polling uses the usage endpoint, not paid inference, and backs off when the service rate-limits it. These endpoints may be unavailable for some accounts or change independently of Psi; unavailable data is never inferred from tokens.
-
-Metered API accounts show **session $…** below the prompt. Psi uses billed USD returned by a provider when available; otherwise it calculates cost from actual returned token usage at the configured model rates. Unknown pricing shows **cost unavailable**. This is not an invoice guarantee: provider pricing tiers, discounts and reporting can differ. The session total includes metered requests across accounts/models and survives resume; `/new` starts a fresh total. Subscription activity is excluded from that monetary total.
-
-Enable **Automatic account switching** in `/settings` to move between saved accounts of the same provider on exhaustion or authentication failure. You can set a reported usage threshold. **Cross-provider fallback models** is an explicit ordered list of `provider/model` routes; an empty list keeps the current provider. Switching is off by default. If every eligible account is unavailable, a goal waits and rechecks until an account recovers, settings change or the user stops it. Accounts remain pinned per request; switching cannot mix credentials or usage attribution. Local per-account request/token counters live in `~/.psi/usage.json` and cover Psi activity only.
-
-## Settings
-
-`/settings` opens a searchable keyboard UI. Type to filter, use arrows and Enter to choose, and Escape to go back. Settings persist under `~/.psi/config.json`.
-
-- Sage, cyan, blue, violet, rose or amber accents, plus custom hex/OKLCH colours.
-- Logo visibility, UI animations and account usage visibility.
-- Automatic account switching, threshold, explicit fallback models and usage refresh interval.
-- Main/compaction model, thinking, output tokens, prompt-cache retention and tool preview size.
-- Read concurrency, loop retry delay, budget/request limits, API prices, Battlecode CLI and debug logging.
-
-Appearance changes apply immediately. Model/execution changes during inference apply at the next boundary, preserving the in-flight request. A waiting loop wakes when its settings change.
-
-![Psi settings UI](docs/settings.png)
-
-## Battlecode project adapter
-
-Psi now integrates the existing Vision controller in `/Users/sebastianmiletic/Coding/Cambridge Battlecode 2026`. `/project` verifies the README/manifest baseline and source hashes without contacting the platform. The adapter exposes tools only in a recognized Battlecode workspace with the Battlecode profile selected.
-
-A durable experiment isolates the candidate, freezes source and WASM identity, runs local correctness commands, invokes the existing `live_trial.py`/`live_collect.py`/`live_report.py`, and verifies complete replay-backed discovery and preselected fresh confirmation panels. Live intents and receipts are persisted before advancing. Unknown live outcomes require reconciliation rather than duplicate creation. Live workers allow the controller to restore the incumbent before cancellation completes.
-
-Decisions require exact map/opponent/seat pairing, all five games, matching engine and outcomes, archive hashes, the candidate marker in actual own-team replay stdout, no recorded runtime faults, and incumbent restoration readbacks. Collected evidence is hashed when the worker commits it and checked again before deciding. A candidate must preserve every incumbent win and gain a win in discovery and across the fresh confirmation set. Confirmation reuses the exact submitted candidate version. Passing yields **qualified_for_review**, not automatic release or a claim of broad ranked superiority.
-
-See the [implemented workflow and tool examples](docs/BATTLECODE_WORKFLOW.md), and the [original design rationale](docs/BATTLECODE_HARNESS_PLAN.md). Building this adapter did not queue real competition games or change the active bot.
-
-## Long, low-overhead loops
-
-```sh
-psi -C "/path/to/battlecode" \
-  --loop "Freeze the baseline, find and validate an improvement, and save the evidence. Follow AGENTS.md and the competition protocol." \
-  --budget 10 --max-steps 300
-```
-
-Headless operation:
-
-```sh
-psi -C /path/to/project -p "Build the bot, diagnose failures and fix them."
-psi -C /path/to/project --continue -p "Continue the next experiment."
-psi --resume SESSION_ID --json -p "Report pending work and continue."
-```
-
-`--json` emits event JSONL for automation. Use a process supervisor such as `tmux`, `launchd` or your existing runner to survive terminal loss or reboot. Detached benchmark jobs survive a Psi process exit; they do not survive a machine reboot or sleep as continuously running compute.
-
-Psi's normal agent loop continues through tool calls. `/loop` without an argument asks for the objective. Autonomous goals continue after plain final responses, recoverable provider errors and stalls; `finish` requires a verified summary and existing evidence paths. Battlecode completion can additionally validate the experiment's fresh-fixture qualification.
-
-A reached budget/request limit keeps the goal **waiting**, with no further inference until the limit changes or the run resumes. Exhausted accounts and temporary failures also wait and recover. Double Escape or Ctrl+C stops the run and preserves the unfinished goal; type another message or resume the saved session to continue it. Defaults impose no cost or request ceiling for the main model; workers have their own configurable request limits. A killed process or reboot requires restarting Psi and resuming the saved session; no harness can guarantee uninterrupted execution through host failure or independently prove every natural-language objective.
-
-Efficiency mechanisms:
-
-- Lazy provider SDK and browser loading. No idle animation timer when the logo view is closed and OVERKILL is off; subscription usage refresh runs at a bounded, configurable interval.
-- Stable session identifiers and provider-supported prompt-cache hints.
-- Configurable reasoning and output budgets; an optional cheaper compaction model.
-- Bounded tool results with full text saved to artifact files.
-- Parallel independent reads/fetches/searches, ordered writes and edits.
-- Detached jobs, bounded logs, event-driven `job await`, and a resumable sweep runner instead of one model turn per match or queue poll.
-- Automatic context compaction. Append-only journals preserve evidence; session loading streams the journal rather than reading it all into memory.
-- A maximum of 100 visible transcript components, independent of the full disk journal.
-- Bounded request retries with exponential backoff; goal-level recovery and optional account/model failover preserve long tasks.
-- Writer locks, partial-journal recovery and explicit unknown outcomes for tools interrupted by a crash. Psi does not silently re-execute an uncertain side effect.
-
-Budget reservation uses configured/catalog rates, not a provider billing guarantee. Before each request Psi reserves estimated input and maximum output cost against the budget in `/settings`; returned billed USD overrides the completed request total when supplied. Unknown/custom prices, tiered/long-context rates and provider accounting differences can affect accuracy. Defaults impose no cost or step ceiling. Choose limits appropriate to your account.
-
-## Local benchmark sweeps
-
-Copy [examples/benchmark.json](examples/benchmark.json) into your project and adapt the command to the actual competition runner. Psi does not assume a particular Battlecode engine CLI.
-
-```sh
-psi -C /path/to/battlecode bench benchmark.json
-```
-
-The model can also invoke the `benchmark` tool with a manifest path. It starts a durable job and returns its ID, so it can continue other useful work and wait later.
-
-A manifest provides:
-
-- An **argv array**, not a shell template. Placeholders: `{candidate}`, `{name}`, `{seed}`, `{side}`, `{map}`, `{repeat}`, plus candidate-specific `params`.
-- Candidates with distinct names and paths to frozen artifacts.
-- Seeds, maps, sides (default `[0,1]`), repetitions and worker concurrency.
-- Optional `inputs` to hash runner scripts, maps or configuration, plus version metadata.
-- A stable output directory for resumability.
-
-The runner records artifact SHA-256 values, exact commands, seeds/sides/maps, exit codes, elapsed times and individual log paths. Each match can print a final JSON object containing `"outcome": "win"`, `"loss"` or `"draw"`; other successful output is recorded as unscored. Nonzero exits and timeouts are errors, regardless of any claimed outcome in stdout.
-
-Results are stored in `results.jsonl`, `sweep.json`, per-match logs, and `summary.json`. Re-running the same manifest/output skips recorded matches. Changing artifact or input hashes requires a new output directory. The final check marks results invalid if frozen inputs changed during the sweep. Records are local comparative evidence; they do not establish competitive promotion, ladder performance or actual submission.
-
-## Tools
-
-`read`, `write`, `edit`, `search`, `bash`, `benchmark`, `job`, `fetch`, `search_web`, `browser`, `checkpoint`, `progress`, `finish`. OVERKILL additionally exposes `agent`. Recognized Battlecode workspaces additionally expose `battlecode_inspect`, `battlecode_control`, `battlecode_experiment`, `battlecode_freeze`, `battlecode_correctness`, `battlecode_live_trial`, `battlecode_collect`, `battlecode_report` and `battlecode_decide`.
-
-`fetch` handles HTML extraction, links, JSON/text, a short cache and full-response artifacts. `search_web` uses DuckDuckGo HTML and reports blocking/no-results errors explicitly. `browser` uses a separate ephemeral headless browser with JavaScript evaluation, links, screenshots and a persistent page for the running Psi process. It does not reuse your personal browser profile. Arbitrary installed CLIs, Python scripts, databases and download tools remain available through `bash`.
-
-Ancestor `AGENTS.md` files are loaded for the selected workspace. The Battlecode profile asks the model to freeze baselines, separate local correctness/comparison from competition evidence, inspect failures/replays and retain checkpoints. It is guidance, not a guarantee of bot quality. A requested live trial can upload and temporarily select a candidate through the existing controller; final release remains a separate objective.
-
-Operational debug logging is enabled by default, per the local development preferences. It records event types, model labels, retries, tool names, durations and errors, without recording raw provider payloads or credential values. Full conversation and tool content are stored in the separate private session journal. Use `--no-debug` to disable operational logging.
-
-## Development
-
-```sh
-npm run verify
-npm run catalog:sync
-```
-
-Tests use an isolated local OpenAI-compatible streaming server and temporary data folders. They cover real HTTP tool cycles, account isolation and refresh locking, costs/limits, retries, resume/crash recovery, process cancellation, website extraction, the installed browser, paired benchmark sweeps, bottom-pinned layout through terminal resizes, footer contents and account attribution, mouse-triggered 3D animation and timer cleanup. They also exercise persistent goal recovery, quota-aware account/model failover, settings changes during inference, and an entire offline Battlecode controller/collector/replay qualification workflow. They do not spend paid inference, sign into external accounts or queue real matches. The Codex path is also exercised by the real Harness-Bench subset described in [benchmark results](docs/HARNESS_BENCH.md). Other provider login/usage paths and all third-party endpoints still need verification with their own accounts. See [verification details](docs/VERIFICATION.md).
-
-Transport and terminal rendering: [Pi](https://github.com/earendil-works/pi). Additional provider data: [models.dev](https://models.dev). Codex authentication reference: [official OpenAI documentation](https://developers.openai.com/codex/auth). Dependency licenses remain with their respective packages.
+[Full guide](docs/GUIDE.md) · [Battlecode workflow](docs/BATTLECODE_WORKFLOW.md) · [Harness-Bench results](docs/HARNESS_BENCH.md) · [Verification](docs/VERIFICATION.md) · [Pi / Codex feature gaps](docs/PARITY.md) · [Command changes](docs/COMMAND_CHANGES.md)

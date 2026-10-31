@@ -21,7 +21,7 @@ export function flowAccent(text,ui,offset=0){
   const {r,g,b}=colors.get(key);let output='',last=-1;
   for(const [i,c]of Array.from(text).entries()){
     const bucket=Math.round((0.5+0.5*Math.sin((i+offset)/11-ui.now()/550))*15);
-    if(bucket!==last){const strength=0.5+bucket/15*0.7;output+=`\x1b[38;2;${[r,g,b].map(n=>Math.min(255,Math.round(n*strength))).join(';')}m`;last=bucket;}
+    if(bucket!==last){const strength=0.6+Math.pow(bucket/15,3)*1.15;output+=`\x1b[38;2;${[r,g,b].map(n=>Math.min(255,Math.round(n*strength))).join(';')}m`;last=bucket;}
     output+=c;
   }
   return output+'\x1b[39m';
@@ -34,7 +34,7 @@ export class Composer extends Editor {
     const label=` ${width>=28?mode.toUpperCase():mode==='plan'?'PLAN':'EXEC'} ${pending?'◌':'▾'} `;
     const x=Math.max(1,width-visibleWidth(label)-2),w=Math.min(visibleWidth(label),Math.max(0,width-x));this.modeBounds={x,y:0,width:w};
     const radiant=this.ui.isOverkill();
-    const edge=(line,offset)=>radiant?flowAccent(stripTerminalSequences(line),this.ui,offset):line;
+    const edge=(line,offset)=>radiant?flowAccent(stripTerminalSequences(line).replaceAll('─','━'),this.ui,offset):line;
     lines[0]=edge(sliceByColumn(lines[0],0,x),0)+this.ui.paint(bold(truncateToWidth(label,w)))+edge(sliceByColumn(lines[0],x+w),x+w);
     const bottom=this.renderedVisibleLineCount+1;lines[bottom]=edge(lines[bottom],13);
     return lines;

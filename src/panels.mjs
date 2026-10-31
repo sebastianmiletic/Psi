@@ -2,31 +2,28 @@ import { matchesKey,truncateToWidth,visibleWidth } from '@earendil-works/pi-tui'
 import { compactCount } from './usage.mjs';
 import { formatDuration,dayKey } from './stats.mjs';
 import { cleanTerminal,redact } from './storage.mjs';
+import { accentBadge,accentText } from './theme.mjs';
 const dim=s=>`\x1b[2m${s}\x1b[22m`,bold=s=>`\x1b[1m${s}\x1b[22m`,safe=s=>cleanTerminal(redact(s));
-function box(lines,width,paint){
- const w=Math.max(8,Math.min(84,width-2)),inside=w-4;
- return[paint(' ╭'+'─'.repeat(w-2)+'╮'),...lines.map(line=>' '+paint('│')+' '+truncateToWidth(line,inside)+' '.repeat(Math.max(0,inside-visibleWidth(truncateToWidth(line,inside))))+' '+paint('│')),paint(' ╰'+'─'.repeat(w-2)+'╯')];
-}
-const descriptions={off:'Direct responses without additional reasoning.',minimal:'A small reasoning budget for straightforward work.',low:'Fast responses for simple, well-scoped tasks.',medium:'Balanced reasoning for everyday engineering.',high:'More reasoning for verification and difficult edge cases.',xhigh:'Deeper reasoning for demanding, multi-step problems.',max:'The deepest model-supported reasoning level.'};
+const row=(text,width)=>truncateToWidth('  '+text,width);
+const hints='← →  tab · ↵ · esc';
+
 export class EffortPanel {
  focused=true;
- constructor(ui,{levels,effort,overkill,resolve,cancel}){this.ui=ui;this.levels=levels;this.index=Math.max(0,levels.indexOf(effort));this.overkill=overkill;this.resolve=resolve;this.cancel=cancel;this.publish();}
+ constructor(ui,{levels,effort,overkill,resolve,cancel}){
+  this.ui=ui;this.levels=levels.filter(l=>l!=='minimal');if(!this.levels.length)this.levels=levels;
+  this.index=Math.max(0,this.levels.indexOf(effort));this.overkill=overkill;this.resolve=resolve;this.cancel=cancel;this.publish();
+ }
  publish(){this.ui.effortPreview={effort:this.levels[this.index],overkill:this.overkill};this.ui.syncMotion();this.ui.render();}
  invalidate(){}
  render(width){
-  const paint=this.ui.paint,level=this.levels[this.index],w=Math.min(78,width-8),labels=this.levels.map((v,i)=>i===this.index?paint(bold(v)):dim(v));
-  let scale;
-  if(this.levels.join('    ').length<=w){
-   const cell=Math.max(5,Math.floor(w/this.levels.length));const positions=this.levels.map((_,i)=>Math.floor(cell/2)+i*cell);
-   const track=Array.from({length:Math.min(w,cell*this.levels.length)},(_,x)=>{const i=positions.indexOf(x);return i>=0?(i===this.index?paint('●'):dim('○')):x<=positions[this.index]?paint('━'):dim('─');}).join('');
-   scale=[labels.map((label,i)=>' '.repeat(Math.max(0,Math.floor((cell-visibleWidth(this.levels[i]))/2)))+label+' '.repeat(Math.max(0,cell-visibleWidth(this.levels[i])-Math.floor((cell-visibleWidth(this.levels[i]))/2)))).join(''),track];
-  }else scale=this.levels.map((v,i)=>(i===this.index?paint('● ')+bold(v):dim('○ '+v)));
-  if(this.ui.terminal.rows<28){
-   const track=this.levels.map((_,i)=>i===this.index?paint('●'):dim('○')).join('━');
-   return box([bold('Effort'),'',paint(bold('← '+level+' →')),track,'',`${bold('OVERKILL')}  ${this.overkill?paint('● on'):dim('○ off')}`,dim(width<48?'tab toggles workers':'tab toggles OVERKILL'),'',dim('← → adjust'),dim('↵ apply · esc cancel')],width,paint);
-  }
-  const lines=[bold('Effort'),'Choose how much reasoning Psi uses.','',...scale,'',paint(bold(level.toUpperCase())),descriptions[level]||'Use this model-supported reasoning level.','',`${bold('OVERKILL')}  ${this.overkill?paint('● on'):dim('○ off')}`,dim('Configured workers, each with its own model and role.'),'',dim('← → adjust · tab OVERKILL · enter apply · esc cancel')];
-  return box(lines,width,paint);
+  const paint=this.ui.paint,cell=Math.floor((Math.min(78,width)-4)/this.levels.length),horizontal=cell>=6;
+  const labels=this.levels.map((v,i)=>i===this.index?paint(bold(v)):dim(v));
+  const track=this.levels.map((_,i)=>i===this.index?paint('●'):dim('○')).join('━');
+  const scale=horizontal?[
+   labels.map((v,i)=>v+' '.repeat(Math.max(0,cell-visibleWidth(this.levels[i])))).join(''),
+   this.levels.map((_,i)=>(i===this.index?paint('●'):dim('○'))+dim('─'.repeat(Math.max(0,cell-1)))).join('')
+  ]:[paint(bold('← '+this.levels[this.index]+' →'))+'  '+track];
+  return [row(bold('Effort'),width),...scale.map(s=>row(s,width)),row(this.overkill?accentBadge(' OVERKILL ON ',this.ui.app.engine.config):dim('○ OVERKILL'),width),row(dim(hints),width)];
  }
  handleInput(data){
   if(matchesKey(data,'escape')){this.cancel();return;}
@@ -38,35 +35,69 @@ export class EffortPanel {
   this.publish();
  }
 }
+
+// A calendar grid, with seven days per column. Future/out-of-period days remain blank.
+export function heatmap(s,weeks,paint){
+ const end=new Date(s.now);end.setHours(0,0,0,0);const start=new Date(end);start.setDate(start.getDate()-(start.getDay()+6)%7-(weeks-1)*7);
+ const max=Math.max(1,...Object.values(s.days));const lines=[];
+ for(let day=0;day<7;day++){
+  let line=dim(['M',' ','W',' ','F',' ','S'][day])+' ';
+  for(let week=0;week<weeks;week++){
+   const d=new Date(start);d.setDate(d.getDate()+week*7+day);const value=s.days[dayKey(d)]||0;
+   if(d>end||+d<(s.start||0))line+='  ';
+   else if(!value)line+=dim('▪ ');
+   else line+=paint(['░ ','▒ ','▓ ','█ '][Math.min(3,Math.floor(value/max*3))]);
+  }
+  lines.push(line);
+ }
+ return lines;
+}
 export class StatsPanel {
  focused=true;
- constructor(ui,{data=null,resolve,cancel,refresh}){this.ui=ui;this.data=data;this.index=2;this.resolve=resolve;this.cancel=cancel;this.refresh=refresh;this.loading=false;if(!data)this.load();}
+ constructor(ui,{data=null,cancel,refresh}){this.ui=ui;this.data=data;this.index=2;this.cancel=cancel;this.refresh=refresh;this.loading=false;if(!data)void this.load();}
  async load(){if(this.loading)return;this.loading=true;this.error=null;try{this.data=await this.refresh();}catch(e){this.error=e.message;}finally{this.loading=false;this.ui.render();}}
  invalidate(){}
  render(width){
-  const paint=this.ui.paint;if(!this.data)return box([bold('Your Psi activity'),'',this.error?safe(this.error):'Reading saved activity…','',dim('esc close')],width,paint);
-  const s=this.data[this.index],wide=width>=64,tall=this.ui.terminal.rows>=30;
-  const tabs=(width>=80?['This week','This month','All time']:['Week','Month','All']).map((v,i)=>i===this.index?paint(bold(`[ ${v} ]`)):dim(`  ${v}  `)).join(wide?'  ':'');
-  const metric=(name,value)=>`${name.padEnd(wide?22:17)}${bold(value)}`;
-  const lines=[bold('Your Psi activity'),tabs,'',metric('Tokens',compactCount(s.tokens)),metric('Active time',formatDuration(s.activeMs)),metric('Requests',s.requests.toLocaleString()),metric(wide?'Sessions / workers':'Sessions/workers',`${s.sessions} / ${s.workers}`),metric('Tool calls',s.tools.toLocaleString()),metric(wide?'Objectives completed':'Objectives',s.goals.toLocaleString()),''];
-  if(wide)lines.push(`${dim('Input')} ${compactCount(s.input)}   ${dim('Output')} ${compactCount(s.output)}   ${dim('Cache read')} ${compactCount(s.cacheRead)} (${s.cachePercent}%)`,'');
-  const providers=Object.entries(s.providers).sort((a,b)=>b[1].tokens-a[1].tokens).slice(0,tall?3:1);
-  if(providers.length&&this.ui.terminal.rows>=26){lines.push(bold('Providers'));for(const [name,p]of providers){const cells=Math.max(1,Math.round(p.tokens/Math.max(1,s.tokens)*(wide?18:8)));lines.push(`${safe(name).slice(0,20).padEnd(wide?22:14)}${paint('█'.repeat(cells))} ${compactCount(p.tokens)}`);}lines.push('');}
-  const days=[];for(let i=27;i>=0;i--){const d=new Date(s.now);d.setDate(d.getDate()-i);days.push(s.days[dayKey(d)]||0);}const max=Math.max(1,...days);
-  if(this.ui.terminal.rows>=26)lines.push(dim('Daily token activity · last 28 days'),days.map(n=>n?paint(['▂','▄','▆','█'][Math.min(3,Math.floor(n/max*3))]):dim('·')).join(' '));
-  if(this.error)lines.push(dim('Refresh failed: '+safe(this.error)));
-  lines.push('',dim(wide?'Saved Psi activity only. Weeks start Monday in local time.':'Psi history only.'));
-  if(s.unknownDatedRequests||s.malformed)lines.push(dim('Some historical records lack dates or could not be read.'));
-  if(wide)lines.push(dim('Active time includes model/tools, excludes quota and idle waits.'),dim('Overlapping workers count once; agent time '+formatDuration(s.agentMs)+'.'));
-  lines.push('',dim(this.loading?'Refreshing…':wide?'← → period · r refresh · esc close':'← → tabs · esc close'));
-  if(!wide)lines.splice(-1,0,dim('r refresh'));
-  const available=Math.max(5,this.ui.terminal.rows-2),body=lines.length>available?[...lines.slice(0,available-1),lines.at(-1)]:lines;
-  const rendered=box(body,width,paint);return [...rendered,...Array.from({length:Math.max(0,this.ui.terminal.rows-rendered.length)},()=> ' '.repeat(width))];
+  const paint=this.ui.paint,budget=this.ui.panelRows(),wide=width>=72;
+  const tabs=['Week','Month','All'].map((v,i)=>i===this.index?paint(bold('['+v+']')):dim(v)).join('  ');
+  const lines=[bold('Stats')+' · '+tabs];
+  if(!this.data){lines.push(this.error?safe(this.error):dim('…'),dim('esc'));return lines.map(s=>row(s,width));}
+  const s=this.data[this.index];
+  if(wide){
+   lines.push(`Tokens ${bold(compactCount(s.tokens))} · Time ${bold(formatDuration(s.activeMs))} · Calls ${bold(compactCount(s.requests))}`,
+    `Sessions ${s.sessions}  ·  Workers ${s.workers}  ·  Tools ${compactCount(s.tools)}  ·  Goals ${s.goals}`,
+    dim(`In ${compactCount(s.input)}  Out ${compactCount(s.output)}  Cache ${s.cachePercent}%`));
+  }else lines.push(`${bold(compactCount(s.tokens))} tokens · ${bold(formatDuration(s.activeMs))}`,
+    `${compactCount(s.requests)} calls · ${s.sessions} sessions`,`${s.workers} workers · ${compactCount(s.tools)} tools`);
+  const weeks=Math.max(2,Math.min(16,Math.floor((width-7)/2))),chart=heatmap(s,weeks,paint);
+  if(budget>=13){lines.push('',...chart);}
+  else if(budget>=7){
+   const cells=[];for(let i=weeks*7-1;i>=0;i--){const d=new Date(s.now);d.setDate(d.getDate()-i);cells.push(s.days[dayKey(d)]||0);}
+   const max=Math.max(1,...cells),points=Math.max(1,Math.min(width-4,cells.length));
+   lines.push(cells.slice(-points).map(n=>n?paint(['▂','▄','▆','█'][Math.min(3,Math.floor(n/max*3))]):dim('·')).join(''));
+  }
+  if(this.error)lines.push(dim('Refresh failed'));
+  else if(s.unknownDatedRequests||s.malformed)lines.push(dim('Partial history'));
+  lines.push(dim(this.loading?'…':'← →  tab · r ↻ · esc'));
+  const body=lines.length>budget?[...lines.slice(0,budget-1),lines.at(-1)]:lines;
+  return body.map(s=>row(s,width));
  }
  handleInput(data){
   if(matchesKey(data,'escape')||matchesKey(data,'enter')){this.cancel();return;}
   if(matchesKey(data,'left'))this.index=(this.index+2)%3;else if(matchesKey(data,'right')||matchesKey(data,'tab'))this.index=(this.index+1)%3;
-  else if(data==='r'&&!this.loading)void this.load();
-  this.ui.render();
+  else if(data==='r'&&!this.loading)void this.load();this.ui.render();
  }
+}
+export class ToolsPanel {
+ focused=true;
+ constructor(ui,{tools,cancel}){this.ui=ui;this.tools=tools;this.cancel=cancel;this.page=0;}
+ invalidate(){}
+ render(width){
+  const slot=Math.min(width-4,Math.max(18,...this.tools.map(t=>t.name.length))+2),columns=Math.max(1,Math.floor((width-4)/slot)),cell=Math.floor((width-4)/columns),rows=Math.max(1,Math.min(8,this.ui.panelRows()-2));
+  this.pageSize=rows*columns;this.pages=Math.max(1,Math.ceil(this.tools.length/this.pageSize));this.page%=this.pages;
+  const tools=this.tools.slice(this.page*this.pageSize,(this.page+1)*this.pageSize),lines=[bold('Tools')+dim(`  ${this.tools.length}${this.pages>1?' · '+(this.page+1)+'/'+this.pages:''}`)];
+  for(let i=0;i<tools.length;i+=columns)lines.push(tools.slice(i,i+columns).map(t=>this.ui.paint(truncateToWidth(t.name,cell-1))+' '.repeat(Math.max(1,cell-visibleWidth(truncateToWidth(t.name,cell-1))))).join(''));
+  lines.push(dim(this.pages>1?'← → · esc':'esc'));return lines.map(s=>row(s,width));
+ }
+ handleInput(data){if(matchesKey(data,'escape')||matchesKey(data,'enter'))this.cancel();else if(matchesKey(data,'right')||matchesKey(data,'tab'))this.page=(this.page+1)%(this.pages||1);else if(matchesKey(data,'left'))this.page=(this.page+(this.pages||1)-1)%(this.pages||1);this.ui.render();}
 }

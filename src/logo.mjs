@@ -27,7 +27,7 @@ const palettes=new Map();
 function paletteFor(accent) {
   if(palettes.has(accent))return palettes.get(accent);
   const rgb=accentColor({accent});
-  const palette=Array.from({length:20},(_,i)=>{const factor=0.35+i*0.047;const c=[rgb.r,rgb.g,rgb.b].map(n=>Math.min(255,Math.round(n*factor)));return{fg:`\x1b[38;2;${c.join(';')}m`,bg:`\x1b[48;2;${c.join(';')}m`};});
+  const palette=Array.from({length:32},(_,i)=>{const factor=0.35+i*0.047;const c=[rgb.r,rgb.g,rgb.b].map(n=>Math.min(255,Math.round(n*factor)));return{fg:`\x1b[38;2;${c.join(';')}m`,bg:`\x1b[48;2;${c.join(';')}m`};});
   if(palettes.size>16)palettes.clear();palettes.set(accent,palette);return palette;
 }
 function rotation(yaw, pitch, roll) {
@@ -38,7 +38,7 @@ function rotation(yaw, pitch, roll) {
     return [xx * cz - yy * sz, xx * sz + yy * cz, zzz];
   };
 }
-export function renderPsi(width, rows, phase = 0, animated = false, accent='sage') {
+export function renderPsi(width, rows, phase = 0, animated = false, accent='sage',glow=null) {
   width = Math.max(1, Math.floor(width)); rows = Math.max(1, Math.floor(rows));
   const palette=paletteFor(accent);
   const height = rows * 2;
@@ -71,7 +71,9 @@ export function renderPsi(width, rows, phase = 0, animated = false, accent='sage
   for (let row = 0; row < rows; row++) {
     let line = '', last = '';
     for (let x = 0; x < width; x++) {
-      const top = pixels[row*2*width+x], bottom = pixels[(row*2+1)*width+x];
+      const boost=glow===null?0:Math.round(3+10*Math.pow(0.5+0.5*Math.sin(x/3+row/2-glow),3));
+      const tone=n=>n<0?n:Math.min(31,n+boost);
+      const top = tone(pixels[row*2*width+x]), bottom = tone(pixels[(row*2+1)*width+x]);
       let style, glyph;
       if (top < 0 && bottom < 0) { style = '\x1b[39;49m'; glyph = ' '; }
       else if (bottom < 0) { style = palette[top].fg+'\x1b[49m'; glyph = '▀'; }
@@ -85,18 +87,25 @@ export function renderPsi(width, rows, phase = 0, animated = false, accent='sage
 }
 
 export class PsiHeader {
-  constructor({ app, onActivate, format = s => s, subdued = s => s }) {
-    this.app = app; this.onActivate = onActivate; this.format = format; this.subdued = subdued; this.cached = null;
+  constructor({ app, onActivate, format = s => s, subdued = s => s,terminal,glow=()=>null }) {
+    this.terminal=terminal;this.glow=glow;this.app = app; this.onActivate = onActivate; this.format = format; this.subdued = subdued; this.cached = null;
   }
   invalidate() {}
   render(width) {
-    const logoWidth = Math.min(12, Math.max(6, width - 4)), logoRows = 4;
+    const short=(this.terminal?.rows||32)<18;
+    if(short){
+      const path=this.app.session.meta.cwd.replace(process.env.HOME||'\0','~');
+      this.bounds={x:1,y:0,width:1,height:1};
+      return [truncateToWidth(' '+this.format('Ψ Psi'),width),truncateToWidth(' '+this.subdued(path),width),''];
+    }
+    const logoWidth = Math.min(short?9:12, Math.max(6,width-4)), logoRows=short?2:4;
     const accent=this.app.engine.config.accent || 'sage';
-    const key = `${logoWidth}:${logoRows}:${accent}`;
-    if (this.cached?.key !== key) this.cached = { key, lines: renderPsi(logoWidth,logoRows,0,false,accent) };
+    const glow=this.glow();
+    const key = `${logoWidth}:${logoRows}:${accent}:${glow}`;
+    if (this.cached?.key !== key) this.cached = { key, lines: renderPsi(logoWidth,logoRows,0,false,accent,glow) };
     this.bounds = { x: 1, y: 1, width: logoWidth, height: logoRows };
     const path = this.app.session.meta.cwd.replace(process.env.HOME || '\0', '~');
-    const labels = width >= 48 ? { 0: this.format('Ψ  Psi'), 3: this.subdued(path) } : {};
+    const labels = width >= 48 ? {0:this.format('Ψ  Psi'),[logoRows-1]:this.subdued(path)}:{0:this.format('Ψ  Psi')};
     return ['', ...this.cached.lines.map((line, i) => truncateToWidth(' '+line+'  '+(labels[i] || ''), width)), ''];
   }
   // Bound the click region to the mark, leaving workspace text selectable.

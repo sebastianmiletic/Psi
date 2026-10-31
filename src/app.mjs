@@ -10,7 +10,7 @@ import { resolve, join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
 import { Battlecode } from './battlecode.mjs';
-import { settingItems } from './settings.mjs';
+import { settingItems,validateSettings } from './settings.mjs';
 import { accents } from './theme.mjs';
 import { AccountUsage, usageLabel } from './usage.mjs';
 import { Registry } from './providers.mjs';
@@ -18,7 +18,7 @@ import { Session } from './session.mjs';
 import { Jobs } from './jobs.mjs';
 import { Tools } from './tools.mjs';
 import { Engine } from './engine.mjs';
-import { saveConfig, psiHome, cleanTerminal, redact } from './storage.mjs';
+import { saveConfig,loadConfig, psiHome, cleanTerminal, redact } from './storage.mjs';
 
 export class App {
   constructor(config, session, options = {}) {
@@ -81,7 +81,7 @@ export class App {
   async settingsMenu() {
     while(true){
       const c={...this.engine.config,...this.engine.pendingSettings};
-      const selected=await this.ui.choose('Settings',settingItems.map(item=>({value:item.id,label:item.label,description:`${item.special==='prices'?'configure':item.special==='agents'?`${c.agents.length} profiles`:Array.isArray(c[item.id])?c[item.id].join(', ')||'none':typeof c[item.id]==='boolean'?(c[item.id]?'on':'off'):c[item.id]??'default'}${item.description?' · '+item.description:''}`})));
+      const selected=await this.ui.choose('Settings',settingItems.map(item=>({value:item.id,label:item.label,description:`${item.special==='prices'?'configure':item.special==='agents'?`${c.agents.length} profiles`:Array.isArray(c[item.id])?c[item.id].join(', ')||'none':typeof c[item.id]==='boolean'?(c[item.id]?'on':'off'):c[item.id]??'default'}`})));
       if(!selected)return;
       const item=settingItems.find(i=>i.id===selected);let value;
       if(item.special==='agents'){await this.agentsMenu();continue;}
@@ -116,15 +116,15 @@ export class App {
     const accounts = await this.registry.accounts.list(); const connected = new Set(accounts.map(a => a.provider));
     const models = this.registry.all().filter(m => `${m.provider}/${m.id} ${m.name}`.toLowerCase().includes(query.toLowerCase()));
     models.sort((a, b) => Number(connected.has(b.provider)) - Number(connected.has(a.provider)) || `${a.provider}/${a.id}`.localeCompare(`${b.provider}/${b.id}`));
-    const choice = await this.ui.choose('Model', models.map(m => ({ value: `${m.provider}/${m.id}`, label: `${m.provider}/${m.id}`, description: `${m.reasoning ? 'reasoning · ' : ''}${Math.round(m.contextWindow / 1000)}k context${connected.has(m.provider) ? ' · connected' : ''}` })));
+    const choice = await this.ui.choose('Model', models.map(m => ({ value: `${m.provider}/${m.id}`, label: `${m.provider}/${m.id}`, description: `${Math.round(m.contextWindow / 1000)}k${connected.has(m.provider)?' · connected':''}` })));
     if (choice) { await this.update({ model: choice }); this.ui.note(`Model: ${choice}`); }
   }
   async accountMenu(action) {
     if (this.engine.busy&&!this.engine.waiting) throw new Error('Press Escape twice to stop before changing accounts, or wait for a quota pause.');
     action ||= await this.ui.choose('Accounts', [
-      { value: 'login', label: 'Login new account', description: 'Add any provider, including another account with the same provider' },
-      { value: 'switch', label: 'Switch accounts', description: 'Choose any saved account' },
-      { value: 'remove', label: 'Remove account', description: 'Delete a saved credential from Psi' },
+      { value: 'login', label: 'Login new account' },
+      { value: 'switch', label: 'Switch accounts' },
+      { value: 'remove', label: 'Remove account' },
     ]);
     if (!action) return;
     if (action === 'login') {
@@ -168,22 +168,8 @@ export class App {
     const fallback = same || this.registry.models.getModels(provider)[0];
     if (fallback) await this.update({ model: `${provider}/${fallback.id}` });
   }
-  async addProvider() {
-    const id = await this.ui.ask({ type: 'text', message: 'Provider ID', placeholder: 'my-server' }); if (!id) return;
-    if (!/^[a-z0-9][a-z0-9_-]*$/.test(id)) throw new Error('Use lowercase letters, numbers, hyphens and underscores.');
-    const baseUrl = await this.ui.ask({ type: 'text', message: 'API base URL', placeholder: 'http://localhost:8000/v1' }); if (!baseUrl) return;
-    const api = await this.ui.choose('API format', [{ value: 'openai-completions', label: 'OpenAI chat completions' }, { value: 'openai-responses', label: 'OpenAI Responses' }, { value: 'anthropic-messages', label: 'Anthropic Messages' }]); if (!api) return;
-    const model = await this.ui.ask({ type: 'text', message: 'Model ID', placeholder: 'Exact model name from your server' }); if (!model) return;
-    const mode = await this.ui.choose('Authentication', [{ value: 'key', label: 'API key' }, { value: 'local', label: 'No key (local server)' }]); if (!mode) return;
-    const p = { id, name: id, baseUrl, api, keyless: mode === 'local', models: [{ id: model }] };
-    this.registry.register(p); await this.update({ customProviders: [...this.config.customProviders.filter(x => x.id !== id), p] });
-    await this.selectModel(`${id}/${model}`);
-    if (mode === 'key') {
-      const key = await this.ui.ask({ type: 'secret', message: 'API key' }); if (key) await this.registry.accounts.add(id, 'Default', { type: 'api_key', key });
-    }
-    this.ui.note(`Provider added: ${id}`);
-  }
   async submit(text) {
+    if(this.reloading&&text!=='/quit')throw new Error('Reloading Psi…');
     if (!text.startsWith('/')) {
       this.ui?.user(text);
       if (this.engine.busy) this.engine.steer(text); else await this.engine.run(text).catch(() => {});
@@ -191,11 +177,11 @@ export class App {
     }
     const match = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()); const command = match?.[1]; const arg = match?.[2] || '';
     if (this.authController && !['quit', 'help'].includes(command)) throw new Error('Finish or cancel account sign-in first.');
-    if (this.engine.busy && !this.engine.waiting && !['stats','effort','settings','agents','directory','update','logo','usage','tools','project','experiments','cost','status','help','quit'].includes(command)) throw new Error('Press Escape twice to stop, or enter a message to queue it at the next tool boundary.');
-    if(['continue','stop','jobs','budget','limit','tokens'].includes(command))throw new Error(`/${command} was removed. Use /settings for limits, /agents for workers, or Escape twice to stop.`);
+    if (this.engine.busy && !this.engine.waiting && !['stats','effort','settings','subagents','refresh','directory','update','logo','usage','tools','project','experiments','cost','status','help','quit'].includes(command)) throw new Error('Press Escape twice to stop, or enter a message to queue it at the next tool boundary.');
+    if(['continue','stop','jobs','budget','limit','tokens','agents','provider','cd','summary-model','checkpoint'].includes(command))throw new Error(`/${command} was removed. Use /settings for limits, /subagents for workers, or Escape twice to stop.`);
     if(command==='settings')return this.settingsMenu();
     if(command==='stats')return this.ui.statsMenu(()=>this.statistics.read());
-    if(command==='agents')return this.agentsMenu();
+    if(command==='subagents')return this.agentsMenu();
     if(command==='directory')return this.directoryCommand(arg);
     if(command==='update'){if(this.engine.busy)throw new Error('Stop the active run before updating Psi.');this.ui.note('Checking GitHub releases…');this.ui.note((await updateInstallation(this.home)).message);return;}
 
@@ -205,13 +191,7 @@ export class App {
     if (command === 'quit' || command === 'exit') return this.close();
     if (command === 'help') { const { commands } = await import('./ui.mjs'); this.ui.markdown(commands.map(c => `**/${c.name}**  ${c.description}`).join('\n\n')); return; }
     if (command === 'model') return this.selectModel(arg);
-    if (command === 'summary-model') {
-      if (!arg) { this.ui.note(`Compaction model: ${this.engine.config.summaryModel || 'same as main model'}. Use /summary-model provider/model or /summary-model same.`); return; }
-      if (arg !== 'same') this.registry.find(arg);
-      await this.update({ summaryModel: arg === 'same' ? null : arg }); this.ui.note(`Compaction model: ${arg}`); return;
-    }
     if (command === 'accounts' || command === 'login') return this.accountMenu(command === 'login' ? 'login' : arg);
-    if (command === 'provider') return this.addProvider();
     if (command === 'effort') {
       if(arg)await this.update({effort:arg});else await this.effortMenu();return;
     }
@@ -223,9 +203,7 @@ export class App {
       if (usage.limits?.length) this.ui.note(JSON.stringify({ reportedAt: usage.limitsAt, limits: usage.limits },null,2));
       return;
     }
-    if (command === 'tools') {
-      this.ui.markdown(this.tools.definitions().map(tool => `**${tool.name}**  ${tool.description}`).join('\n\n')); return;
-    }
+    if (command === 'tools') return this.ui.toolsMenu(this.tools.definitions());
     if (command === 'cost') {
       const u = this.session.totals; const cached = u.input + u.cacheRead ? Math.round(u.cacheRead / (u.input + u.cacheRead) * 100) : 0;
       this.ui.note(`${u.requests} requests · ${u.input.toLocaleString()} input · ${u.output.toLocaleString()} output · ${u.cacheRead.toLocaleString()} cache read (${cached}%)\nEstimated catalog cost: $${u.cost.toFixed(5)}. Subscription quotas, tiered pricing and unknown/custom prices are not measured.`); return;
@@ -233,21 +211,45 @@ export class App {
     if (command === 'status') { this.ui.note(JSON.stringify({ session: this.session.meta.id, cwd: this.session.meta.cwd, directories:await this.tools.policy.roots(),status: this.session.status,mode:this.engine.config.agentMode,overkill:this.engine.config.overkill,model: this.engine.config.model, effort: this.engine.config.effort, profile: this.engine.config.profile, budget: this.engine.config.budget || 'unlimited', maxSteps: this.engine.config.maxSteps || 'unlimited', access: 'approved directories; no approval prompts', objective: this.session.state.loopGoal || null }, null, 2)); return; }
     if (command === 'loop') { const objective=arg || await this.ui.ask({type:'text',message:'What should Psi achieve?',placeholder:'Describe the goal and how success can be verified'}); if(!objective?.trim())return; this.ui.user(objective); await this.engine.run(objective, { loop: true }).catch(() => {}); return; }
     if (command === 'compact') { await this.engine.run(null, { compactOnly: true }).catch(() => {}); return; }
-    if (command === 'checkpoint') {
-      const path = join(this.session.dir, 'checkpoint.md');
-      if (arg) { await writeFile(path, arg, { mode: 0o600 }); this.ui.note('Checkpoint saved.'); }
-      else this.ui.markdown(await readFile(path, 'utf8').catch(() => 'No checkpoint yet.')); return;
-    }
     if (command === 'new') return this.changeSession(await Session.create(this.session.meta.cwd, this.home));
-    if (command === 'cd') { if (!arg) { this.ui.note(this.session.meta.cwd); return; } const cwd = resolve(this.session.meta.cwd, arg.replace(/^~(?=\/|$)/, process.env.HOME || '~')); if (!(await stat(cwd)).isDirectory()) throw new Error('Workspace must be a directory.'); return this.changeSession(await Session.create(cwd, this.home)); }
     if (command === 'resume') {
       const sessions = await Session.list(this.home);
       const id = arg || await this.ui.choose('Resume session', sessions.map(s => ({ value: s.id, label: s.title, description: `${s.createdAt.slice(0, 16)} · ${s.cwd}` })));
       if (id) await this.changeSession(await Session.load(id, this.home)); return;
     }
-    if (command === 'refresh') { this.ui.note('Refreshing model catalog…'); const result = await this.registry.refresh(arg || this.engine.model.provider); this.ui.note(result.errors.size ? [...result.errors].map(([p, e]) => `${p}: ${e.message}`).join('\n') : 'Provider catalog refreshed.'); return; }
+    if (command === 'refresh') return this.reload();
     if (command === 'export') { const path = resolve(this.session.meta.cwd, arg || `psi-${this.session.meta.id}.md`); await writeFile(path, this.exportMarkdown(), { mode: 0o600 }); this.ui.note(`Exported: ${path}`); return; }
     throw new Error(`Unknown command: /${command}. Use /help.`);
+  }
+  async reload(){
+    if(this.reloading)return false;
+    this.reloading=true;
+    try{
+      let active=this.engine.busy;
+      if(!active)for(const r of await this.agents.records()){
+        const job=await this.jobs.get(r.jobId).catch(()=>null);
+        if(job&&['running','queued'].includes(job.status)){active=true;break;}
+      }
+      if(active){
+        const answer=await this.ui.choose('Stop AI and reload?',[{value:'cancel',label:'Cancel'},{value:'reload',label:'Reload'}]);
+        if(answer!=='reload')return false;
+      }
+      // Validate disk settings before interrupting anything or writing to the session.
+      const config=await loadConfig(this.home),registry=new Registry(config,this.home);
+      validateSettings(config,registry);if(config.summaryModel)registry.find(config.summaryModel);
+      const levels=getSupportedThinkingLevels(registry.find(config.model));
+      if(!levels.includes(config.effort))config.effort=levels.includes('medium')?'medium':levels[0];
+      this.engine.stop();await this.agents.stopAll({wait:true});
+      while(this.engine.busy&&!this.closing)await delay(25);
+      if(this.closing)return false;
+      const session=await Session.load(this.session.meta.id,this.home);
+      await session.event({type:'state',state:{settings:config,pendingSettings:{}}});
+      await this.tools.close();clearInterval(this.quotaTimer);this.quotaController?.abort();
+      this.config=config;this.session=session;this.registry=registry;this.bind();
+      if(this.ui){const {CombinedAutocompleteProvider}=await import('@earendil-works/pi-tui');const {commands}=await import('./ui.mjs');this.ui.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands,session.meta.cwd));this.ui.finishResponse();}
+      await this.refreshAccount();if(this.ui){this.startUsageMonitor();this.ui.syncMotion();this.ui.tui.invalidate();this.ui.render();}
+      this.ui?.note('Reloaded');return true;
+    }finally{this.reloading=false;}
   }
   async effortMenu(){const c={...this.engine.config,...this.engine.pendingSettings};const result=await this.ui.effortMenu({levels:getSupportedThinkingLevels(this.engine.model),effort:c.effort,overkill:c.overkill});if(result)await this.update(result);}
   async setMode(mode){if(mode==='plan')await this.agents.stopAll({wait:true});await this.update({agentMode:mode});}
@@ -264,7 +266,7 @@ export class App {
   async checkUpdates(){try{const update=await checkUpdate(this.home);if(!update.available||this.closing)return;if(this.engine.config.autoUpdate&&!this.engine.busy){this.ui.note((await updateInstallation(this.home,{release:update})).message);}else this.ui.note(`Psi ${update.latest} is available. Run /update or psi update, then restart.`);}catch{/* Offline startup remains quiet and fast. */}}
   async agentsMenu(){
     while(true){const c={...this.engine.config,...this.engine.pendingSettings},runs=await this.agents.records();
-      const action=await this.ui.choose('OVERKILL workers',[{value:'enabled',label:`OVERKILL ${c.overkill?'ON':'off'}`,description:'Also toggle with Tab inside /effort'},{value:'concurrency',label:'Concurrent workers',description:String(c.subagentConcurrency)},{value:'add',label:'Add a worker profile'},...c.agents.map(p=>({value:'profile:'+p.id,label:p.name,description:`${p.model||'main model'} · ${p.mode} · ${p.job}`})),...runs.map(r=>({value:'run:'+r.id,label:'Run · '+r.name,description:r.prompt.slice(0,100)}))]);if(!action)return;
+      const action=await this.ui.choose('Subagents',[{value:'enabled',label:`OVERKILL ${c.overkill?'ON':'off'}`},{value:'concurrency',label:'Concurrent workers',description:String(c.subagentConcurrency)},{value:'add',label:'Add subagent'},...c.agents.map(p=>({value:'profile:'+p.id,label:p.name,description:`${p.mode} · ${p.model||'main model'}`})),...runs.map(r=>({value:'run:'+r.id,label:'Run · '+r.name,description:r.model}))]);if(!action)return;
       if(action==='enabled'){await this.update({overkill:!c.overkill});continue;}
       if(action==='concurrency'){const text=await this.ui.ask({type:'text',message:'Concurrent workers (1–16)',placeholder:String(c.subagentConcurrency)});if(text!==null)try{await this.update({subagentConcurrency:Number(text)});}catch(e){this.ui.note(e.message,true);}continue;}
       if(action.startsWith('run:')){const r=await this.agents.status(action.slice(4));const choice=await this.ui.choose(r.name,[{value:'status',label:'Show status and result'},{value:'send',label:'Send a follow-up'},{value:'stop',label:'Stop this worker'}]);if(choice==='status')this.ui.note(JSON.stringify(r,null,2));if(choice==='stop')await this.jobs.stop(r.jobId);if(choice==='send'){const prompt=await this.ui.ask({type:'text',message:'Follow-up task'});if(prompt){const entry=this.tools.entries.get('agent');if(entry)await entry.execute({action:'send',id:r.id,prompt});}}continue;}

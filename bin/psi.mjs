@@ -44,7 +44,7 @@ Usage: psi [options] [prompt]
   -h, --help                Show help
   -v, --version             Show version
 
-Interactive: /model /effort /accounts /directory /settings /agents /loop /help
+Interactive: /model /effort /accounts /directory /settings /subagents /loop /help
 Shift+Tab: plan/execute. Escape twice: stop. Enter while busy: queue.
 Tools stay within approved directories, without approval prompts.
 Settings and credentials: PSI_HOME (default ~/.psi)

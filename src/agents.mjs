@@ -10,7 +10,7 @@ export class Agents {
  async records(){return this.session.state.agents||[];}
  async spawn({profile,prompt}){
   const a=this.app,c=a.engine.config;if(!c.overkill)throw new Error('Enable OVERKILL with Tab inside /effort first.');if(c.subagentDepth>=1)throw new Error('Subagents cannot create nested subagents.');
-  const spec=c.agents.find(p=>p.id===profile);if(!spec)throw new Error('Unknown agent profile. Configure workers in /agents or /settings.');
+  const spec=c.agents.find(p=>p.id===profile);if(!spec)throw new Error('Unknown agent profile. Configure workers in /subagents or /settings.');
   const active=[];for(const r of await this.records()){const j=await a.jobs.get(r.jobId).catch(()=>null);if(j&&['running','queued'].includes(j.status))active.push(r);}
   if(active.length>=c.subagentConcurrency)throw new Error(`All ${c.subagentConcurrency} subagent slots are occupied. Await a worker first.`);
   const child=await Session.create(a.session.meta.cwd,this.home),id=randomUUID(),manifest=join(child.dir,'worker.json');

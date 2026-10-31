@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **85 passing tests**.
+- `npm run verify`: syntax checks and **89 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -83,3 +83,13 @@ Actual API invoices and real competition transactions were not exercised in this
 - Historical statistics verify calendar periods, token categories, worker receipt deduplication, overlapping wall time versus summed agent time, incremental partial appends, truncation, active process locks and crash recovery. The private cache excludes prompt content, and reading statistics does not repair or mutate session journals.
 - The real `/stats` overlay is exercised at 100×32, 68×24 and 28×18, including period navigation, one-Escape closure, unchanged draft and zero model calls.
 - Real renderer previews in `docs/effort.png`, `docs/stats.png` and `docs/overkill.png` use illustrative data. They are UI evidence, not live account or competition results.
+
+## Compact menus and repository identity (0.2.5)
+
+- The original normal-height terminal logo frame was compared with 0.2.4 and matches exactly when OVERKILL is off. Repository SVG/PNG art is redesigned separately.
+- Header visibility is exercised through effort, statistics, settings and tool panels. Narrow terminals retain their prompt and selected tab; compact panels do not create full-screen overlays.
+- Quota tests verify five-hour-first ordering beside the account, all windows as remaining percentages, an empty bar at 0% left, a full bar at 100% left, and the selected accent rather than fixed blue. Goal fallback is explicitly estimated work remaining.
+- Animation checks compare the input borders, quota meter and terminal logo at different times, and verify static reduced motion and timer cleanup. OVERKILL uses a filled badge and heavier borders.
+- Removed slash commands are rejected, without hidden aliases. The tool list is a paged name grid. Compaction model selection remains in Settings; account/provider capability remains intact.
+- Real local HTTP and worker fixtures verify reload cancellation, stopping on confirmation, confirmation for a worker still running after its parent, rebuilt registries/tools, and preserved session identity, context, directories, queued messages and draft. Reload performs no replacement inference call.
+- `npm run preview:ui` renders actual terminal frames with illustrative activity; `npm run preview:brand` renders the code-native vectors without external image/font services or paid model calls.

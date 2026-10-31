@@ -1,9 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 176 184" fill="none" role="img" aria-labelledby="title">
-  <title id="title">Psi, an extruded Greek capital psi</title>
-  <defs><path id="psi" d="M72 14H88V105C107 102 117 90 117 70V30H135V70C135 101 118 120 88 124V163H72V124C42 120 25 101 25 70V30H43V70C43 90 57 102 72 105V14Z"/></defs>
-  <g transform="translate(5 2) rotate(-4 80 90)">
-    <use href="#psi" transform="translate(10 8)" fill="#28664f"/>
-    <use href="#psi" transform="translate(6 5)" fill="#3e926c"/>
-    <use href="#psi" fill="#8bdcb5" stroke="#b1e9cc" stroke-width="1" stroke-linejoin="round"/>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 192" role="img" aria-labelledby="t"><title id="t">Psi, a cut-tip Greek psi</title><g transform="translate(5 4)"><defs><path id="psi" d="M72 8H88V106C112 102 126 88 126 66V32L144 14V66C144 99 122 122 88 126V172H72V126C38 122 16 99 16 66V14L34 32V66C34 88 48 102 72 106V8Z"/></defs><use href="#psi" transform="translate(9 9)" fill="#174f3b"/><use href="#psi" transform="translate(5 5)" fill="#388663"/><use href="#psi" fill="#93e4b6" stroke="#c6f5d8" stroke-width="1"/></g></svg>

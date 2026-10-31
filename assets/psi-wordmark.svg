@@ -1,6 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 184" role="img" aria-labelledby="title">
-  <title id="title">Psi</title>
-  <defs><path id="psi" d="M72 14H88V105C107 102 117 90 117 70V30H135V70C135 101 118 120 88 124V163H72V124C42 120 25 101 25 70V30H43V70C43 90 57 102 72 105V14Z"/></defs>
-  <g transform="translate(5 2) rotate(-4 80 90)"><use href="#psi" transform="translate(10 8)" fill="#28664f"/><use href="#psi" transform="translate(6 5)" fill="#3e926c"/><use href="#psi" fill="#8bdcb5" stroke="#b1e9cc" stroke-width="1" stroke-linejoin="round"/></g>
-  <text x="206" y="112" fill="#80cda8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="600" font-size="66" letter-spacing="12">PSI</text>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 510 192" role="img" aria-labelledby="t"><title id="t">Psi</title><g transform="translate(5 4)"><defs><path id="psi" d="M72 8H88V106C112 102 126 88 126 66V32L144 14V66C144 99 122 122 88 126V172H72V126C38 122 16 99 16 66V14L34 32V66C34 88 48 102 72 106V8Z"/></defs><use href="#psi" transform="translate(9 9)" fill="#174f3b"/><use href="#psi" transform="translate(5 5)" fill="#388663"/><use href="#psi" fill="#93e4b6" stroke="#c6f5d8" stroke-width="1"/></g><path d="M0 108V0H52L72 20V52L52 72H20V108H0ZM20 20V52H44L52 44V28L44 20H20Z M184 0H124L104 20V45L124 65H164V88H104V108H164L184 88V65L164 45H124V20H184V0Z M216 0H264V18H249V90H264V108H216V90H231V18H216V0Z" transform="translate(220 42)" fill="#93e4b6" fill-rule="evenodd"/></svg>

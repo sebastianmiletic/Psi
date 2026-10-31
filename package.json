@@ -1,6 +1,6 @@
 {
   "name": "psi-harness",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "type": "module",
   "description": "Lightweight AI harness made for long and intensive loops.",
@@ -17,6 +17,7 @@
     "verify": "npm run check && npm test",
     "catalog:sync": "node scripts/sync-catalog.mjs",
     "install:local": "node scripts/install-local.mjs",
+    "preview:brand": "node scripts/brand-assets.mjs",
     "preview:ui": "node scripts/preview-ui.mjs",
     "release:build": "node scripts/release.mjs",
     "bench:harness": "node benchmarks/run_harness_bench.mjs"

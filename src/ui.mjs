@@ -3,11 +3,11 @@ import {
   CombinedAutocompleteProvider, matchesKey, truncateToWidth, CURSOR_MARKER,
   colorToRgb, parseColor, visibleWidth,
 } from '@earendil-works/pi-tui';
-import { accentText } from './theme.mjs';
+import { accentText,accentBadge } from './theme.mjs';
 import { usageLabel,applicableQuota } from './usage.mjs';
-import { EffortPanel,StatsPanel } from './panels.mjs';
+import { EffortPanel,StatsPanel,ToolsPanel } from './panels.mjs';
 import { PsiHeader, PsiAnimation } from './logo.mjs';
-import { Composer,UserMessage,AssistantMessage,ToolMessage } from './message-ui.mjs';
+import { Composer,flowAccent,UserMessage,AssistantMessage,ToolMessage } from './message-ui.mjs';
 import { cleanTerminal, redact } from './storage.mjs';
 
 const rgb = colorToRgb(parseColor('oklch(68% 0.105 162)'));
@@ -23,10 +23,10 @@ const markdownTheme = {
   bold, italic: t => `\x1b[3m${t}\x1b[23m`, strikethrough: t => `\x1b[9m${t}\x1b[29m`, underline: t => `\x1b[4m${t}\x1b[24m`,
 };
 export const commands = [
- ['directory','Manage allowed working directories'],['settings','Appearance, accounts, workers and execution'],['agents','Configure and inspect OVERKILL workers'],['update','Install the latest GitHub release'],
- ['project','Inspect the Battlecode baseline and controller'],['experiments','Inspect durable experiments'],['logo','Open the Psi logo'],['model','Choose a model'],['effort','Thinking effort; Tab toggles OVERKILL'],['accounts','Login, switch or remove accounts'],
- ['provider','Add a custom endpoint'],['loop','Set a persistent objective'],['new','Start a fresh session'],['resume','Resume a saved session'],['cd','Start in another workspace'],['usage','Reported account usage'],['tools','Available AI tools'],['cost','Session token and cost totals'],
- ['stats','Weekly, monthly and all-time activity'],['summary-model','Choose the compaction model'],['compact','Summarize earlier context'],['checkpoint','Read or write the progress note'],['profile','Battlecode or general guidance'],['refresh','Refresh model catalog'],['status','Workspace and run state'],['export','Export session Markdown'],['help','Commands and keyboard shortcuts'],['quit','Exit Psi']
+ ['model','Model'],['effort','Effort + OVERKILL'],['accounts','Accounts'],['directory','Working directories'],['settings','Settings'],['subagents','Subagents'],
+ ['loop','Persistent goal'],['stats','Activity'],['tools','Tools'],['usage','Account usage'],['cost','Session cost'],['new','New session'],['resume','Resume'],
+ ['refresh','Reload Psi'],['compact','Compact context'],['project','Battlecode project'],['experiments','Experiments'],['profile','Agent profile'],
+ ['logo','3D logo'],['update','Update Psi'],['status','Session status'],['export','Export session'],['help','Commands'],['quit','Quit']
 ].map(([name,description])=>({name,description}));
 
 class Transcript extends Container {
@@ -60,27 +60,30 @@ export class TerminalUI {
       this.editor.addToHistory(text); this.editor.setText('');
       void app.submit(text).catch(e => this.note(e.message, true));
     };
-    this.header = new PsiHeader({ app, onActivate: () => this.showLogo(), format: t => bold(safe(t)), subdued: t => dim(safe(t)) });
+    this.header = new PsiHeader({ app, onActivate: () => this.showLogo(), format: t => bold(safe(t)), subdued: t => dim(safe(t)),terminal,glow:()=>this.isOverkill()?(app.engine.config.animations===false?0:this.now()/360):null });
     this.footer = { invalidate() {}, render: width => {
       const c = app.engine.config;
       const slash = c.model.indexOf('/');
       const model = safe(slash >= 0 ? c.model.slice(slash + 1) : c.model);
       const state={...c,...app.engine.pendingSettings,...this.effortPreview};
-      const right = truncateToWidth(`${safe(state.effort)}${state.overkill?' · OVERKILL':''}`, Math.max(0,width-3));
-      const left = truncateToWidth(`  ${model}`, Math.max(0,width-visibleWidth(right)-3));
-      const gap = Math.max(1,width-visibleWidth(left)-visibleWidth(right)-1);
-      return [left+' '.repeat(gap)+(state.overkill?this.paint(right):dim(right)), ...(app.engine.config.showUsage===false?[]:[truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage,{sessionCost:app.session.meteredCost,costKnown:app.session.meteredCostKnown,omitQuota:applicableQuota(app.activeUsage)?.label}))),width)])];
+      const right = truncateToWidth(`${safe(state.effort)}${state.overkill?' · OVERKILL':''}`, Math.max(0,width-(state.overkill?5:3)));
+      const rightWidth=visibleWidth(right)+(state.overkill?2:0);
+      const left = truncateToWidth(`  ${model}`, Math.max(0,width-rightWidth-3));
+      const gap = Math.max(1,width-visibleWidth(left)-rightWidth-1);
+      return [left+' '.repeat(gap)+(state.overkill?accentBadge(' '+right+' ',c):dim(right)), ...(app.engine.config.showUsage===false?[]:[truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage,{sessionCost:app.session.meteredCost,costKnown:app.session.meteredCostKnown,remaining:true,compact:true}))),width)])];
     } };
     this.progressBar={invalidate(){},render:width=>{
-      const quota=applicableQuota(app.activeUsage),state=app.session.state.progress,pct=Math.round(Math.max(0,Math.min(100,quota?.usedPercent??state?.percent??0)));
-      const label=quota?(width>=70?`${quota.label} limit · ${pct}% used · ${100-pct}% left`:`${quota.label} · ${pct}% used`):(width>=70?`Goal · ${pct}% · ${100-pct}% remaining · est.`:`Goal ${pct}% · est.`);
+      const quota=applicableQuota(app.activeUsage),state=app.session.state.progress;
+      const pct=Math.round(Math.max(0,Math.min(100,100-(quota?.usedPercent??state?.percent??0))));
+      const label=quota?`${pct}% left`:`Goal · ${pct}% left · est.`;
       const available=Math.max(0,width-visibleWidth(label)-6),size=Math.min(30,available),filled=Math.round(size*pct/100);
-      return[truncateToWidth('  '+accentText('█'.repeat(filled),{accent:'blue'})+dim('░'.repeat(size-filled))+'  '+dim(safe(label)),width)];
+      const blocks='█'.repeat(filled)+'░'.repeat(size-filled),painted=this.isOverkill()?flowAccent(blocks,this,17):this.paint('█'.repeat(filled))+dim(this.paint('░'.repeat(size-filled)));
+      return[truncateToWidth('  '+painted+'  '+dim(label),width)];
     }};
     this.scroll = new ScrollView(this.transcript, { follow: 'end', primary: true, scrollbar: 'auto' });
     this.panelScroll = new ScrollView(this.panel, { follow: 'end', scrollbar: 'auto' });
     this.layout = new VStack([
-      { component: this.header, basis: 'auto', shrink: 1, minSize: 0, visible: viewport => viewport.height >= 14 && app.engine.config.showLogo!==false && !this.pending },
+      { component: this.header, basis: 'auto', shrink: 0, minSize: 0, visible: viewport => viewport.height >= 10 && app.engine.config.showLogo!==false },
       { component: this.scroll, basis: 0, grow: 1, minSize: 1 },
       { component: this.panelScroll, basis: 'auto', shrink: 1, minSize: 0 },
       { component: this.editor, basis: 'auto', shrink: 1, minSize: 3 },
@@ -188,31 +191,36 @@ export class TerminalUI {
     if (event.type === 'run_end') {this.finishResponse(event.status==='stopped'?'stopped':['error','limited'].includes(event.status)?'partial response':'');this.activity='';this.openTools.clear();this.syncMotion();}
     this.render();
   }
-  async choose(title, items, options={}) {
-    if (!items.length) { this.note('No items available.'); return null; }
-    return this.interact(title, ({ resolve, cancel }) => {
-      const input = new Input({ prompt: '  Search: ', placeholder: 'type to filter' });
-      input.focused = true;
-      const list = new SelectList(items, 9, this.selectionTheme, { minPrimaryColumnWidth: 22, maxPrimaryColumnWidth: 55 });
-      list.onSelect = item => resolve(item.value); list.onCancel = cancel;
-      const component = {
-        focused: true, invalidate() { input.invalidate(); list.invalidate(); },
-        render: width => [...(options.status?[dim('  '+options.status()),'']:[]),...input.render(width), '', ...list.render(width), '', dim('  ↑ ↓ choose   enter select   esc back')],
-        handleInput: data => {
-          if(matchesKey(data,'tab')&&options.onTab){void options.onTab().then(()=>this.render()).catch(e=>this.note(e.message,true));return;}
-          if (matchesKey(data, 'up') || matchesKey(data, 'down') || matchesKey(data, 'enter') || matchesKey(data, 'escape') || matchesKey(data, 'pageUp') || matchesKey(data, 'pageDown')) list.handleInput(data);
-          else { input.handleInput(data); list.setFilter(input.getValue()); }
-          this.render();
+  panelRows(){
+    const header=this.app.engine.config.showLogo===false||this.terminal.rows<10?0:this.header.render(this.terminal.columns).length;
+    const editor=Math.min(6,this.editor.render(this.terminal.columns).length);
+    return Math.max(3,this.terminal.rows-header-editor-this.footer.render(this.terminal.columns).length-2);
+  }
+  async choose(title,items,options={}){
+    if(!items.length){this.note('No items');return null;}
+    return this.interact('',({resolve,cancel})=>{
+      const input=new Input({prompt:'  › ',placeholder:'filter'});input.focused=true;
+      const list=new SelectList(items,6,this.selectionTheme,{minPrimaryColumnWidth:18,maxPrimaryColumnWidth:42});
+      list.onSelect=item=>resolve(item.value);list.onCancel=cancel;
+      const component={focused:true,invalidate(){input.invalidate();list.invalidate();},
+        render:width=>{
+          list.maxVisible=Math.max(1,Math.min(7,this.panelRows()-4));
+          return [truncateToWidth('  '+bold(safe(title)),width),...input.render(width),...list.render(width),truncateToWidth(dim('  ↑ ↓  ↵ · esc'),width)];
         },
-      };
-      return component;
+        handleInput:data=>{
+          if(matchesKey(data,'tab')&&options.onTab){void options.onTab().then(()=>this.render()).catch(e=>this.note(e.message,true));return;}
+          if(['up','down','enter','escape','pageUp','pageDown'].some(k=>matchesKey(data,k)))list.handleInput(data);
+          else{input.handleInput(data);list.setFilter(input.getValue());}this.render();
+        }
+      };return component;
     });
   }
   async effortMenu(options){
     try{return await this.interact('',({resolve,cancel})=>new EffortPanel(this,{...options,resolve,cancel}));}
     finally{this.effortPreview=null;this.syncMotion();this.render();}
   }
-  async statsMenu(refresh){return this.interact('',({resolve,cancel})=>new StatsPanel(this,{resolve,cancel,refresh}),undefined,{overlay:true});}
+  async statsMenu(refresh){return this.interact('',({cancel})=>new StatsPanel(this,{cancel,refresh}));}
+  async toolsMenu(tools){return this.interact('',({cancel})=>new ToolsPanel(this,{tools,cancel}));}
   async ask(prompt) {
     if (prompt.type === 'select') return this.choose(prompt.message, prompt.options.map(o => ({ value: o.id, label: o.label, description: o.description })));
     return this.interact(prompt.message, ({ resolve, cancel }) => {
@@ -231,7 +239,7 @@ export class TerminalUI {
       };
       const cancel = () => finish(null);
       this.pending = { cancel }; signal?.addEventListener('abort', cancel, { once: true });
-      if(title)this.panel.addChild(new Text(`  ${bold(safe(title))}`, 0, 1));
+      if(title)this.panel.addChild(new Text(`  ${bold(safe(title))}`, 0, 0));
       const component = make({ resolve: finish, cancel });
       if(overlay)handle=this.tui.showOverlay(component,{width:'100%',maxHeight:'100%',row:0,col:0,margin:0});else this.panel.addChild(component);
       this.editor.disableSubmit = true; this.tui.setFocus(component); this.render();

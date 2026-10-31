@@ -37,7 +37,7 @@ test('footer hides provider, right-aligns thinking, and shows the active account
   const lines = ui.footer.render(100).map(stripTerminalSequences);
   assert.ok(lines[0].startsWith('  test')); assert.ok(lines[0].endsWith('off'));
   assert.equal(visibleWidth(lines[0]),99); assert.doesNotMatch(lines.join('\n'), /fixture|987|thinking/);
-  assert.match(lines[1], /Personal.*session.*1.3k tokens/);
+  assert.match(lines[1], /Personal.*session/);
   assert.match(lines[1], /session/);
   f.app.engine.busy = false;
 });
@@ -90,5 +90,5 @@ test('reduced motion keeps response and tool state visible without animation tim
   const call={id:'read-1',name:'read',arguments:{path:'src/main.cpp'}};ui.event({type:'tool_start',call});assert.match(frame(ui).join('\n'),/read.*src\/main.cpp.*running/);assert.ok(!ui.motionTimer);
   ui.event({type:'tool_end',call,duration:200,result:{isError:false,content:[{type:'text',text:'Verified source'}]}});assert.equal(ui.transcript.children.length,2);assert.match(frame(ui).join('\n'),/read.*done.*0.2s/);assert.match(frame(ui).join('\n'),/Verified source/);
   const background={id:'shell-1',name:'bash',arguments:{command:'run a long benchmark'}};ui.event({type:'tool_start',call:background});ui.event({type:'tool_end',call:background,duration:100,result:{isError:false,content:[{type:'text',text:JSON.stringify({id:'durable-job-1',status:'running',output:'Benchmark started'})}]}});assert.match(frame(ui).join('\n'),/job durable-job-1.*running/);
-  f.session.state.progress={percent:60};const progress=stripTerminalSequences(ui.progressBar.render(100)[0]);assert.match(progress,/█+░+/);assert.match(progress,/60%.*40% remaining/);
+  f.session.state.progress={percent:60};const progress=stripTerminalSequences(ui.progressBar.render(100)[0]);assert.match(progress,/█+░+/);assert.match(progress,/40% left/);
 });

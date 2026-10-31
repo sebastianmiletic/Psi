@@ -9,3 +9,5 @@ export function accentColor(config = {}) {
 }
 export function accentText(text, config) { const {r,g,b}=accentColor(config); return `\x1b[38;2;${r};${g};${b}m${text}\x1b[39m`; }
 export function validAccent(value) { try { parseColor(accents[value] || value); return true; } catch { return false; } }
+
+export function accentBadge(text,config) { const {r,g,b}=accentColor(config);return `\x1b[1m\x1b[48;2;${r};${g};${b}m\x1b[38;2;16;25;22m${text}\x1b[39;49m\x1b[22m`; }
