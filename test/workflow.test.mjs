@@ -18,11 +18,11 @@ test('directory grants resolve symlinks, persist across resume, and can be revok
  await f.app.tools.policy.change('add',outside);assert.equal((await call(f,'read',{path:join(outside,'private.txt')})).isError,false);
  await f.app.tools.policy.change('remove',outside);assert.equal((await call(f,'read',{path:join(outside,'private.txt')})).isError,true);
 });
-test('shell commands cannot read/write a sibling directory, even through Python or inherited environment secrets',{skip:process.platform!=='darwin'},async t=>{
+test('shell commands cannot read/write a sibling directory, even through Python or inherited environment secrets',{skip:!['darwin','linux'].includes(process.platform)},async t=>{
  const f=await fixture(t,()=>({text:'unused'})),outside=await mkdtemp(join(tmpdir(),'psi-forbidden-'));t.after(()=>rm(outside,{recursive:true,force:true}));await writeFile(join(outside,'secret.txt'),'secret');
  process.env.PSI_TEST_SECRET='must-not-leak';t.after(()=>delete process.env.PSI_TEST_SECRET);
  const command=`python3 -c 'import os,pathlib; print("env",os.getenv("PSI_TEST_SECRET")); pathlib.Path(${JSON.stringify(join(outside,'secret.txt'))}).read_text()'`;
- const result=await call(f,'bash',{command,yield_ms:2000});assert.equal(result.isError,true);assert.match(result.content[0].text,/PermissionError|Operation not permitted/);assert.doesNotMatch(result.content[0].text,/must-not-leak/);
+ const result=await call(f,'bash',{command,yield_ms:2000});assert.equal(result.isError,true);assert.match(result.content[0].text,/PermissionError|Operation not permitted|FileNotFoundError/);assert.doesNotMatch(result.content[0].text,/must-not-leak/);
  const write=await call(f,'bash',{command:`printf forbidden > '${join(outside,'written.txt')}'`,yield_ms:2000});assert.equal(write.isError,true);await assert.rejects(readFile(join(outside,'written.txt')));
 });
 test('plan mode blocks mutations and shell commands while recording a durable plan',async t=>{
