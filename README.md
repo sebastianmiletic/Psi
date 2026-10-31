@@ -83,7 +83,7 @@ Answers use clean Markdown without repeated assistant headings. Reads and search
 
 ![Account reset countdowns](docs/accounts.png)
 
-Account menus show provider-reported five-hour and weekly reset countdowns and available reset credits. First prompts get an automatic chat title; `/name` locks your own title. Use `/directory /path/to/project` or start with `psi -C /path/to/project` to work elsewhere without changing your shell directory.
+Account menus show provider-reported five-hour and weekly reset countdowns and available reset credits. Empty or unnamed drafts stay out of saved history and are removed on close or session switching. First prompts get an automatic chat title; `/name` locks your own title. Use `/directory /path/to/project` or start with `psi -C /path/to/project` to work elsewhere without changing your shell directory.
 
 Budget, request limits, output tokens and **Compaction model** stay in `/settings`.
 

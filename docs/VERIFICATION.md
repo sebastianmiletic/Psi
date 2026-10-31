@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **130 passing tests**.
+- `npm run verify`: syntax checks and **135 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -161,3 +161,8 @@ Actual API invoices and real competition transactions were not exercised in this
 ## Portable stats readiness (0.2.17)
 
 - Windows release validation exposed an existing fixed 60 ms wait in the stats panel test. The test now waits for the loaded Tokens state, with a bounded deadline, before checking the layout. No runtime behavior or model call was added. The failed 0.2.16 release remains unpublished.
+
+## Unsaved session drafts (0.2.18)
+
+- Session history requires a real message and a title. The first message persists its generated title; settings-only and named-but-empty sessions remain drafts. Empty sessions are removed on close and session switching after checking the durable journal, lock and active jobs.
+- Tests cover empty/named drafts, first-message saving, `/new`, preserving a message committed by another writer, active locks, and legacy snapshots. No inference was used.

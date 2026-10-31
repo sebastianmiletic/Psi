@@ -79,7 +79,7 @@ test('closing waits for a mode change to settle and does not restart quota monit
 
 test('saved workspace and chat title stay above the composer across resume, directory switching and narrow menus',async t=>{
  const {app,ui,terminal,root}=await setup(t);const {mkdir,writeFile,realpath}=await import('node:fs/promises');
- const folder=join(root,'Other project');await mkdir(folder);await writeFile(join(folder,'marker.txt'),'other workspace');await app.session.rename('Replay experiments');ui.markdown('Keep this conversation visible.');
+ const folder=join(root,'Other project');await mkdir(folder);await writeFile(join(folder,'marker.txt'),'other workspace');await app.session.message({role:'user',content:'Inspect replay experiments',timestamp:Date.now()});await app.session.rename('Replay experiments');ui.markdown('Keep this conversation visible.');
  await app.submit('/directory "'+folder+'"');const canonical=await realpath(folder);assert.equal(app.session.meta.cwd,canonical);assert.equal(app.tools.cwd,canonical);assert.deepEqual(await app.tools.policy.roots(),[canonical]);assert.match(frame(ui).join('\n'),/Keep this conversation visible/);
  const read=await app.tools.call({id:'workspace',name:'read',arguments:{path:'marker.txt'}});assert.equal(read.isError,false);assert.match(read.content[0].text,/other workspace/);
  const saved=await Session.load(app.session.meta.id,app.home);assert.equal(saved.meta.cwd,canonical);await app.changeSession(await Session.create(root,app.home));await app.changeSession(saved);assert.equal(app.tools.cwd,canonical);assert.equal(app.session.meta.title,'Replay experiments');

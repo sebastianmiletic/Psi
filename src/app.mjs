@@ -113,7 +113,7 @@ export class App {
   }
   async changeSession(session,{preserveTranscript=false}={}) {
     if (this.engine.busy) throw new Error('Stop the current run first.');
-    await this.agents.dispose();if(session.meta.id===this.session.meta.id){await session.assertLatest().catch(async()=>{session=await Session.load(session.meta.id,this.home);});}await this.tools.close(); this.session = session; this.bind();
+    await this.agents.dispose();if(session.meta.id===this.session.meta.id){await session.assertLatest().catch(async()=>{session=await Session.load(session.meta.id,this.home);});}await this.tools.close();if(session.meta.id!==this.session.meta.id&&!((await this.jobs.list()).some(j=>j.sessionId===this.session.meta.id&&['running','queued'].includes(j.status))))await this.session.discardEmpty();this.session = session; this.bind();
     if (this.ui) { const { CombinedAutocompleteProvider } = await import('@earendil-works/pi-tui'); const { commands } = await import('./ui.mjs'); this.ui.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, session.meta.cwd)); }
     await this.engine.recoverReview();await this.refreshAccount();
     if(this.ui)this.startUsageMonitor();
@@ -331,6 +331,6 @@ export class App {
   }
   async close() {
     if (this.closing) return; this.closing = true;
-    clearInterval(this.quotaTimer);this.quotaController?.abort();this.authController?.abort(); this.engine.stop();this.ui?.stop();await this.ui?.modeSwitch;await this.agents.dispose();await this.tools.close(); this.options.onClose?.();
+    clearInterval(this.quotaTimer);this.quotaController?.abort();this.authController?.abort(); this.engine.stop();this.ui?.stop();await this.ui?.modeSwitch;await this.agents.dispose();await this.tools.close();if(!this.engine.busy&&typeof this.session.discardEmpty==='function'&&!((await this.jobs.list()).some(j=>j.sessionId===this.session.meta.id&&['running','queued'].includes(j.status))))await this.session.discardEmpty();this.options.onClose?.();
   }
 }
