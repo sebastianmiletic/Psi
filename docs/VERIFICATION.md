@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **118 passing tests**.
+- `npm run verify`: syntax checks and **119 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -140,3 +140,8 @@ Actual API invoices and real competition transactions were not exercised in this
 - Header tests check the chat name above the saved directory at wide and narrow sizes and in menus. Selecting a workspace rebuilds file/tool resolution and survives changing/resuming chats without adopting the launcher directory.
 - Model and account pickers share the real composer; account tests verify draft restoration, no inference or conversation mutations, per-account countdown/credit rows, concurrent refreshes and ignored late updates after Escape.
 - `session_title` permits one automatic title during normal model work, including plan mode. Manual names win, including concurrent naming and session reload. Missing subscription windows and API plans omit reset metadata; unavailable or cached data is identified. No live provider credentials or paid inference were needed.
+
+## Direct workspace selection (0.2.14)
+
+- `/directory <path>` is the sole directory command; switching rebuilds tools and replaces the previous workspace grant after stopping active session processes. Existing symlink isolation, saved-directory resume and reload checks cover the change.
+- Header labels use `~/` plus the home-relative path with forward slashes. A regression check excludes sibling homes from tilde shortening. Paths outside the home retain their absolute identity.

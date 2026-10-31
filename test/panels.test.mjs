@@ -47,7 +47,7 @@ test('tool names stay in a compact paged panel, while removed slash commands are
 
 test('reload reads disk settings, rebuilds tools and accounts, and preserves session state and draft',async t=>{
  const {app,ui,session,root,config,requests}=await setup(t);const {writeFile,mkdir,realpath}=await import('node:fs/promises');const {join}=await import('node:path');
- const extra=join(root,'extra');await mkdir(extra);await app.tools.policy.change('add',extra);
+ const extra=join(root,'extra');await mkdir(extra);await app.submit('/directory '+extra);
  await session.message({role:'user',content:'Saved context',timestamp:Date.now()});await session.event({type:'state',state:{loopGoal:'Unfinished goal',queuedMessages:['Next task']}});
  await app.update({accent:'rose'});await writeFile(join(app.home,'config.json'),JSON.stringify({...config,accent:'cyan',checkForUpdates:false}));
  const oldEngine=app.engine,oldTools=app.tools,oldRegistry=app.registry;let closed=false;const close=oldTools.close.bind(oldTools);oldTools.close=async()=>{closed=true;await close();};ui.editor.setText('Preserve draft');

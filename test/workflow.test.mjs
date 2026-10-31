@@ -11,12 +11,12 @@ import { importPi } from '../src/pi-import.mjs';
 import { newer,checkUpdate } from '../src/updates.mjs';
 const call=(f,name,args)=>f.app.tools.call({id:'test-'+name,name,arguments:args});
 
-test('directory grants resolve symlinks, persist across resume, and can be revoked',async t=>{
+test('directory selection resolves symlinks and replaces the previous workspace grant',async t=>{
  const f=await fixture(t,()=>({text:'unused'})),outside=await mkdtemp(join(tmpdir(),'psi-outside-'));t.after(()=>rm(outside,{recursive:true,force:true}));await writeFile(join(outside,'private.txt'),'private');
  assert.equal((await call(f,'read',{path:join(outside,'private.txt')})).isError,true);
  if(process.platform!=='win32'){await symlink(outside,join(f.root,'escape'));assert.equal((await call(f,'write',{path:'escape/created.txt',content:'no'})).isError,true);}
- await f.app.tools.policy.change('add',outside);assert.equal((await call(f,'read',{path:join(outside,'private.txt')})).isError,false);
- await f.app.tools.policy.change('remove',outside);assert.equal((await call(f,'read',{path:join(outside,'private.txt')})).isError,true);
+ await f.app.submit('/directory '+outside);assert.equal((await call(f,'read',{path:join(outside,'private.txt')})).isError,false);
+ await f.app.submit('/directory '+f.root);assert.equal((await call(f,'read',{path:join(outside,'private.txt')})).isError,true);
 });
 test('shell commands cannot read/write a sibling directory, even through Python or inherited environment secrets',{skip:!['darwin','linux'].includes(process.platform)},async t=>{
  const f=await fixture(t,()=>({text:'unused'})),outside=await mkdtemp(join(tmpdir(),'psi-forbidden-'));t.after(()=>rm(outside,{recursive:true,force:true}));await writeFile(join(outside,'secret.txt'),'secret');

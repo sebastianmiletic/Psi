@@ -11,19 +11,8 @@ export class Directories {
   async check(path,{internal=true,write=false}={}){
     const p=await canonical(resolve(this.cwd,path)),roots=await this.roots();
     if(internal&&!write&&['plan.json','checkpoint.md','events.jsonl'].some(n=>p===join(this.session.dir,n)))return p;
-    if(![...roots,...(internal?await Promise.all(this.internal.map(canonical)):[])].some(root=>within(root,p)))throw new Error(`Directory access denied: ${p}. The user can grant access with /directory add <path>.`);
+    if(![...roots,...(internal?await Promise.all(this.internal.map(canonical)):[])].some(root=>within(root,p)))throw new Error(`Directory access denied: ${p}. The user can grant access with /directory <path>.`);
     return p;
-  }
-  async change(action,path){
-    if(!['add','remove'].includes(action))return this.roots();
-    if(!path)throw new Error('Use /directory add <path> or /directory remove <path>.');
-    const p=await canonical(resolve(this.cwd,path.replace(/^~(?=\/|\\|$)/,process.env.HOME||process.env.USERPROFILE||'~')));
-    if(!(await stat(p)).isDirectory())throw new Error('Choose an existing directory.');
-    const roots=await this.roots();
-    const next=action==='add'?[...new Set([...roots,p])]:roots.filter(r=>r!==p);
-    if(!next.length)throw new Error('At least one working directory is required. Add another directory first.');
-    if(action==='remove'&&!roots.includes(p))throw new Error('That directory is not in the allowed list.');
-    await this.session.event({type:'state',state:{directories:next}});return next;
   }
   async sandbox(command,cwd,{write=true}={}){
     cwd=await this.check(cwd,{internal:false});

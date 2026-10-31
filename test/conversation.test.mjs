@@ -80,7 +80,7 @@ test('closing waits for a mode change to settle and does not restart quota monit
 test('saved workspace and chat title stay above the composer across resume, directory switching and narrow menus',async t=>{
  const {app,ui,terminal,root}=await setup(t);const {mkdir,writeFile,realpath}=await import('node:fs/promises');
  const folder=join(root,'Other project');await mkdir(folder);await writeFile(join(folder,'marker.txt'),'other workspace');await app.session.rename('Replay experiments');ui.markdown('Keep this conversation visible.');
- await app.submit('/directory "'+folder+'"');const canonical=await realpath(folder);assert.equal(app.session.meta.cwd,canonical);assert.equal(app.tools.cwd,canonical);assert.match(frame(ui).join('\n'),/Keep this conversation visible/);
+ await app.submit('/directory "'+folder+'"');const canonical=await realpath(folder);assert.equal(app.session.meta.cwd,canonical);assert.equal(app.tools.cwd,canonical);assert.deepEqual(await app.tools.policy.roots(),[canonical]);assert.match(frame(ui).join('\n'),/Keep this conversation visible/);
  const read=await app.tools.call({id:'workspace',name:'read',arguments:{path:'marker.txt'}});assert.equal(read.isError,false);assert.match(read.content[0].text,/other workspace/);
  const saved=await Session.load(app.session.meta.id,app.home);assert.equal(saved.meta.cwd,canonical);await app.changeSession(await Session.create(root,app.home));await app.changeSession(saved);assert.equal(app.tools.cwd,canonical);assert.equal(app.session.meta.title,'Replay experiments');
  for(const [columns,rows]of[[100,32],[40,18],[28,12]]){terminal.resize(columns,rows);const header=ui.header.render(columns).map(stripTerminalSequences);const title=header.findIndex(l=>l.includes('Replay experiments')),path=header.findIndex(l=>l.includes('Other project'));assert.ok(title>=0);assert.ok(path>title);assert.ok(header.every(l=>visibleWidth(l)<=columns));}
@@ -111,4 +111,11 @@ test('normal inference can assign its first chat title through the same persiste
  const {app,session,requests}=await fixture(t,(_,n)=>n===1?{call:{name:'session_title',args:{title:'Replay explorer'}}}:{text:'Ready to build the replay explorer.'});
  await app.engine.run('Build a replay explorer');assert.equal(session.meta.title,'Replay explorer');assert.equal(session.meta.autoNamed,true);assert.equal(requests.length,2);assert.match(requests[0].messages[0].content,/call session_title once/);assert.equal(session.messages.find(m=>m.role==='toolResult'&&m.toolName==='session_title').isError,false);
  assert.equal((await Session.load(session.meta.id,app.home)).meta.title,'Replay explorer');
+});
+
+
+test('directory header uses home-relative slash paths without shortening another user or a sibling home',async()=>{
+ const {workspaceLabel}=await import('../src/logo.mjs'),{resolve}=await import('node:path');
+ const home=resolve('Users','personal');assert.equal(workspaceLabel(join(home,'Coding','Psi'),home),'~/Coding/Psi');assert.equal(workspaceLabel(home,home),'~/');
+ const sibling=home+'-other';assert.equal(workspaceLabel(join(sibling,'Psi'),home),join(sibling,'Psi'));
 });

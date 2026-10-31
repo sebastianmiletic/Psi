@@ -43,7 +43,7 @@ The local `psi` launcher can be installed with `npm run install:local`. Then ope
 psi -C "/Users/sebastianmiletic/Coding/Cambridge Battlecode 2026"
 ```
 
-Use `/accounts` to connect an account, `/model` to choose a model, and type your task. The starting directory is granted automatically. Tools execute without approval prompts inside the approved directories; use `/directory add <path>` to grant another directory.
+Use `/accounts` to connect an account, `/model` to choose a model, and type your task. The starting directory is granted automatically. Tools execute without approval prompts inside the approved directories; use `/directory <path>` to select a different workspace.
 
 Requirements: Node.js 22.19 or newer, `rg` for file search, and your normal build/competition tools. Browser tools use an installed Chromium-family browser, including Brave on this Mac. No browser download is required. Set `PSI_CHROME_PATH` for another installation.
 
@@ -55,7 +55,7 @@ Interactive startup checks the latest stable GitHub release in the background, a
 
 ## Directories, planning and OVERKILL
 
-Psi grants the directory where the session starts. No AI tool can grant additional access. `/directory` lists the session's allowlist; `/directory add /path/to/project` and `/directory remove /path/to/project` change it. File tools resolve symlinks before access, and shell processes inherit an OS boundary. System executables/runtime libraries are available read-only; Psi manages its own scratch files, session artifacts and experiment evidence. Provider credentials and the real HOME are excluded from tool environments. The isolated shell HOME is a private scratch directory, so CLIs needing existing personal credentials require deliberate setup within the permitted directories.
+Psi grants the directory where the session starts. No AI tool can grant additional access. `/directory /path/to/project` selects the session workspace and replaces the previous directory grant. `/directory` alone shows the command syntax. File tools resolve symlinks before access, and shell processes inherit an OS boundary. System executables/runtime libraries are available read-only; Psi manages its own scratch files, session artifacts and experiment evidence. Provider credentials and the real HOME are excluded from tool environments. The isolated shell HOME is a private scratch directory, so CLIs needing existing personal credentials require deliberate setup within the permitted directories.
 
 Click the mode control on the top input border, or press **Shift+Tab**, for **PLAN** mode. The model can inspect files/websites and record a plan, but cannot edit project files, run shell/build commands, evaluate arbitrary browser scripts or perform live transactions. It can use the conversation to request missing information. Switch back to **EXECUTE** to implement the agreed plan. A mode change during inference is enforced before the returned tool calls run.
 
@@ -117,7 +117,7 @@ Custom endpoint prices default to unknown. Use `/settings` → **API rates** to 
 | `/model [provider/model or search]` | Search and choose a model |
 | `/effort [level]` | Choose a model-supported reasoning effort |
 | `/accounts` | Login, switch or remove accounts |
-| `/directory [add\|remove] <path>` | List, grant or revoke working directories |
+| `/directory <path>` | Select the working directory |
 | `/subagents` | Configure worker roles, independent models, thinking and limits |
 | `/update` | Install the latest GitHub release |
 | `/settings` | Searchable settings UI for appearance, accounts, models, limits and execution |
@@ -300,4 +300,4 @@ See [Reset details](RESETS.md) for banked Codex resets, provider reset schedules
 
 `/name My experiment` renames the current session. `/name` without an argument opens a title prompt. Names persist in the journal and session metadata, appear in `/resume` and session listings, and are included in exports. Naming does not clear context, goals, account data or files and works while inference is active. Escape cancels the prompt. Names are one line, up to 120 characters.
 
-Use `/directory /path/to/project` to select a workspace inside the current chat, or `psi -C /path/to/project` at startup. Psi saves the selected path in the session, rebuilds tools against it and retains the conversation and previously granted directories. `/directory add` and `/directory remove` continue to manage extra access independently. Resuming a chat always restores its own saved workspace rather than the launch directory.
+Use `/directory /path/to/project` to select a workspace inside the current chat, or `psi -C /path/to/project` at startup. Psi saves the selected path in the session, rebuilds tools against it and retains the conversation and replaces the previous workspace grant. Home-relative header paths use `~/`, for example `~/Coding/Psi`. Resuming a chat always restores its own saved workspace rather than the launch directory.

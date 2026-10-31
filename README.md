@@ -53,7 +53,7 @@ Installers verify GitHub's archive digest and preserve accounts/settings under `
 
 ## Less text. More control.
 
-The Ψ header stays visible above compact bottom menus. Chat names sit above the saved workspace path, including after resume. Model and account search live in the input bar, with names such as `5.6 luna`. Effort is a slider with OVERKILL on the right. Statistics are a heatmap. Weekly quota sits beside your account as **percent left**; the bottom meter prioritizes the five-hour window. OVERKILL makes the prompt, meter and terminal logo flow in your chosen accent.
+The Ψ header stays visible above compact bottom menus. Chat names sit above the saved workspace path (`~/Coding/Psi` for a project inside your home), including after resume. Model and account search live in the input bar, with names such as `5.6 luna`. Effort is a slider with OVERKILL on the right. Statistics are a heatmap. Weekly quota sits beside your account as **percent left**; the bottom meter prioritizes the five-hour window. OVERKILL makes the prompt, meter and terminal logo flow in your chosen accent.
 
 <table>
 <tr><td><a href="docs/effort.png"><img src="docs/effort.png" alt="Minimal effort slider and OVERKILL switch"></a></td><td><a href="docs/stats.png"><img src="docs/stats.png" alt="Compact statistics panel with a calendar heatmap"></a></td></tr>
@@ -66,7 +66,7 @@ The Ψ header stays visible above compact bottom menus. Chat names sit above the
 | `/accounts` | Add, switch or remove accounts |
 | `/subagents` | Roles, models, effort and concurrency |
 | `/loop` | Give Psi a persistent objective |
-| `/directory [path]` | Switch workspace or manage directory access |
+| `/directory <path>` | Switch working directory |
 | `/stats` · `/tools` | Activity and available tools |
 | `/reset` | Reset times and available account resets |
 | `/settings` · `/reload` | Configure Psi or reload disk settings |

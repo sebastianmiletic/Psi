@@ -24,7 +24,7 @@ const markdownTheme = {
   bold, italic: t => `\x1b[3m${t}\x1b[23m`, strikethrough: t => `\x1b[9m${t}\x1b[29m`, underline: t => `\x1b[4m${t}\x1b[24m`,
 };
 export const commands = [
- ['model','Model'],['effort','Effort + OVERKILL'],['accounts','Accounts'],['directory','Working directories'],['settings','Settings'],['subagents','Subagents'],
+ ['model','Model'],['effort','Effort + OVERKILL'],['accounts','Accounts'],['directory','Working directory'],['settings','Settings'],['subagents','Subagents'],
  ['loop','Persistent goal'],['stats','Activity'],['tools','Tools'],['usage','Account usage'],['reset','Quota resets'],['cost','Session cost'],['new','New session'],['resume','Resume'],['name','Rename session'],
  ['reload','Reload Psi'],['refresh','Reload Psi'],['compact','Compact context'],['project','Battlecode project'],['experiments','Experiments'],['profile','Agent profile'],
  ['logo','3D logo'],['update','Update Psi'],['status','Session status'],['export','Export session'],['help','Commands'],['quit','Quit']

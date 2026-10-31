@@ -1,3 +1,5 @@
+import { homedir } from 'node:os';
+import { relative,isAbsolute,sep } from 'node:path';
 import { accentColor } from './theme.mjs';
 import { colorToRgb, parseColor, truncateToWidth,visibleWidth } from '@earendil-works/pi-tui';
 
@@ -86,6 +88,12 @@ export function renderPsi(width, rows, phase = 0, animated = false, accent='sage
   return lines;
 }
 
+export function workspaceLabel(cwd,home=homedir()){
+  const path=relative(home,cwd);
+  if(!path)return '~/';
+  return !isAbsolute(path)&&path!=='..'&&!path.startsWith('..'+sep)?'~/'+path.split(sep).join('/'):cwd;
+}
+
 function headerPath(path,width){
   if(visibleWidth(path)<=width)return path;
   const tail=Array.from(path);while(tail.length&&visibleWidth(tail.join(''))>Math.max(0,width-1))tail.shift();return '…'+tail.join('');
@@ -99,7 +107,7 @@ export class PsiHeader {
   render(width) {
     const short=(this.terminal?.rows||32)<18;
     if(short||width<48){
-      const path=this.app.session.meta.cwd.replace(process.env.HOME||'\0','~');
+      const path=workspaceLabel(this.app.session.meta.cwd);
       this.bounds={x:1,y:0,width:1,height:1};
       return [truncateToWidth(' '+this.format('Ψ Psi'),width),truncateToWidth(' '+this.format(this.app.session.meta.title||'New session'),width),truncateToWidth(' '+this.subdued(headerPath(path,Math.max(1,width-1))),width),''];
     }
@@ -109,7 +117,7 @@ export class PsiHeader {
     const key = `${logoWidth}:${logoRows}:${accent}:${glow}`;
     if (this.cached?.key !== key) this.cached = { key, lines: renderPsi(logoWidth,logoRows,0,false,accent,glow) };
     this.bounds = { x: 1, y: 1, width: logoWidth, height: logoRows };
-    const path = this.app.session.meta.cwd.replace(process.env.HOME || '\0', '~');
+    const path = workspaceLabel(this.app.session.meta.cwd);
     const labels = {0:this.format('Ψ  Psi'),[logoRows-2]:this.format(this.app.session.meta.title||'New session'),[logoRows-1]:this.subdued(headerPath(path,Math.max(1,width-logoWidth-3)))};
     return ['', ...this.cached.lines.map((line, i) => truncateToWidth(' '+line+'  '+(labels[i] || ''), width)), ''];
   }

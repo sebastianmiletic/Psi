@@ -288,20 +288,16 @@ export class App {
   async effortMenu(){const c={...this.engine.config,...this.engine.pendingSettings};const result=await this.ui.effortMenu({levels:getSupportedThinkingLevels(this.engine.model),effort:c.effort,overkill:c.overkill});if(result)await this.update(result);}
   async setMode(mode){if(mode==='plan')await this.agents.stopAll({wait:true});await this.update({agentMode:mode});}
   async directoryCommand(arg){
-    const match=/^(add|remove)(?:\s+([\s\S]+))?$/.exec(arg.trim());
-    if(!arg.trim()){this.ui.note('Allowed directories:\n'+(await this.tools.policy.roots()).join('\n')+'\n/directory <path> · /directory add <path> · /directory remove <path>');return;}
-    if(!match)return this.setDirectory(arg.trim());
-    // Existing sandboxes keep their original allowlist, so stop them before revoking access.
-    if(this.engine.busy)this.engine.stop();await this.agents.stopAll({wait:true});
-    for(const job of await this.jobs.list())if(job.sessionId===this.session.meta.id&&['running','queued'].includes(job.status)){await this.jobs.stop(job.id);await this.jobs.awaitCompletion(job.id);}
-    while(this.engine.busy)await delay(25);
-    const path=match[2]?.replace(/^(["'])(.*)\1$/,'$2');const roots=await this.tools.policy.change(match[1],path);this.ui.note('Allowed directories:\n'+roots.join('\n'));
+    if(!arg.trim()){this.ui.note('/directory <path>');return;}
+    return this.setDirectory(arg.trim());
   }
   async setDirectory(value){
     const path=value.replace(/^(["'])(.*)\1$/,'$2').replace(/^~(?=\/|\\|$)/,process.env.HOME||process.env.USERPROFILE||'~');
     const cwd=await canonical(resolve(this.session.meta.cwd,path));if(!(await stat(cwd)).isDirectory())throw new Error('Choose an existing directory.');
-    const roots=[...new Set([...await this.tools.policy.roots(),cwd])];
-    this.engine.stop();await this.agents.stopAll({wait:true});while(this.engine.busy)await delay(25);
+    const roots=[cwd];
+    this.engine.stop();await this.agents.stopAll({wait:true});
+    for(const job of await this.jobs.list())if(job.sessionId===this.session.meta.id&&['running','queued'].includes(job.status)){await this.jobs.stop(job.id);await this.jobs.awaitCompletion(job.id);}
+    while(this.engine.busy)await delay(25);
     await this.session.directory(cwd,roots);await this.changeSession(this.session,{preserveTranscript:true});
   }
   async checkUpdates(){try{const update=await checkUpdate(this.home);if(!update.available||this.closing)return;if(this.engine.config.autoUpdate&&!this.engine.busy){this.ui.note((await updateInstallation(this.home,{release:update})).message);}else this.ui.note(`Psi ${update.latest} is available. Run /update or psi update, then restart.`);}catch{/* Offline startup remains quiet and fast. */}}
