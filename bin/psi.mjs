@@ -97,7 +97,7 @@ try {
   const app = new App(config, session, { home, onEvent: event => {
     if (v.json) console.log(JSON.stringify(event));
     else if (event.type === 'text_delta' && !event.summary) { process.stdout.write(cleanTerminal(event.delta)); outputOpen = true; }
-    else if (event.type === 'goal_complete') { if (outputOpen) process.stdout.write('\n'); console.log(cleanTerminal(event.summary)); if (event.evidence?.length) console.log(event.evidence.map(cleanTerminal).join('\n')); outputOpen = false; }
+    else if (event.type === 'final_response') { if (outputOpen) process.stdout.write('\n'); console.log(cleanTerminal(event.text)); outputOpen = false; }
     else if (event.type === 'tool_start') { if (outputOpen) process.stdout.write('\n'); outputOpen = false; console.error(`  ${event.call.name} ${cleanTerminal(String(event.call.arguments.command || event.call.arguments.path || event.call.arguments.url || '')).slice(0, 140)}`); }
     else if (['retry', 'stopped'].includes(event.type)) console.error(redact(event.error || 'Stopped.'));
   } });

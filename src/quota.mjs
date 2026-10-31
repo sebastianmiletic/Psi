@@ -37,7 +37,7 @@ export class QuotaMonitor {
   async read(account,{force,signal}) {
     return withLock(join(this.home,'quota',`${account.id}.lock`),async()=>{
       let data=await this.usage.get(account.id);
-      const interval=Math.max(60000,(this.config.quotaRefreshSeconds || 120)*1000);
+      const interval=Math.max(5000,Math.min(30,this.config.quotaRefreshSeconds||15)*1000);
       if ((!force && this.now()-Date.parse(data.quotaCheckedAt || '')<interval) || Date.parse(data.quotaRetryAt || '')>this.now()) return data;
       try {
         const models=this.registry.forAccount(account);

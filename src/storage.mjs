@@ -55,7 +55,7 @@ export const defaults = {
   maxSteps: 0, budget: 0, maxOutputTokens: 8192, contextFraction: 0.72,
   toolOutputChars: 16000, concurrency: 4, retries: 4, cacheRetention: 'long',
   debug: true, customProviders: [], accent: 'sage', showLogo: true, animations: true,
-  autoSwitchAccounts: false, accountSwitchThreshold: 100, quotaRefreshSeconds: 120,
+  autoSwitchAccounts: false, accountSwitchThreshold: 100, quotaRefreshSeconds: 15,
   fallbackModels: [], loopRetrySeconds: 30, showUsage: true, customPrices: {},
   agentMode:'execute', overkill:false, subagentConcurrency:3, subagentDepth:0, checkForUpdates:true, autoUpdate:false,
   agents:[1,2,3].map(i=>({id:'worker-'+i,name:'Worker '+i,job:'Complete the concrete task assigned by the parent and verify the result.',model:null,effort:'medium',mode:'execute',maxSteps:150})),

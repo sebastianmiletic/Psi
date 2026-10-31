@@ -1,0 +1,459 @@
+{
+  "benchmark": "Qihoo360/harness-bench",
+  "sourceCommit": "b8d89634c6f445fcc68ceb6744a59bef6cdf4863",
+  "psiCommit": "922b074118fe98806b4068cce537739e321bed7c",
+  "psiVersion": "0.2.15",
+  "codexVersion": "codex-cli 0.165.0",
+  "startedAt": "2026-10-31T08:01:03.010Z",
+  "completedAt": "2026-10-31T08:17:45.127Z",
+  "model": "gpt-6.1-sol",
+  "effort": "medium",
+  "overkill": false,
+  "subagents": false,
+  "sameAccount": true,
+  "psiProfile": "battlecode",
+  "trialsPerTask": 2,
+  "tasks": [
+    "009-safe-archive-extraction",
+    "010-layered-config-resolution",
+    "028-excel-like-cleaning"
+  ],
+  "protocol": "Native macOS copied workspaces, original unchanged outcome oracles, independent sessions, no personal configs/MCP for Codex, balanced arm order across two rounds. Not the full Docker/ABI benchmark. Native prompts/tools differ by design. Psi retains its configured Battlecode/general profile; an 80-request guard for Psi and a 480-second timeout for both arms per cell. No model-directed retries of failed scored cells.",
+  "usageDefinition": "Total = uncached input + cached input + cache write + output. Reasoning is already included in output. Codex input_tokens includes its cached_input_tokens; Psi input excludes cacheRead. Token totals are not a subscription-quota formula or an API bill.",
+  "creditEstimate": {
+    "units": "credits per million tokens",
+    "rates": {
+      "uncachedInput": 50,
+      "cachedInput": 2.5,
+      "output": 250
+    },
+    "source": "https://learn.chatgpt.com/docs/pricing#token-rates",
+    "checkedAt": "2026-10-31",
+    "note": "Standard-speed credit-rate estimate, not an invoice or a formula for included five-hour/weekly allowance."
+  },
+  "totals": {
+    "psi": {
+      "runs": 6,
+      "fullySuccessful": 3,
+      "meanOutcomeScore": 0.6983333333333334,
+      "wallSeconds": 558.5409999999999,
+      "estimatedCredits": 17.303240000000002,
+      "uncachedInput": 166016,
+      "cachedInput": 728576,
+      "cacheWrite": 0,
+      "output": 28724,
+      "reasoning": 1714,
+      "requests": 65,
+      "total": 923316,
+      "inputCacheHitPercent": 81.4422664186579
+    },
+    "codex": {
+      "runs": 6,
+      "fullySuccessful": 3,
+      "meanOutcomeScore": 0.665,
+      "wallSeconds": 433.36699999999996,
+      "estimatedCredits": 12.236830000000001,
+      "uncachedInput": 87797,
+      "cachedInput": 657792,
+      "cacheWrite": 0,
+      "output": 24810,
+      "reasoning": 1419,
+      "requests": 40,
+      "total": 770399,
+      "inputCacheHitPercent": 88.22447756069363
+    }
+  },
+  "psiDifferencePercent": {
+    "total": 19.849065224643336,
+    "uncachedInput": 89.09074341947903,
+    "cachedInput": 10.760848414088354,
+    "output": 15.775896815800072,
+    "requests": 62.5,
+    "estimatedCredits": 41.40296138787578,
+    "wallSeconds": 28.884063622749313
+  },
+  "subsets": {
+    "sameScore": {
+      "pairs": [
+        {
+          "task": "009-safe-archive-extraction",
+          "trial": 1
+        },
+        {
+          "task": "010-layered-config-resolution",
+          "trial": 1
+        },
+        {
+          "task": "028-excel-like-cleaning",
+          "trial": 1
+        },
+        {
+          "task": "009-safe-archive-extraction",
+          "trial": 2
+        },
+        {
+          "task": "028-excel-like-cleaning",
+          "trial": 2
+        }
+      ],
+      "totals": {
+        "psi": {
+          "runs": 5,
+          "fullySuccessful": 3,
+          "meanOutcomeScore": 0.798,
+          "wallSeconds": 437.714,
+          "estimatedCredits": 13.12715,
+          "uncachedInput": 119883,
+          "cachedInput": 524800,
+          "cacheWrite": 0,
+          "output": 23284,
+          "reasoning": 1277,
+          "requests": 51,
+          "total": 667967,
+          "inputCacheHitPercent": 81.40434911421582
+        },
+        "codex": {
+          "runs": 5,
+          "fullySuccessful": 3,
+          "meanOutcomeScore": 0.798,
+          "wallSeconds": 341.527,
+          "estimatedCredits": 9.648230000000002,
+          "uncachedInput": 67051,
+          "cachedInput": 527872,
+          "cacheWrite": 0,
+          "output": 19904,
+          "reasoning": 1076,
+          "requests": 32,
+          "total": 614827,
+          "inputCacheHitPercent": 88.72946583003178
+        }
+      }
+    },
+    "bothFullySuccessful": {
+      "pairs": [
+        {
+          "task": "009-safe-archive-extraction",
+          "trial": 1
+        },
+        {
+          "task": "009-safe-archive-extraction",
+          "trial": 2
+        },
+        {
+          "task": "028-excel-like-cleaning",
+          "trial": 2
+        }
+      ],
+      "totals": {
+        "psi": {
+          "runs": 3,
+          "fullySuccessful": 3,
+          "meanOutcomeScore": 1,
+          "wallSeconds": 267.26099999999997,
+          "estimatedCredits": 7.51106,
+          "uncachedInput": 70111,
+          "cachedInput": 277504,
+          "cacheWrite": 0,
+          "output": 13247,
+          "reasoning": 499,
+          "requests": 31,
+          "total": 360862,
+          "inputCacheHitPercent": 79.8308473454828
+        },
+        "codex": {
+          "runs": 3,
+          "fullySuccessful": 3,
+          "meanOutcomeScore": 1,
+          "wallSeconds": 198.164,
+          "estimatedCredits": 5.53333,
+          "uncachedInput": 36997,
+          "cachedInput": 315392,
+          "cacheWrite": 0,
+          "output": 11580,
+          "reasoning": 703,
+          "requests": 19,
+          "total": 363969,
+          "inputCacheHitPercent": 89.50109112372974
+        }
+      }
+    }
+  },
+  "results": [
+    {
+      "task": "009-safe-archive-extraction",
+      "trial": 1,
+      "arm": "psi",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "wallSeconds": 98.636,
+      "usage": {
+        "uncachedInput": 34142,
+        "cachedInput": 116224,
+        "cacheWrite": 0,
+        "output": 4364,
+        "reasoning": 205,
+        "requests": 13,
+        "total": 154730
+      },
+      "estimatedCredits": 3.08866,
+      "outcomeScore": 1,
+      "taskSuccess": true,
+      "gradeSha256": "5773f22879933fe55a52b500811fe219746e862e7fb3867494e63b9ff4dde639",
+      "subagentsStarted": 0
+    },
+    {
+      "task": "009-safe-archive-extraction",
+      "trial": 1,
+      "arm": "codex",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "wallSeconds": 72.193,
+      "usage": {
+        "uncachedInput": 19410,
+        "cachedInput": 128768,
+        "cacheWrite": 0,
+        "output": 4028,
+        "reasoning": 400,
+        "requests": 8,
+        "total": 152206
+      },
+      "estimatedCredits": 2.29942,
+      "outcomeScore": 1,
+      "taskSuccess": true,
+      "gradeSha256": "5773f22879933fe55a52b500811fe219746e862e7fb3867494e63b9ff4dde639",
+      "subagentsStarted": 0
+    },
+    {
+      "task": "010-layered-config-resolution",
+      "trial": 1,
+      "arm": "codex",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "wallSeconds": 90.586,
+      "usage": {
+        "uncachedInput": 13787,
+        "cachedInput": 153344,
+        "cacheWrite": 0,
+        "output": 4774,
+        "reasoning": 281,
+        "requests": 9,
+        "total": 171905
+      },
+      "estimatedCredits": 2.26621,
+      "outcomeScore": 0.2,
+      "taskSuccess": false,
+      "gradeSha256": "24cf61201120f62498d3e006502b16a303e221a7757d0f994dc80cc97ccf2021",
+      "subagentsStarted": 0
+    },
+    {
+      "task": "010-layered-config-resolution",
+      "trial": 1,
+      "arm": "psi",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "wallSeconds": 98.059,
+      "usage": {
+        "uncachedInput": 31849,
+        "cachedInput": 197504,
+        "cacheWrite": 0,
+        "output": 5859,
+        "reasoning": 671,
+        "requests": 13,
+        "total": 235212
+      },
+      "estimatedCredits": 3.55096,
+      "outcomeScore": 0.2,
+      "taskSuccess": false,
+      "gradeSha256": "24cf61201120f62498d3e006502b16a303e221a7757d0f994dc80cc97ccf2021",
+      "subagentsStarted": 0
+    },
+    {
+      "task": "028-excel-like-cleaning",
+      "trial": 1,
+      "arm": "psi",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "wallSeconds": 72.394,
+      "usage": {
+        "uncachedInput": 17923,
+        "cachedInput": 49792,
+        "cacheWrite": 0,
+        "output": 4178,
+        "reasoning": 107,
+        "requests": 7,
+        "total": 71893
+      },
+      "estimatedCredits": 2.06513,
+      "outcomeScore": 0.79,
+      "taskSuccess": false,
+      "gradeSha256": "f2de1ecd0c9e98be4222736078ff5253aad2998d024320397ff7bc0f8373fd32",
+      "subagentsStarted": 0
+    },
+    {
+      "task": "028-excel-like-cleaning",
+      "trial": 1,
+      "arm": "codex",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "wallSeconds": 52.777,
+      "usage": {
+        "uncachedInput": 16267,
+        "cachedInput": 59136,
+        "cacheWrite": 0,
+        "output": 3550,
+        "reasoning": 92,
+        "requests": 4,
+        "total": 78953
+      },
+      "estimatedCredits": 1.84869,
+      "outcomeScore": 0.79,
+      "taskSuccess": false,
+      "gradeSha256": "f2de1ecd0c9e98be4222736078ff5253aad2998d024320397ff7bc0f8373fd32",
+      "subagentsStarted": 0
+    },
+    {
+      "task": "009-safe-archive-extraction",
+      "trial": 2,
+      "arm": "codex",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "wallSeconds": 76.706,
+      "usage": {
+        "uncachedInput": 10357,
+        "cachedInput": 119168,
+        "cacheWrite": 0,
+        "output": 4207,
+        "reasoning": 224,
+        "requests": 7,
+        "total": 133732
+      },
+      "estimatedCredits": 1.86752,
+      "outcomeScore": 1,
+      "taskSuccess": true,
+      "gradeSha256": "5773f22879933fe55a52b500811fe219746e862e7fb3867494e63b9ff4dde639",
+      "subagentsStarted": 0
+    },
+    {
+      "task": "009-safe-archive-extraction",
+      "trial": 2,
+      "arm": "psi",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "wallSeconds": 97.93,
+      "usage": {
+        "uncachedInput": 17491,
+        "cachedInput": 104192,
+        "cacheWrite": 0,
+        "output": 4768,
+        "reasoning": 231,
+        "requests": 10,
+        "total": 126451
+      },
+      "estimatedCredits": 2.32703,
+      "outcomeScore": 1,
+      "taskSuccess": true,
+      "gradeSha256": "5773f22879933fe55a52b500811fe219746e862e7fb3867494e63b9ff4dde639",
+      "subagentsStarted": 0
+    },
+    {
+      "task": "010-layered-config-resolution",
+      "trial": 2,
+      "arm": "psi",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "wallSeconds": 120.827,
+      "usage": {
+        "uncachedInput": 46133,
+        "cachedInput": 203776,
+        "cacheWrite": 0,
+        "output": 5440,
+        "reasoning": 437,
+        "requests": 14,
+        "total": 255349
+      },
+      "estimatedCredits": 4.17609,
+      "outcomeScore": 0.2,
+      "taskSuccess": false,
+      "gradeSha256": "24cf61201120f62498d3e006502b16a303e221a7757d0f994dc80cc97ccf2021",
+      "subagentsStarted": 0
+    },
+    {
+      "task": "010-layered-config-resolution",
+      "trial": 2,
+      "arm": "codex",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "wallSeconds": 91.84,
+      "usage": {
+        "uncachedInput": 20746,
+        "cachedInput": 129920,
+        "cacheWrite": 0,
+        "output": 4906,
+        "reasoning": 343,
+        "requests": 8,
+        "total": 155572
+      },
+      "estimatedCredits": 2.5886,
+      "outcomeScore": 0,
+      "taskSuccess": false,
+      "gradeSha256": "8ef53ef5f28efd41609dd71809d67fe350ba62cf860806cb83528895f9677828",
+      "subagentsStarted": 0
+    },
+    {
+      "task": "028-excel-like-cleaning",
+      "trial": 2,
+      "arm": "codex",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "wallSeconds": 49.265,
+      "usage": {
+        "uncachedInput": 7230,
+        "cachedInput": 67456,
+        "cacheWrite": 0,
+        "output": 3345,
+        "reasoning": 79,
+        "requests": 4,
+        "total": 78031
+      },
+      "estimatedCredits": 1.36639,
+      "outcomeScore": 1,
+      "taskSuccess": true,
+      "gradeSha256": "881ce89bd6de035556efd4dc68e10bffffd376871d2ee1f297160911f79506cc",
+      "subagentsStarted": 0
+    },
+    {
+      "task": "028-excel-like-cleaning",
+      "trial": 2,
+      "arm": "psi",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "wallSeconds": 70.695,
+      "usage": {
+        "uncachedInput": 18478,
+        "cachedInput": 57088,
+        "cacheWrite": 0,
+        "output": 4115,
+        "reasoning": 63,
+        "requests": 8,
+        "total": 79681
+      },
+      "estimatedCredits": 2.09537,
+      "outcomeScore": 1,
+      "taskSuccess": true,
+      "gradeSha256": "881ce89bd6de035556efd4dc68e10bffffd376871d2ee1f297160911f79506cc",
+      "subagentsStarted": 0
+    }
+  ]
+}

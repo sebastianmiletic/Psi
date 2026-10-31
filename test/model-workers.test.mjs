@@ -58,7 +58,7 @@ test('a delegated plan worker stays read-only and a goal cannot finish before it
  const f=await fixture(t,async p=>{
   if(p.messages.some(m=>typeof m.content==='string'&&m.content.startsWith('Task from parent:'))){if(++children===1){await gate;return{call:{name:'write',args:{path:'forbidden.txt',content:'wrong'}}};}return{text:'Write denied; evidence inspected.'};}
   if(++parents===1)return{call:{name:'agent',args:{action:'spawn',name:'Verify completion evidence',mode:'plan',prompt:'Inspect evidence without changing files.'}}};
-  release();return{call:{name:'finish',args:{summary:'Verified with worker evidence',evidence:['evidence.txt']}}};
+  release();return{call:{name:'finish',args:{summary:'Verified with worker evidence',report:'Verified with worker evidence.\n\n### What I examined\n\nWorker findings and the saved evidence file.\n\n### Limitations\n\nLocal fixture only.',evidence:['evidence.txt']}}};
  });
  const {writeFile}=await import('node:fs/promises');await writeFile(join(f.root,'evidence.txt'),'verified');await f.app.update({overkill:true,agents:[]});await f.app.engine.run('Verify the evidence',{loop:true});
  await assert.rejects(readFile(join(f.root,'forbidden.txt')));assert.equal(f.session.state.loopStatus,'complete');assert.equal(f.session.state.workerDeliveries.length,1);assert.ok(f.session.messages.some(m=>m.role==='toolResult'&&m.toolName==='finish'&&m.isError));assert.equal(f.session.messages.findLast(m=>m.role==='toolResult'&&m.toolName==='finish').isError,false);

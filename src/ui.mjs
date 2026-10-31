@@ -5,7 +5,7 @@ import {
 } from '@earendil-works/pi-tui';
 import { modelLabel } from './model-label.mjs';
 import { accentText,accentBadge } from './theme.mjs';
-import { usageLabel,applicableQuota } from './usage.mjs';
+import { usageLabel,applicableQuota,quotaFreshness,remainingPercent } from './usage.mjs';
 import { EffortPanel,StatsPanel,ToolsPanel,ResetPanel } from './panels.mjs';
 import { PsiHeader, PsiAnimation } from './logo.mjs';
 import { Composer,flowAccent,UserMessage,AssistantMessage,ToolMessage,ExplorationGroup,exploration } from './message-ui.mjs';
@@ -82,9 +82,10 @@ export class TerminalUI {
     }};
     this.progressBar={invalidate(){},render:width=>{
       const quota=applicableQuota(app.activeUsage),state=app.session.state.progress;
-      const pct=Math.round(Math.max(0,Math.min(100,100-(quota?.usedPercent??state?.percent??0))));
-      const label=quota?`${pct}% left`:`Goal · ${pct}% left · est.`;
-      const available=Math.max(0,width-visibleWidth(label)-6),size=Math.min(30,available),filled=Math.round(size*pct/100);
+      const pct=remainingPercent(quota?.usedPercent??state?.percent??0);
+      const subscription=app.activeAccount?.billingMode==='subscription'||app.activeAccount?.type==='oauth',freshness=quotaFreshness(app.activeUsage);
+      const label=quota?`${pct}% left${freshness?' · '+freshness:''}`:subscription?'Usage unavailable':`Goal · ${pct}% left · est.`;
+      const available=Math.max(0,width-visibleWidth(label)-6),size=Math.min(30,available),filled=subscription&&!quota?0:Math.round(size*pct/100);
       const blocks='█'.repeat(filled)+'░'.repeat(size-filled),painted=this.isOverkill()?flowAccent(blocks,this,17):this.paint('█'.repeat(filled))+dim(this.paint('░'.repeat(size-filled)));
       return[truncateToWidth('  '+painted+'  '+dim(label),width)];
     }};
@@ -167,7 +168,7 @@ export class TerminalUI {
     if(exploration(tool.call)&&last instanceof ExplorationGroup&&last.tools.length<20)last.add(tool);
     else this.transcript.addChild(exploration(tool.call)?new ExplorationGroup(this,tool):tool);
   }
-  user(text,options) { this.lastUser=new UserMessage(this,text,options);this.transcript.addChild(this.lastUser);if(options?.animate!==false)this.syncMotion();this.render(); }
+  user(text,options) { this.lastUser=new UserMessage(this,text,options);this.transcript.addChild(this.lastUser);if(options?.animate!==false){this.scroll.scrollToEnd();this.syncMotion();}this.render(); }
   markdown(text, label = true) {
     const component = label?new AssistantMessage(this,text):new Markdown(safe(text),5,1,this.markdownTheme);this.transcript.addChild(component);this.render();return component;
   }
@@ -208,7 +209,7 @@ export class TerminalUI {
     if(event.type==='progress'){this.note(event.update);if(this.app.engine.config.agentMode==='plan')this.markdown(event.steps.map((s,i)=>`${i+1}. ${s.title}`).join('\n'),false);}
     if(['agent_started','agent_finished','agent_status'].includes(event.type)){this.workerRows.set(event.agent.id,{...event.agent,status:event.agent.status||(event.type==='agent_started'?'running':'completed')});if(this.workerRows.size>32)this.workerRows.delete(this.workerRows.keys().next().value);}
     if (event.type === 'error') this.note(event.error, true);
-    if (event.type === 'goal_complete') this.note(`Objective complete. ${event.summary}`);
+    if(event.type==='final_response'){this.finishResponse();this.markdown(event.text);}
     if (event.type === 'run_end') {this.finishResponse(event.status==='stopped'?'stopped':['error','limited'].includes(event.status)?'partial response':'');this.activity='';for(const tool of this.openTools.values())tool.interrupt();this.openTools.clear();this.syncMotion();}
     this.render();
   }

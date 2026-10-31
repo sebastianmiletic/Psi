@@ -11,7 +11,7 @@ import { TerminalUI } from '../src/ui.mjs';
 import { MemoryTerminal } from './terminal.mjs';
 import { renderPsi } from '../src/logo.mjs';
 
-const finish=()=>({call:{name:'finish',args:{summary:'Goal achieved.',evidence:['evidence.txt']}}});
+const finish=()=>({call:{name:'finish',args:{summary:'Goal achieved.',report:'Goal achieved. Evidence saved and verified.',evidence:['evidence.txt']}}});
 test('goal loop survives plain final answers and temporary failures until evidence-backed completion',async t=>{
   const f=await fixture(t,(_p,n)=>n===1?{httpError:503}:n<6?{text:'Still working.'}:n===6?{call:{name:'write',args:{path:'evidence.txt',content:'verified'}}}:finish());
   f.app.engine.config.retries=0;f.app.engine.config.loopRetrySeconds=0.05;

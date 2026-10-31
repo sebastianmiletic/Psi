@@ -11,7 +11,7 @@ export const settingItems = [
   {id:'autoSwitchAccounts',label:'Account switching',boolean:true,description:'Try another saved account when quota is exhausted'},
   {id:'accountSwitchThreshold',label:'Switch at %',number:[1,100]},
   {id:'fallbackModels',label:'Fallback models',description:'Explicit provider/model routes, comma-separated; empty means same provider only'},
-  {id:'quotaRefreshSeconds',label:'Usage refresh (s)',number:[60,3600]},
+  {id:'quotaRefreshSeconds',label:'Usage refresh (s)',number:[5,30]},
   {id:'loopRetrySeconds',label:'Retry delay (s)',number:[1,300]},
   {id:'model',label:'Model',special:'model'},{id:'effort',label:'Effort',special:'effort'},
   {id:'summaryModel',label:'Compaction model',description:'Provider/model, or same'},

@@ -13,7 +13,7 @@ const timer=setInterval(async()=>{if(polling)return;polling=true;try{await check
 try{
  const {clampThinkingLevel}=await import('@earendil-works/pi-ai');app.engine.config.effort=clampThinkingLevel(app.engine.model,app.engine.config.effort);
  await checkStop();if(!stopping)await app.engine.run(spec.prompt);
- const summary=session.messages.filter(m=>m.role==='assistant').at(-1)?.content.filter(c=>c.type==='text').map(c=>c.text).join('\n')||'No final response. Inspect the child journal.';
+ const summary=session.conversation.filter(m=>m.role==='assistant').at(-1)?.content.filter(c=>c.type==='text').map(c=>c.text).join('\n')||'No final response. Inspect the child journal.';
  await atomicJSON(join(session.dir,'worker-result.json'),{status:session.status,summary,totals:session.totals,session:session.meta.id});
 }catch(e){await atomicJSON(join(session.dir,'worker-result.json'),{status:'error',error:e.message,totals:session.totals});process.exitCode=1;}
 finally{await activityWrites;clearInterval(timer);if(stopping)for(const j of await app.jobs.list())if(j.sessionId===session.meta.id&&['running','queued'].includes(j.status)){await app.jobs.stop(j.id);await app.jobs.awaitCompletion(j.id).catch(()=>{});}await app.close();}

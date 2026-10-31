@@ -55,6 +55,12 @@ export function limitsFromHeaders(provider, raw) {
 export function compactCount(n = 0) {
   return n >= 1e6 ? `${(n/1e6).toFixed(1)}m` : n >= 1e3 ? `${(n/1e3).toFixed(1)}k` : String(Math.round(n));
 }
+export function quotaFreshness(usage={},now=Date.now()){
+ if(!usage?.quotaCheckedAt)return '';
+ if(usage.quotaError)return 'cached';
+ return now-Date.parse(usage.quotaCheckedAt)>60000?'stale':'';
+}
+export const remainingPercent=used=>Math.round(Math.max(0,Math.min(100,100-used))*10)/10;
 export function applicableQuota(usage={},now=Date.now()){
  usage||={};
  const limits=(usage.limits||[]).filter(l=>l.kind==='quota'&&Number.isFinite(l.usedPercent)&&l.usedPercent>=0&&l.usedPercent<=100&&(l.resetAt?l.resetAt*1000>now:now-Date.parse(l.reportedAt||usage.limitsAt||'')<300000));
@@ -66,7 +72,7 @@ export function usageLabel(account, usage = {}, { sessionCost, costKnown=true,om
   const now = Date.now()/1000;
   const rank=l=>l.label==='5h'?0:['7d','1w','weekly'].includes(l.label)?1:2;
   const quota=(usage.limits || []).filter(l=>l.kind==='quota' && (!weeklyOnly||['7d','1w','weekly'].includes(l.label)) && l.label!==omitQuota && (l.resetAt ? l.resetAt>now : Date.now()-Date.parse(l.reportedAt||usage.limitsAt||'')<300000)).sort((a,b)=>rank(a)-rank(b));
-  if(account.billingMode==='subscription'||(account.billingMode===undefined&&account.type==='oauth')) return prefix+(quota.length?' · '+quota.map(l=>`${l.label} ${remaining?100-Math.round(l.usedPercent):Math.round(l.usedPercent)}% ${remaining?'left':'used'}`).join(' · '):'');
+  if(account.billingMode==='subscription'||(account.billingMode===undefined&&account.type==='oauth')) return prefix+(quota.length?' · '+quota.map(l=>`${l.label} ${remaining?remainingPercent(l.usedPercent):Math.round(l.usedPercent)}% ${remaining?'left':'used'}`).join(' · '):'');
   if(sessionCost!==undefined) return `${prefix} · session ${costKnown?'$'+sessionCost.toFixed(4):'cost unavailable'}${compact?'':' · '+compactCount(usage.totalTokens || 0)+' tokens'}`;
   return `${prefix} · ${compactCount(usage.totalTokens || 0)} tokens · ${usage.requests || 0} calls in Psi`;
 }

@@ -59,30 +59,36 @@ export class App {
       void appendFile(join(this.session.dir, 'debug.jsonl'), JSON.stringify(data) + '\n', { mode: 0o600 }).catch(() => {});
     }
     this.ui?.event(event); this.options.onEvent?.(event);
+    if(this.ui&&['request_end','run_end','account_switched'].includes(event.type)&&this.activeAccount?.type==='oauth')void this.refreshAccount({live:true,force:true}).catch(()=>{});
   }
-  async refreshAccount({live=false}={}) {
-    const account = await this.registry.accounts.selected(this.engine.model.provider);
-    const configured = account.type !== 'ambient' || !!await this.registry.models.checkAuth(account.provider);
-    account.billingMode=this.registry.billingMode(account);this.activeAccount = configured ? account : null; this.activeUsage = live && account.type==='oauth'?await this.engine.quota.refresh(account,{signal:this.quotaController?.signal}):await this.accountUsage.get(account.id);
-    this.ui?.render(); return { account: this.activeAccount, usage: this.activeUsage };
+  async refreshAccount({live=false,force=false}={}) {
+    const engine=this.engine,account=await this.registry.accounts.selected(engine.model.provider);
+    const configured=account.type!=='ambient'||!!await this.registry.models.checkAuth(account.provider);
+    account.billingMode=this.registry.billingMode(account);
+    const usage=live&&account.type==='oauth'?await engine.quota.refresh(account,{force,signal:this.quotaController?.signal}):await this.accountUsage.get(account.id);
+    if(engine!==this.engine||this.closing)return{account:this.activeAccount,usage:this.activeUsage};
+    const current=await this.registry.accounts.selected(engine.model.provider);if(current.id!==account.id)return{account:this.activeAccount,usage:this.activeUsage};
+    this.activeAccount=configured?account:null;this.activeUsage=usage;this.ui?.render();return{account:this.activeAccount,usage};
   }
   async startUI() {
+    await this.engine.recoverReview();
     await this.refreshAccount();
     const { TerminalUI } = await import('./ui.mjs'); this.ui = new TerminalUI(this); this.ui.start();await this.agents.restore();this.startUsageMonitor();
     if(this.engine.config.checkForUpdates)void this.checkUpdates();
     if (this.session.messages.length) {
       this.ui.note(`Resumed ${this.session.meta.id}. ${this.session.messages.length} context messages.`);
-      for (const m of this.session.messages.slice(-8)) {
-        if (m.role === 'user') this.ui.user(typeof m.content === 'string' ? m.content.slice(0, 2000) : '[Attached content]',{animate:false});
-        if (m.role === 'assistant') { const text = m.content.filter(c => c.type === 'text').map(c => c.text).join('\n'); if (text) this.ui.markdown(text.slice(-6000)); }
-      }
+      this.showHistory();
     }
   }
+  showHistory(){for(const m of this.session.conversation.slice(-8)){
+    if(m.role==='user')this.ui.user(typeof m.content==='string'?m.content:'[Attached content]',{animate:false});
+    if(m.role==='assistant'){const text=typeof m.content==='string'?m.content:m.content.filter(c=>c.type==='text').map(c=>c.text).join('\n');if(text)this.ui.markdown(text);}
+  }}
   startUsageMonitor() {
     clearInterval(this.quotaTimer);this.quotaController?.abort();if(this.closing)return;this.quotaController=new AbortController();
     if(this.activeAccount?.type!=='oauth')return;
-    const poll=()=>{if(!this.closing)void this.refreshAccount({live:true}).catch(()=>{});};poll();
-    this.quotaTimer=setInterval(poll,Math.max(60,this.engine.config.quotaRefreshSeconds||120)*1000);this.quotaTimer.unref();
+    const poll=()=>{if(!this.closing)void this.refreshAccount({live:true}).catch(()=>{});};void this.refreshAccount({live:true,force:true}).catch(()=>{});
+    this.quotaTimer=setInterval(poll,Math.max(5,Math.min(30,this.engine.config.quotaRefreshSeconds||15))*1000);this.quotaTimer.unref();
   }
   async settingsMenu() {
     while(true){
@@ -109,9 +115,9 @@ export class App {
     if (this.engine.busy) throw new Error('Stop the current run first.');
     await this.agents.dispose();if(session.meta.id===this.session.meta.id){await session.assertLatest().catch(async()=>{session=await Session.load(session.meta.id,this.home);});}await this.tools.close(); this.session = session; this.bind();
     if (this.ui) { const { CombinedAutocompleteProvider } = await import('@earendil-works/pi-tui'); const { commands } = await import('./ui.mjs'); this.ui.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, session.meta.cwd)); }
-    await this.refreshAccount();
+    await this.engine.recoverReview();await this.refreshAccount();
     if(this.ui)this.startUsageMonitor();
-    if(!preserveTranscript)this.ui?.clear();if(this.ui)await this.agents.restore(); this.ui?.note(`Session ${session.meta.id}\n${session.meta.cwd}`);
+    if(!preserveTranscript)this.ui?.clear();if(this.ui){await this.agents.restore();if(!preserveTranscript)this.showHistory();} this.ui?.note(`Session ${session.meta.id}\n${session.meta.cwd}`);
   }
   async update(patch) { await this.engine.settings(patch); this.config = await saveConfig(patch, this.home); await this.refreshAccount(); if(this.ui)this.startUsageMonitor(); this.engine.wake?.(); }
   async selectModel(query = '') {
@@ -236,7 +242,7 @@ export class App {
       if (id) await this.changeSession(await Session.load(id, this.home)); return;
     }
     if (command === 'reload' || command === 'refresh') return this.reload();
-    if (command === 'export') { const path = resolve(this.session.meta.cwd, arg || `psi-${this.session.meta.id}.md`); await writeFile(path, this.exportMarkdown(), { mode: 0o600 }); this.ui.note(`Exported: ${path}`); return; }
+    if (command === 'export') { const path = resolve(this.session.meta.cwd, arg || `psi-${this.session.meta.id}.md`); await writeFile(path, await this.exportMarkdown(), { mode: 0o600 }); this.ui.note(`Exported: ${path}`); return; }
     throw new Error(`Unknown command: /${command}. Use /help.`);
   }
   async resetMenu(){
@@ -314,11 +320,14 @@ export class App {
       }
     }
   }
-  exportMarkdown() {
-    return `# Ψ Psi session\n\nName: ${redact(this.session.meta.title)}\nWorkspace: ${this.session.meta.cwd}\nSession: ${this.session.meta.id}\n\n` + this.session.messages.map(m => {
-      const content = typeof m.content === 'string' ? m.content : m.content.map(c => c.type === 'text' ? c.text : c.type === 'toolCall' ? `Tool: ${c.name}\n\n${JSON.stringify(c.arguments)}` : c.type === 'image' ? '[Image]' : '').join('\n');
-      return `## ${m.role}${m.toolName ? `: ${m.toolName}` : ''}\n\n${redact(content)}\n`;
-    }).join('\n');
+  async exportMarkdown() {
+    let text=`# Ψ Psi session\n\nName: ${redact(this.session.meta.title)}\nWorkspace: ${this.session.meta.cwd}\nSession: ${this.session.meta.id}\n\n`;
+    for await(const event of this.session.events()){
+      const m=event.type==='message'?event.message:event.type==='final_response'?{role:'assistant',content:[{type:'text',text:event.text}]}:null;if(!m)continue;
+      const content=typeof m.content==='string'?m.content:m.content.map(c=>{if(c.type==='text')return c.text;if(c.type==='image')return '[Image]';if(c.type==='toolCall'){const args={...c.arguments};if(c.name==='finish')delete args.report;return `Tool: ${c.name}\n\n${JSON.stringify(args)}`;}return '';}).join('\n');
+      text+=`## ${m.role}${m.toolName?': '+m.toolName:''}\n\n${redact(content)}\n\n`;
+    }
+    return text;
   }
   async close() {
     if (this.closing) return; this.closing = true;

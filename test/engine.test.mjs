@@ -11,7 +11,7 @@ test('HTTP streaming model executes write, detached benchmark, fetch and finish;
     if (n === 1) return { call: { name: 'write', args: { path: 'candidate.txt', content: 'frozen-baseline' } } };
     if (n === 2) return { call: { name: 'bash', args: { command: "printf 'benchmark-ok\\n'", label: 'fixture benchmark', yield_ms: 2000 } } };
     if (n === 3) return { call: { name: 'fetch', args: { url: `http://127.0.0.1:${port}/page` } } };
-    if (n === 4) return { call: { name: 'finish', args: { summary: 'Verified fixture workflow.', evidence: ['candidate.txt'] } } };
+    if (n === 4) return { call: { name: 'finish', args: { summary: 'Verified fixture workflow.', report:'Verified fixture workflow.\n\n### Verification\n\nThe file, benchmark and website fixtures passed.', evidence: ['candidate.txt'] } } };
     return { text: 'Fixture completed with recorded evidence.' };
   });
   await f.app.engine.run('Run the isolated test workflow.', { loop: true });

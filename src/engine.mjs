@@ -41,17 +41,36 @@ export class Engine {
     this.pendingSettings={...session.state.pendingSettings};
     this.busy = false; this.queue = [...session.state.queuedMessages||[]]; this.controller = null;
     tools.add('session_title','Set a concise chat title once after the first user message. User-set names are protected; never rename later.',{title:Type.String({minLength:1,maxLength:80})},async({title})=>({renamed:await session.autoName(title),title:session.meta.title}));
-    tools.add('finish', 'Mark the current autonomous objective complete. Provide the verified outcome and evidence paths. Use only when the objective has actually been achieved.', { summary: Type.String({minLength:1}), evidence: Type.Array(Type.String(),{minItems:1}), experiment_id:Type.Optional(Type.String()) }, async args => {
+    tools.add('finish', 'Complete verified work. Include report: the full user-facing Markdown final review (outcome, scope, evidence/findings, verification, limitations and relevant next steps). Psi displays report after validation without another model request. Never finish with only a progress update. Evidence paths must exist; use only when the objective is actually achieved.', { summary: Type.String({minLength:1}), evidence: Type.Array(Type.String(),{minItems:1}), report:Type.Optional(Type.String({minLength:1,maxLength:100000})), experiment_id:Type.Optional(Type.String()) }, async args => {
       if((await this.tools.subagentsUnreported?.())?.length){this.awaitWorkers=true;throw new Error('Subagents are still reporting. Review their results before finishing.');}
       for(const path of args.evidence){await this.tools.policy?.check(path);await stat(resolve(session.meta.cwd,path)).catch(()=>{throw new Error(`Completion evidence does not exist: ${path}`);});}
       if(args.experiment_id){const exp=await tools.projectAdapter?.validateQualification(args.experiment_id);if(exp?.phase!=='qualified_for_review')throw new Error('The experiment has not passed fresh-fixture confirmation');}
 
-      await session.event({ type: 'state', state: { loopGoal: null, loopStatus: 'complete', completed: args } });
+      const completed={...args,...(args.report!==undefined?{report:args.report.trim()}:{}),completionId:randomUUID()};
+      await session.event({ type: 'state', state: { loopGoal: null, loopStatus: 'complete', completed } });
       await session.event({type:'state',state:{progress:{...session.state.progress,percent:100,update:args.summary,verified:true}}});
-      this.onEvent({ type: 'goal_complete', ...args }); return args;
+      this.completedThisRun=completed;
+      const {report,...receipt}=completed;
+      this.onEvent({ type: 'goal_complete', ...receipt });return{...receipt,...(!report?{review_required:'Write the full final review now, without tools or further actions.'}:{review:'Final review will be displayed after this tool result.'})};
     });
   }
   get model() { return this.registry.find(this.config.model); }
+  async publishReview(text,completion=this.completedThisRun){
+    const event={type:'final_response',text,timestamp:Date.now(),...(completion?.completionId?{completionId:completion.completionId}:{})};
+    await this.session.event(event);this.onEvent(event);this.reviewDelivered=true;
+  }
+  async recoverReview(locked=false){
+    const recover=async()=>{
+      await this.session.assertLatest();const completed=this.session.state.completed;
+      if(completed?.report&&completed.completionId&&this.session.state.reviewedCompletionId!==completed.completionId)await this.publishReview(completed.report,completed);
+    };
+    return locked?recover():withLock(join(this.session.dir,'run.lock'),recover,{timeout:500});
+  }
+  async fallbackReview(reason){
+    const c=this.completedThisRun;
+    const text=c?`${c.summary}\n\n### Evidence\n\n${c.evidence.map(path=>'- '+path).join('\n')}\n\n### Review limitation\n\nA detailed model review was not returned. ${redact(reason)}\n\nThe recorded completion and evidence remain saved.`:`A final model review was not returned. Completion has not been verified.\n\n### Limitation\n\n${redact(reason)}`;
+    await this.publishReview(text,c);
+  }
   async settings(patch, immediate=false) {
     validateSettings(patch,this.registry);
     if (patch.model) {
@@ -203,10 +222,11 @@ export class Engine {
   async run(text, { loop = false, compactOnly = false } = {}) {
     if (this.busy) { if (text) this.steer(text); return; }
     let ownsSession = false;
-    this.busy = true; this.runRequests = 0; this.controller = new AbortController();
+    this.busy = true; this.runRequests = 0; this.controller = new AbortController();this.completedThisRun=null;this.reviewDelivered=false;this.finalizing=false;
     try {
       return await withLock(join(this.session.dir, 'run.lock'), async () => {
         await this.session.assertLatest();
+        await this.recoverReview(true);this.reviewDelivered=false;
         ownsSession = true;
         await this.session.event({ type: 'state', state: { settings: {...this.config} } });
         const project=this.config.profile==='battlecode'?await this.tools.projectAdapter?.inspect().catch(()=>null):null;
@@ -223,19 +243,27 @@ export class Engine {
           this.controller.signal.throwIfAborted();
           try {
           if(Object.keys(this.pendingSettings).length){const patch={...this.pendingSettings};this.pendingSettings={};await this.settings(patch,true);await this.session.event({type:'state',state:{pendingSettings:{}}});}
-          while (this.queue.length) await this.session.message({ role: 'user', content: this.queue.shift(), timestamp: Date.now() });
-          if(this.session.state.queuedMessages?.length)await this.session.event({type:'state',state:{queuedMessages:[]}});
+          if(this.queue.length&&this.reviewDelivered){this.completedThisRun=null;this.reviewDelivered=false;this.finalizing=false;}
+          if(!this.finalizing){
+            while (this.queue.length) await this.session.message({ role: 'user', content: this.queue.shift(), timestamp: Date.now() });
+            if(this.session.state.queuedMessages?.length)await this.session.event({type:'state',state:{queuedMessages:[]}});
+          }
           await this.receiveSubagentReports(this.awaitWorkers);this.awaitWorkers=false;
           await this.compact();
           let result;
-          try { result = await this.request(this.session.messages); }
+          try { result = await this.request(this.session.messages,{tools:!this.finalizing}); }
           catch (e) {
-            if (/context.{0,30}(length|limit|window|exceed)|too many tokens|maximum.{0,20}tokens/i.test(e.message) && await this.compact(true)) result = await this.request(this.session.messages);
+            if (/context.{0,30}(length|limit|window|exceed)|too many tokens|maximum.{0,20}tokens/i.test(e.message) && await this.compact(true)) result = await this.request(this.session.messages,{tools:!this.finalizing});
             else throw e;
           }
           await this.session.message(result);
           if(Object.keys(this.pendingSettings).length){const patch={...this.pendingSettings};this.pendingSettings={};await this.settings(patch,true);await this.session.event({type:'state',state:{pendingSettings:{}}});}
           const calls = result.content.filter(c => c.type === 'toolCall');
+          const responseText=result.content.filter(c=>c.type==='text').map(c=>c.text).join('\n').trim();
+          if(this.finalizing&&calls.length){
+            for(const call of calls)await this.session.message({role:'toolResult',toolCallId:call.id,toolName:call.name,content:[{type:'text',text:'Not executed: final review is text-only.'}],isError:true,timestamp:Date.now()});
+            await this.fallbackReview('The model returned tool calls instead of its text-only review.');this.finalizing=false;if(this.queue.length)continue;break;
+          }
           if (calls.length) {
             stalls = 0;
             // Consecutive read-only calls can overlap; mutations remain ordered.
@@ -247,12 +275,19 @@ export class Engine {
                 const results = await Promise.all(batch.map(call => this.tools.call(call, this.controller.signal)));
                 for (const message of results) await this.session.message(message);
               } else { await this.session.message(await this.tools.call(calls[i++], this.controller.signal)); }
+              if(this.completedThisRun){for(const call of calls.slice(i))await this.session.message({role:'toolResult',toolCallId:call.id,toolName:call.name,content:[{type:'text',text:'Skipped after verified completion; no further actions were executed.'}],isError:true,timestamp:Date.now()});break;}
               if(this.queue.length&&i<calls.length){for(const skipped of calls.slice(i))await this.session.message({role:'toolResult',toolCallId:skipped.id,toolName:skipped.name,content:[{type:'text',text:'Skipped pending tool call to apply the queued user message at this boundary.'}],isError:true,timestamp:Date.now()});break;}
             }
-            // A finish result already contains the outcome; avoid another paid request just to restate it.
-            if (calls.some(c => c.name === 'finish') && this.session.state.completed && !this.session.state.loopGoal) break;
-            if(this.config.agentMode==='plan'&&calls.some(c=>c.name==='progress')&&!this.queue.length){if(await this.receiveSubagentReports(true))continue;await this.session.event({type:'state',state:{loopStatus:this.session.state.loopGoal?'planned':null}});break;}
+            if(this.completedThisRun){
+              if(this.completedThisRun.report?.trim())await this.publishReview(this.completedThisRun.report);
+              else this.finalizing=true;
+              if(this.reviewDelivered&&!this.queue.length)break;
+            }
             continue;
+          }
+          if(this.finalizing&&result.stopReason!=='length'){
+            if(!responseText)await this.fallbackReview('The model returned an empty review.');
+            this.finalizing=false;this.reviewDelivered=true;if(this.queue.length)continue;break;
           }
           if (this.queue.length) continue;
           if(await this.receiveSubagentReports(true))continue;
@@ -261,10 +296,15 @@ export class Engine {
             if (++stalls >= 3 && !this.session.state.loopGoal) throw new LimitError('Three consecutive output-limit responses. Increase output tokens in /settings before continuing.');
             continue;
           }
-          if (!this.session.state.loopGoal||this.config.agentMode==='plan') break;
+          if (!this.session.state.loopGoal||this.config.agentMode==='plan') {
+            if(!responseText){this.finalizing=true;continue;}
+            if(this.config.agentMode==='plan')await this.session.event({type:'state',state:{loopStatus:this.session.state.loopGoal?'planned':null}});
+            break;
+          }
           if (++stalls >= 3) await this.waitFor('The model is still working on the goal',Math.min(3,this.config.loopRetrySeconds||3));
           await this.session.message({ role: 'user', content: `Continue the autonomous objective: ${this.session.state.loopGoal}\nTake the next concrete action. Call finish with existing evidence paths only when the complete objective is achieved. A plain final response does not end this loop.`, timestamp: Date.now() });
           } catch(error) {
+            if(this.finalizing&&!this.controller.signal.aborted){await this.fallbackReview(error.message);this.finalizing=false;if(this.queue.length)continue;break;}
             if(this.controller.signal.aborted || !this.session.state.loopGoal)throw error;
             const reason=error instanceof LimitError?error.message:error instanceof AccountUnavailableError?'Waiting for an eligible account or quota reset':`Recovering: ${redact(error.message)}`;
             await this.waitFor(reason,error.retryAt?Math.max(1,(error.retryAt-Date.now())/1000):this.config.loopRetrySeconds);

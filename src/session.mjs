@@ -9,6 +9,7 @@ export class Session {
   constructor(home, meta) {
     this.home = home; this.meta = meta; this.dir = join(home, 'sessions', meta.id);
     this.messages = []; this.totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, requests: 0 };
+    this.conversation = [];
     this.accountTotals = {}; this.meteredCost = 0; this.meteredCostKnown = true;
     this.seenUsage=new Set();
     this.state = {}; this.status = 'idle'; this.journalSize = 0; this.writeChain=Promise.resolve();
@@ -59,7 +60,15 @@ export class Session {
     });
   }
   apply(event) {
-    if (event.type === 'message') this.messages.push(event.message);
+    if (event.type === 'message') {
+      this.messages.push(event.message);
+      const m=event.message;
+      if(m.role==='user'||m.role==='assistant'&&(typeof m.content==='string'?m.content.trim():m.content.some(c=>c.type==='text'&&c.text.trim())))this.rememberVisible(m);
+    }
+    if(event.type==='final_response'){
+      this.rememberVisible({role:'assistant',content:[{type:'text',text:event.text}],timestamp:event.timestamp||Date.parse(event.at),finalReview:true});
+      if(event.completionId)this.state.reviewedCompletionId=event.completionId;
+    }
     if (event.type === 'compact') this.messages = event.messages;
     if (event.type === 'usage') {
       if(event.requestId&&this.seenUsage.has(event.requestId))return;
@@ -84,6 +93,7 @@ export class Session {
       await appendFile(join(this.dir,'events.jsonl'),line,{mode:0o600});this.journalSize+=Buffer.byteLength(line);this.apply(event);
     });
   }
+  rememberVisible(message){this.conversation.push(message);if(this.conversation.length>100)this.conversation.shift();}
   async message(message) {
     await this.event({ type: 'message', message });
     if (message.role === 'user' && this.meta.title === 'New session'&&!this.meta.named&&!this.meta.seedNamed) {

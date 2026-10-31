@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **120 passing tests**.
+- `npm run verify`: syntax checks and **130 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -151,3 +151,9 @@ Actual API invoices and real competition transactions were not exercised in this
 - OVERKILL no longer starts workers before inference or when enabled mid-request. Real local inference fixtures verify zero initial workers, then explicit model assignments, distinct task names, execution through a legacy read-only preset, file changes, result integration and exact-once usage.
 - Workers can use the main model without a preset or select configured model/effort/limit presets. Parent plan mode remains read-only. Finish/report gating, double-Escape cancellation and resume recovery retain coverage.
 - Required names contain one to five words and describe a task. Generic roles and duplicate names (including case/punctuation variants) are rejected before launch, even when requests arrive concurrently. Child sessions persist the same task name.
+
+## Automatic final reviews and live usage (0.2.16)
+
+- `finish.report` is published after evidence and subagent gates, with no second request. Reports survive restart/export and recover exactly once when publication was interrupted. Legacy missing reports receive text-only review requests. Failed completion never publishes a success report, and tool calls after completion are skipped. Plan progress no longer suppresses the actual final plan.
+- New tests cover no-extra-request reports, legacy report recovery, evidence rejection, journal recovery, plan explanations, sending while scrolled up and precise subscription usage freshness. Provider refreshes use 5–30 second caching, default 15 seconds, plus response/account boundaries, and protect against stale account refresh responses. Missing quota is not replaced with goal progress.
+- [Paired Codex comparison](CODEX_USAGE_COMPARISON.md): twelve real 0.2.15 cells, two trials across three original Harness-Bench tasks, medium effort and no subagents. Psi used 19.8% more total tokens and 41.4% more rate-card credits overall. These results predate 0.2.16 and do not claim savings from new behavior. Counter-normalization tests prevent cached input/reasoning double counting.
