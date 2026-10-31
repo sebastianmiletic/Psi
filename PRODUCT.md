@@ -30,4 +30,4 @@ Unrequested ambient animation, busy dashboards, oversized tool output, nested ac
 
 ## Accessibility & Inclusion
 
-Keyboard-first operation, clear text, standard terminal scrolling and a readable narrow layout. All status colors have text labels. No idle animation. Brief send feedback and restrained active-response/tool motion clarify work; UI animations can be disabled in settings. The 3D logo is opt-in via click or `/logo` and can be dismissed immediately. Inherit the user's terminal font, palette and background. No additional accessibility needs were specified.
+Keyboard-first operation, clear text, standard terminal scrolling and a readable narrow layout. All status colors have text labels. No idle animation by default. Explicitly enabled OVERKILL adds a flowing accent to the composer. Brief send feedback and restrained active-response/tool motion clarify work; UI animations can be disabled in settings. The 3D logo is opt-in via click or `/logo` and can be dismissed immediately. Inherit the user's terminal font, palette and background. No additional accessibility needs were specified.

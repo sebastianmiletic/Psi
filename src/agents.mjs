@@ -27,7 +27,7 @@ export class Agents {
  async get(id){const r=(await this.records()).find(r=>r.id===id);if(!r)throw new Error('Unknown subagent ID.');return r;}
  async status(id){const r=await this.get(id),job=await this.app.jobs.get(r.jobId),result=await readJSON(join(this.home,'sessions',r.sessionId,'worker-result.json'),null);return{...r,status:job.status,result};}
  async collect(r){
-  const child=new Session(this.home,{id:r.sessionId});for await(const e of child.events())if(e.type==='usage')await this.session.event({...e,requestId:`agent:${r.id}:${e.requestId}`});
+  const child=new Session(this.home,{id:r.sessionId});for await(const e of child.events())if(e.type==='usage')await this.session.event({...e,originalRequestId:e.originalRequestId||e.requestId,sourceAt:e.sourceAt||e.at,requestId:`agent:${r.id}:${e.requestId}`});
  }
  async wait(id,signal){const r=await this.get(id);await this.app.jobs.awaitCompletion(r.jobId,signal);await this.collect(r);const result=await this.status(id);this.app.event({type:'agent_finished',agent:result});return result;}
  async stopAll({wait=false}={}){for(const r of await this.records()){await this.app.jobs.stop(r.jobId).catch(()=>{});if(wait){await this.app.jobs.awaitCompletion(r.jobId).catch(()=>{});await this.collect(r);}}}

@@ -4,7 +4,8 @@ import {
   colorToRgb, parseColor, visibleWidth,
 } from '@earendil-works/pi-tui';
 import { accentText } from './theme.mjs';
-import { usageLabel } from './usage.mjs';
+import { usageLabel,applicableQuota } from './usage.mjs';
+import { EffortPanel,StatsPanel } from './panels.mjs';
 import { PsiHeader, PsiAnimation } from './logo.mjs';
 import { Composer,UserMessage,AssistantMessage,ToolMessage } from './message-ui.mjs';
 import { cleanTerminal, redact } from './storage.mjs';
@@ -25,7 +26,7 @@ export const commands = [
  ['directory','Manage allowed working directories'],['settings','Appearance, accounts, workers and execution'],['agents','Configure and inspect OVERKILL workers'],['update','Install the latest GitHub release'],
  ['project','Inspect the Battlecode baseline and controller'],['experiments','Inspect durable experiments'],['logo','Open the Psi logo'],['model','Choose a model'],['effort','Thinking effort; Tab toggles OVERKILL'],['accounts','Login, switch or remove accounts'],
  ['provider','Add a custom endpoint'],['loop','Set a persistent objective'],['new','Start a fresh session'],['resume','Resume a saved session'],['cd','Start in another workspace'],['usage','Reported account usage'],['tools','Available AI tools'],['cost','Session token and cost totals'],
- ['summary-model','Choose the compaction model'],['compact','Summarize earlier context'],['checkpoint','Read or write the progress note'],['profile','Battlecode or general guidance'],['refresh','Refresh model catalog'],['status','Workspace and run state'],['export','Export session Markdown'],['help','Commands and keyboard shortcuts'],['quit','Exit Psi']
+ ['stats','Weekly, monthly and all-time activity'],['summary-model','Choose the compaction model'],['compact','Summarize earlier context'],['checkpoint','Read or write the progress note'],['profile','Battlecode or general guidance'],['refresh','Refresh model catalog'],['status','Workspace and run state'],['export','Export session Markdown'],['help','Commands and keyboard shortcuts'],['quit','Exit Psi']
 ].map(([name,description])=>({name,description}));
 
 class Transcript extends Container {
@@ -64,16 +65,17 @@ export class TerminalUI {
       const c = app.engine.config;
       const slash = c.model.indexOf('/');
       const model = safe(slash >= 0 ? c.model.slice(slash + 1) : c.model);
-      const right = truncateToWidth(`thinking ${safe(c.effort)}${c.overkill?' · OVERKILL':''}`, Math.max(0,width-3));
+      const state={...c,...app.engine.pendingSettings,...this.effortPreview};
+      const right = truncateToWidth(`${safe(state.effort)}${state.overkill?' · OVERKILL':''}`, Math.max(0,width-3));
       const left = truncateToWidth(`  ${model}`, Math.max(0,width-visibleWidth(right)-3));
       const gap = Math.max(1,width-visibleWidth(left)-visibleWidth(right)-1);
-      return [left+' '.repeat(gap)+dim(right), ...(app.engine.config.showUsage===false?[]:[truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage,{sessionCost:app.session.meteredCost,costKnown:app.session.meteredCostKnown}))),width)])];
+      return [left+' '.repeat(gap)+(state.overkill?this.paint(right):dim(right)), ...(app.engine.config.showUsage===false?[]:[truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage,{sessionCost:app.session.meteredCost,costKnown:app.session.meteredCostKnown,omitQuota:applicableQuota(app.activeUsage)?.label}))),width)])];
     } };
     this.progressBar={invalidate(){},render:width=>{
-      const state=app.session.state.progress,pct=Math.max(0,Math.min(100,state?.percent||0));
-      const label=width>=70?`${pct}% · ${100-pct}% remaining · est.`:`${pct}% · est.`;
+      const quota=applicableQuota(app.activeUsage),state=app.session.state.progress,pct=Math.round(Math.max(0,Math.min(100,quota?.usedPercent??state?.percent??0)));
+      const label=quota?(width>=70?`${quota.label} limit · ${pct}% used · ${100-pct}% left`:`${quota.label} · ${pct}% used`):(width>=70?`Goal · ${pct}% · ${100-pct}% remaining · est.`:`Goal ${pct}% · est.`);
       const available=Math.max(0,width-visibleWidth(label)-6),size=Math.min(30,available),filled=Math.round(size*pct/100);
-      return[truncateToWidth('  '+this.paint('█'.repeat(filled))+dim('░'.repeat(size-filled))+'  '+dim(label),width)];
+      return[truncateToWidth('  '+accentText('█'.repeat(filled),{accent:'blue'})+dim('░'.repeat(size-filled))+'  '+dim(safe(label)),width)];
     }};
     this.scroll = new ScrollView(this.transcript, { follow: 'end', primary: true, scrollbar: 'auto' });
     this.panelScroll = new ScrollView(this.panel, { follow: 'end', scrollbar: 'auto' });
@@ -89,6 +91,7 @@ export class TerminalUI {
     this.tui.setFocus(this.editor);
     this.tui.addInputListener(data => {
       if (this.logoAnimation && (matchesKey(data, 'escape') || matchesKey(data, 'ctrl+c') || matchesKey(data, 'ctrl+d'))) { this.hideLogo(); return { consume: true }; }
+      if(matchesKey(data,'escape')&&this.pending){this.lastEscape=0;this.pending.cancel();return{consume:true};}
       if (matchesKey(data, 'ctrl+c')) {
         if (app.authController) { app.authController.abort(); this.pending?.cancel(); }
         else if (this.pending) this.pending.cancel();
@@ -103,7 +106,7 @@ export class TerminalUI {
   }
   start() {
     this.closed=false;
-    this.tui.start();
+    this.tui.start();this.syncMotion();
   }
   stop() { this.closed=true; this.hideLogo();this.stopMotion();clearTimeout(this.renderTimer); this.pending?.cancel(); clearTimeout(this.renderTimer); this.tui.stop(); }
   toggleMode() {
@@ -113,8 +116,9 @@ export class TerminalUI {
     this.render();
   }
   stopMotion() { clearInterval(this.motionTimer);this.motionTimer=null; }
+  isOverkill(){return this.effortPreview?.overkill??this.app.engine.pendingSettings.overkill??this.app.engine.config.overkill;}
   syncMotion() {
-    const active=this.response?.active||this.openTools.size||this.lastUser?.animate!==false&&this.lastUser&&this.now()-this.lastUser.started<240;
+    const active=this.isOverkill()||this.response?.active||this.openTools.size||this.lastUser?.animate!==false&&this.lastUser&&this.now()-this.lastUser.started<240;
     if(this.closed||this.app.engine.config.animations===false||!active){this.stopMotion();return;}
     if(!this.motionTimer){this.motionTimer=setInterval(()=>{this.syncMotion();if(!this.closed)this.tui.requestRender();},80);this.motionTimer.unref();}
   }
@@ -144,7 +148,8 @@ export class TerminalUI {
   }
   event(event) {
     if(this.closed)return;
-    if(event.type==='settings_queued')this.note('Settings saved for the next model/tool boundary.');
+    if(event.type==='settings_queued'&&!Object.keys(event.patch||event.settings||{}).every(k=>['agentMode','effort','overkill'].includes(k)))this.note('Settings saved for the next model/tool boundary.');
+    if(event.type==='settings_queued')this.syncMotion();
     if(event.type==='settings'){this.syncMotion();this.tui.invalidate();this.tui.requestRender(true);}
     if(event.type==='waiting'){this.finishResponse('partial response');this.note(event.reason+' · Escape twice to stop; /settings or /accounts can resolve the wait.');}
     if(event.type==='account_switched')this.note(`Switched account: ${event.previous} → ${event.account.name}`);
@@ -203,6 +208,11 @@ export class TerminalUI {
       return component;
     });
   }
+  async effortMenu(options){
+    try{return await this.interact('',({resolve,cancel})=>new EffortPanel(this,{...options,resolve,cancel}));}
+    finally{this.effortPreview=null;this.syncMotion();this.render();}
+  }
+  async statsMenu(refresh){return this.interact('',({resolve,cancel})=>new StatsPanel(this,{resolve,cancel,refresh}),undefined,{overlay:true});}
   async ask(prompt) {
     if (prompt.type === 'select') return this.choose(prompt.message, prompt.options.map(o => ({ value: o.id, label: o.label, description: o.description })));
     return this.interact(prompt.message, ({ resolve, cancel }) => {
@@ -210,17 +220,20 @@ export class TerminalUI {
       input.onSubmit = resolve; input.onEscape = cancel; return input;
     }, prompt.signal);
   }
-  interact(title, make, signal) {
+  interact(title, make, signal, {overlay=false}={}) {
+    if(this.closed)return Promise.resolve(null);
     if (this.pending) throw new Error('Finish the current selection first.');
     if (signal?.aborted) return Promise.resolve(null);
     return new Promise(resolve => {
+      let settled=false,handle;
       const finish = value => {
-        signal?.removeEventListener('abort', cancel); this.pending = null; this.panel.clear(); this.editor.disableSubmit = false; this.tui.setFocus(this.editor); this.render(); resolve(value);
+        if(settled)return;settled=true;handle?.hide();signal?.removeEventListener('abort', cancel); this.pending = null; this.panel.clear(); this.editor.disableSubmit = false; this.tui.setFocus(this.editor); this.render(); resolve(value);
       };
       const cancel = () => finish(null);
       this.pending = { cancel }; signal?.addEventListener('abort', cancel, { once: true });
-      this.panel.addChild(new Text(`  ${bold(safe(title))}`, 0, 1));
-      const component = make({ resolve: finish, cancel }); this.panel.addChild(component);
+      if(title)this.panel.addChild(new Text(`  ${bold(safe(title))}`, 0, 1));
+      const component = make({ resolve: finish, cancel });
+      if(overlay)handle=this.tui.showOverlay(component,{width:'100%',maxHeight:'100%',row:0,col:0,margin:0});else this.panel.addChild(component);
       this.editor.disableSubmit = true; this.tui.setFocus(component); this.render();
     });
   }

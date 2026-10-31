@@ -39,7 +39,7 @@ test('double Escape stops, Shift+Tab changes mode, and removed slash commands ar
 });
 test('Tab in /effort toggles OVERKILL without changing the selected thinking level',async t=>{
  const f=await fixture(t,()=>({text:'unused'})),terminal=new MemoryTerminal(100,28),ui=new TerminalUI(f.app,{terminal});f.app.ui=ui;ui.start();t.after(()=>ui.stop());
- const menu=f.app.submit('/effort');await delay(5);terminal.input('\t');await delay(30);assert.equal(f.app.engine.config.overkill,true);terminal.input('\r');await menu;assert.equal(f.app.engine.config.effort,'off');assert.ok(f.app.tools.entries.has('agent'));
+ const menu=f.app.submit('/effort');await delay(5);terminal.input('\t');await delay(30);assert.equal(ui.effortPreview.overkill,true);assert.equal(f.app.engine.config.overkill,false);terminal.input('\r');await menu;assert.equal(f.app.engine.config.overkill,true);assert.equal(f.app.engine.config.effort,'off');assert.ok(f.app.tools.entries.has('agent'));
 });
 test('independent subagent uses its configured model, writes within the inherited workspace and accounts usage exactly once',async t=>{
  const f=await fixture(t,(_p,n)=>n===1?{call:{name:'write',args:{path:'worker-result.txt',content:'verified child output'}}}:{text:'Worker completed the assigned file.'});

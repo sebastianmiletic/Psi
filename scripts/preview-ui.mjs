@@ -2,6 +2,7 @@
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { App } from '../src/app.mjs';
 import { Session } from '../src/session.mjs';
@@ -29,12 +30,15 @@ function htmlLine(line) {
 const home=await mkdtemp(join(tmpdir(),'psi-preview-')); let app,ui,browser;
 try {
   const session=await Session.create('/workspace/battlecode',home); app=new App({...defaults,debug:false},session,{home});
-  const terminal=new MemoryTerminal(100,32);ui=new TerminalUI(app,{terminal});app.ui=ui;ui.start();ui.tui.renderNow();
+  const terminal=new MemoryTerminal(100,32);ui=new TerminalUI(app,{terminal,now:()=>1400});app.ui=ui;ui.start();ui.tui.renderNow();
   browser=await chromium.launch({executablePath:process.env.PSI_CHROME_PATH||'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',headless:true});
   const page=await browser.newPage({viewport:{width:1040,height:744},deviceScaleFactor:2});
   await mkdir(new URL('../docs/',import.meta.url),{recursive:true});
-  for (const [name,animation] of [['terminal',false],['logo-3d',true],['settings',false],['conversation',false]]) {
+  for (const [name,animation] of [['terminal',false],['logo-3d',true],['settings',false],['conversation',false],['effort',false],['stats',false],['overkill',false]]) {
     let settings;
+    if(name==='effort'){ui.clear();settings=ui.effortMenu({levels:['off','minimal','low','medium','high','xhigh'],effort:'medium',overkill:true});}
+    if(name==='stats'){ui.clear();const now=Date.now();const days={};for(let i=0;i<28;i++){const d=new Date(now);d.setDate(d.getDate()-i);days[`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`]=[0,8000,26000,140000,90000,42000,16000][i%7];}const data=['week','month','all'].map((period,i)=>{const tokens=[286400,1283000,4821000][i];return{period,now,tokens,input:tokens*0.45,output:tokens*0.2,cacheRead:tokens*0.35,cachePercent:44,requests:[34,186,642][i],sessions:[5,24,87][i],workers:[9,41,138][i],tools:[206,984,3612][i],goals:[3,18,61][i],activeMs:[9600000,48600000,168200000][i],agentMs:[16400000,89100000,296100000][i],providers:{'openai-codex':{tokens:tokens*0.74,requests:400},anthropic:{tokens:tokens*0.26,requests:242}},days,unknownDatedRequests:0,malformed:0};});settings=ui.statsMenu(async()=>data);await new Promise(r=>setTimeout(r,0));}
+    if(name==='overkill'){ui.clear();app.engine.config.overkill=true;ui.syncMotion();ui.editor.setText('/model');}
     if(name==='settings'){ui.hideLogo();settings=app.settingsMenu();}
     if(name==='conversation'){
       ui.clear();ui.user('Inspect the baseline and prepare the next experiment.',{animate:false});
@@ -42,14 +46,15 @@ try {
       const call={id:'preview-read',name:'read',arguments:{path:'bots/vision-v6/manifest.json'}};
       ui.event({type:'tool_start',call});ui.event({type:'tool_end',call,duration:180,result:{isError:false,content:[{type:'text',text:'Baseline identity verified. Source hashes match the frozen manifest.'}]}});
       ui.event({type:'request_start'});ui.event({type:'text_delta',delta:'The baseline is unchanged. I’m checking both sides of the paired fixtures and keeping the candidate separate from the incumbent.'});
+      app.activeAccount={name:'Personal',type:'oauth',billingMode:'subscription'};app.activeUsage={limitsAt:new Date().toISOString(),limits:[{kind:'quota',label:'5h',usedPercent:31,resetAt:9999999999},{kind:'quota',label:'7d',usedPercent:17,resetAt:9999999999}]};
       session.state.progress={percent:64};ui.editor.setText('Compare both sides before changing the strategy.');
     }
     if(animation) { ui.showLogo(); ui.logoAnimation.started-=520; }
     ui.tui.renderNow();
     const lines=ui.tui.getScreenLines();
     await page.setContent(`<html><style>body{margin:0;padding:20px;background:#18221d}pre{margin:0;font:16px/22px Menlo,monospace;white-space:pre}</style><body><pre>${lines.map(htmlLine).join('\n')}</pre></body></html>`);
-    await page.screenshot({path:new URL(`../docs/${name}.png`,import.meta.url).pathname});
+    await page.screenshot({path:fileURLToPath(new URL(`../docs/${name}.png`,import.meta.url))});
     if(settings){ui.pending?.cancel();await settings;}
   }
-  console.log('Rendered terminal, 3D logo, settings and conversation previews from actual terminal frames.');
+  console.log('Rendered terminal, conversation, effort, stats and OVERKILL previews from actual terminal frames.');
 } finally {ui?.stop();await app?.close();await browser?.close();await rm(home,{recursive:true,force:true});}

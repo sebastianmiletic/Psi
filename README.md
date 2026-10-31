@@ -57,11 +57,11 @@ Interactive startup checks the latest stable GitHub release in the background, a
 
 Psi grants the directory where the session starts. No AI tool can grant additional access. `/directory` lists the session's allowlist; `/directory add /path/to/project` and `/directory remove /path/to/project` change it. File tools resolve symlinks before access, and shell processes inherit an OS boundary. System executables/runtime libraries are available read-only; Psi manages its own scratch files, session artifacts and experiment evidence. Provider credentials and the real HOME are excluded from tool environments. The isolated shell HOME is a private scratch directory, so CLIs needing existing personal credentials require deliberate setup within the permitted directories.
 
-Click the mode control inside the input row, or press **Shift+Tab**, for **PLAN** mode. The model can inspect files/websites and record a plan, but cannot edit project files, run shell/build commands, evaluate arbitrary browser scripts or perform live transactions. It can use the conversation to request missing information. Switch back to **EXECUTE** to implement the agreed plan. A mode change during inference is enforced before the returned tool calls run.
+Click the mode control on the top input border, or press **Shift+Tab**, for **PLAN** mode. The model can inspect files/websites and record a plan, but cannot edit project files, run shell/build commands, evaluate arbitrary browser scripts or perform live transactions. It can use the conversation to request missing information. Switch back to **EXECUTE** to implement the agreed plan. A mode change during inference is enforced before the returned tool calls run.
 
-Open `/effort`, then press **Tab** to toggle **OVERKILL**. Use `/agents` or the worker entry in `/settings` to set concurrency and edit each worker's name, job, model, thinking, plan/execute mode, request limit and budget independently. Workers inherit the approved directories, use separate durable model sessions, and cannot create nested workers. A plan-mode parent always forces read-only workers. The AI can spawn, send follow-ups, inspect, await and stop them through `agent`; completed workers can resume for follow-up tasks. Returned worker usage is included exactly once in parent session accounting. Per-worker budgets are capped to a share of the parent's remaining configured budget when a worker starts.
+Open `/effort` for a dedicated slider: **←/→** adjust effort, **Tab** stages **OVERKILL**, **Enter** applies and **Escape** cancels. OVERKILL adds a flowing glow in your selected accent around the input bar. Disable UI animations for a static accent. Use `/agents` or the worker entry in `/settings` to set concurrency and edit each worker's name, job, model, thinking, plan/execute mode, request limit and budget independently. Workers inherit the approved directories, use separate durable model sessions, and cannot create nested workers. A plan-mode parent always forces read-only workers. The AI can spawn, send follow-ups, inspect, await and stop them through `agent`; completed workers can resume for follow-up tasks. Returned worker usage is included exactly once in parent session accounting. Per-worker budgets are capped to a share of the parent's remaining configured budget when a worker starts.
 
-Tool names, brief result previews, model updates and worker lifecycle events appear in the conversation. The mode control sits beside the draft text. The bottom bar uses solid blocks and shows **estimated** completion, plus the remaining percentage on wide terminals. This percentage is not an independently measured guarantee of goal achievement. A verified loop finish still requires evidence.
+Tool names, brief result previews, model updates and worker lifecycle events appear in the conversation. The mode control sits at the right edge of the top input border, leaving drafts and slash commands at full width. Mode changes stay out of the chat. The solid **blue** bottom bar shows the reported **5h** account limit first, falling back to weekly or another reported quota. With no applicable quota it shows clearly labelled **estimated goal** progress. This percentage is not an independently measured guarantee of goal achievement. A verified loop finish still requires evidence.
 
 ## Providers and accounts
 
@@ -120,6 +120,7 @@ Custom endpoint prices default to unknown. Use `/settings` → **API pricing for
 | `/project` | Inspect the documented baseline and existing Battlecode controllers |
 | `/experiments [id]` | List durable experiments or reconcile one experiment |
 | `/usage` | Active account usage and provider-reported limits |
+| `/stats` | Tabbed week, month and all-time tokens, active time and activity |
 | `/tools` | List the actual tools available to the AI |
 | `/cost` | Usage, cache reads and estimated cost |
 | `/compact` | Summarize older context while preserving the full journal |
@@ -133,17 +134,29 @@ Custom endpoint prices default to unknown. Use `/settings` → **API pricing for
 | `/export [path]` | Export the current session context as Markdown |
 | `/status`, `/help`, `/quit` | Inspect state, see commands or exit |
 
-The prompt stays pinned to the bottom of the terminal while the conversation scrolls above it. Its footer shows the model on the left and thinking level aligned to the right, without a provider label. The next row shows the selected account: subscription accounts display only reported usage windows; metered API accounts display the current session cost. No provider label appears in either footer row.
+The prompt stays pinned to the bottom of the terminal while the conversation scrolls above it. Its footer shows the model on the left and the effort value (such as `medium`) aligned to the right, without a provider label or “thinking” prefix. The next row shows the selected account: subscription accounts display only reported usage windows; metered API accounts display the current session cost. No provider label appears in either footer row.
 
 Click the compact shaded Ψ mark to expand it into a shaded, rotating 3D mesh. Click again or press Escape to return to your unchanged prompt. `/logo` provides the same interaction from the keyboard. The 3D animation renders only while open and adds no dependencies.
 
-Type to filter pickers, use arrows to navigate and Enter to select. Tab completes slash commands and paths. Shift+Enter creates a newline. The clickable mode control shares the input row with your draft. Escape twice within 600 ms stops the current run. Shift+Tab toggles plan/execute mode. Ctrl+C cancels a prompt or run and exits when idle. A message entered during a run is saved and queued after the next tool boundary. Remaining stale calls in that response are skipped with recorded outcomes before the correction reaches the model.
+Type to filter pickers, use arrows to navigate and Enter to select. Tab completes slash commands and paths. Shift+Enter creates a newline. The clickable mode control sits on the input border without shifting draft text or slash commands. One Escape closes a submenu. Escape twice within 600 ms stops the current run. Shift+Tab toggles plan/execute mode. Ctrl+C cancels a prompt or run and exits when idle. A message entered during a run is saved and queued after the next tool boundary. Remaining stale calls in that response are skipped with recorded outcomes before the correction reaches the model.
 
 Stopping the AI also signals its subagents. Standalone detached jobs can continue; inspect them with `psi jobs` and terminate them with `psi jobs stop <id>`. Revoking a directory stops active session jobs before changing the allowlist. Live-controller cleanup can take several minutes.
 
-Messages use a brief eased send indicator and a compact **Ψ Psi** response header. Active model/tool work pulses subtly; text streams immediately. Tool rows update in place with their outcome, duration and a short preview, including background job IDs. Disable **UI animations** in `/settings` for static activity labels. Animation timers stop when work and send feedback settle.
+Messages use a brief eased send indicator and a compact **Ψ Psi** response header. Active model/tool work pulses subtly; text streams immediately. Tool rows update in place with their outcome, duration and a short preview, including background job IDs. Disable **UI animations** in `/settings` for static activity labels. Animation timers stop when work and send feedback settle, except while OVERKILL is explicitly enabled.
 
 ![Psi conversation and inline mode control](docs/conversation.png)
+
+## Activity statistics
+
+`/stats` opens a keyboard UI with **This week**, **This month** and **All time** tabs. Use arrows or Tab to change periods, **r** to refresh and Escape to close. It shows tokens, model requests, active time, sessions/workers, tool calls, completed objectives, input/output/cache usage, provider distribution and daily token activity.
+
+Statistics come from saved **Psi** journals, including existing sessions. They do not include work performed directly in Pi, Codex or Claude Code. Weeks start Monday and months use calendar boundaries in your local timezone. Worker receipts are deduplicated; overlapping work counts once as active time, while summed agent time is shown separately. Quota/idle waits are excluded. Interrupted sessions count only observed activity, so historical time can be a lower bound. Undated legacy worker copies count only toward all-time totals when their original journal is missing. Deleting a saved session removes its statistics.
+
+An incremental private cache stores counters and timestamps, without copying prompts, messages or credentials. Opening statistics performs no model requests. See [feature gaps compared with Pi and Codex](docs/PARITY.md).
+
+![Psi effort slider](docs/effort.png)
+
+![Psi activity statistics, illustrative data](docs/stats.png)
 
 ## Usage and multiple accounts
 
@@ -203,7 +216,7 @@ A reached budget/request limit keeps the goal **waiting**, with no further infer
 
 Efficiency mechanisms:
 
-- Lazy provider SDK and browser loading. No idle animation timer when the logo view is closed; subscription usage refresh runs at a bounded, configurable interval.
+- Lazy provider SDK and browser loading. No idle animation timer when the logo view is closed and OVERKILL is off; subscription usage refresh runs at a bounded, configurable interval.
 - Stable session identifiers and provider-supported prompt-cache hints.
 - Configurable reasoning and output budgets; an optional cheaper compaction model.
 - Bounded tool results with full text saved to artifact files.

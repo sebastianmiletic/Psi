@@ -1,4 +1,4 @@
-import { Editor, Markdown, Text, truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
+import { Editor, Markdown, Text, truncateToWidth, visibleWidth, sliceByColumn, stripTerminalSequences } from '@earendil-works/pi-tui';
 import { accentColor } from './theme.mjs';
 import { cleanTerminal, redact } from './storage.mjs';
 
@@ -13,33 +13,36 @@ const pulse = (text, ui, strength) => {
   return `\x1b[38;2;${[r,g,b].map(n=>Math.round(n*strength)).join(';')}m${text}\x1b[39m`;
 };
 
-// Keep the native editor's wrapping, cursor, history and completion behavior.
-// The mode control occupies its own fixed gutter inside the input row.
+// The mode chip lives on the border: draft text and slash completion retain full width.
+export function flowAccent(text,ui,offset=0){
+  if(ui.app.engine.config.animations===false)return ui.paint(text);
+  const config=ui.app.engine.config,key=config.accent||'sage';
+  if(!colors.has(key)){if(colors.size>=16)colors.clear();colors.set(key,accentColor(config));}
+  const {r,g,b}=colors.get(key);let output='',last=-1;
+  for(const [i,c]of Array.from(text).entries()){
+    const bucket=Math.round((0.5+0.5*Math.sin((i+offset)/11-ui.now()/550))*15);
+    if(bucket!==last){const strength=0.5+bucket/15*0.7;output+=`\x1b[38;2;${[r,g,b].map(n=>Math.min(255,Math.round(n*strength))).join(';')}m`;last=bucket;}
+    output+=c;
+  }
+  return output+'\x1b[39m';
+}
 export class Composer extends Editor {
-  constructor(ui, theme) {
-    super(ui.tui, theme, { paddingX: 1, autocompleteMaxVisible: 7 });
-    this.ui = ui;
+  constructor(ui,theme){super(ui.tui,theme,{paddingX:1,autocompleteMaxVisible:7});this.ui=ui;}
+  render(width){
+    const lines=super.render(width),mode=this.ui.app.engine.pendingSettings.agentMode||this.ui.app.engine.config.agentMode||'execute';
+    const pending=!!this.ui.app.engine.pendingSettings.agentMode||!!this.ui.modeSwitch;
+    const label=` ${width>=28?mode.toUpperCase():mode==='plan'?'PLAN':'EXEC'} ${pending?'◌':'▾'} `;
+    const x=Math.max(1,width-visibleWidth(label)-2),w=Math.min(visibleWidth(label),Math.max(0,width-x));this.modeBounds={x,y:0,width:w};
+    const radiant=this.ui.isOverkill();
+    const edge=(line,offset)=>radiant?flowAccent(stripTerminalSequences(line),this.ui,offset):line;
+    lines[0]=edge(sliceByColumn(lines[0],0,x),0)+this.ui.paint(bold(truncateToWidth(label,w)))+edge(sliceByColumn(lines[0],x+w),x+w);
+    const bottom=this.renderedVisibleLineCount+1;lines[bottom]=edge(lines[bottom],13);
+    return lines;
   }
-  render(width) {
-    const mode = this.ui.app.engine.pendingSettings.agentMode || this.ui.app.engine.config.agentMode || 'execute';
-    const label = width >= 38 ? mode.toUpperCase() : mode === 'plan' ? 'PLAN' : 'EXEC';
-    this.modeWidth = Math.min(width > 19 ? visibleWidth(label)+6 : 0, Math.max(0,width-8));
-    const innerWidth = Math.max(1,width-this.modeWidth);
-    const lines = super.render(innerWidth);
-    const pending = !!this.ui.app.engine.pendingSettings.agentMode || !!this.ui.modeSwitch;
-    return lines.map((line,i) => {
-      if (!this.modeWidth) return line;
-      if (i === 0 || i === this.renderedVisibleLineCount+1) return dim('─'.repeat(this.modeWidth))+line;
-      const prefix = i === 1 ? `  ${this.ui.paint(bold(label))}${dim(pending?' ◌ ':' ▾ ')} ` : ' '.repeat(this.modeWidth);
-      return prefix+line;
-    });
-  }
-  handleMouse(event) {
-    if (this.modeWidth && event.type === 'click' && event.button === 'left' && event.y === 1 && event.x < this.modeWidth) {
-      this.ui.toggleMode();
-      return { handled: true, render: true };
-    }
-    return super.handleMouse({ ...event, x: Math.max(0,event.x-(this.modeWidth||0)), width: Math.max(1,event.width-(this.modeWidth||0)) });
+  handleMouse(event){
+    const b=this.modeBounds;
+    if(b&&event.type==='click'&&event.button==='left'&&event.y===b.y&&event.x>=b.x&&event.x<b.x+b.width){this.ui.toggleMode();return{handled:true,render:true};}
+    return super.handleMouse(event);
   }
 }
 

@@ -35,8 +35,8 @@ test('footer hides provider, right-aligns thinking, and shows the active account
   f.session.totals.cost = 987.65; f.app.engine.busy = true;
   f.app.activeAccount = { id: 'a', name: 'Personal' }; f.app.activeUsage = { totalTokens: 1250, requests: 2 };
   const lines = ui.footer.render(100).map(stripTerminalSequences);
-  assert.ok(lines[0].startsWith('  test')); assert.ok(lines[0].endsWith('thinking off'));
-  assert.equal(visibleWidth(lines[0]),99); assert.doesNotMatch(lines.join('\n'), /fixture|987/);
+  assert.ok(lines[0].startsWith('  test')); assert.ok(lines[0].endsWith('off'));
+  assert.equal(visibleWidth(lines[0]),99); assert.doesNotMatch(lines.join('\n'), /fixture|987|thinking/);
   assert.match(lines[1], /Personal.*session.*1.3k tokens/);
   assert.match(lines[1], /session/);
   f.app.engine.busy = false;
@@ -64,12 +64,12 @@ test('the extruded Psi mesh changes with 3D rotation and fits its terminal canva
   assert.ok(a.join('').includes('48;2;'));
 });
 
-test('the composer mode control is inside the draft row and mouse switching preserves multiline input',async t=>{
+test('the composer mode chip preserves full draft width and switches silently with a mouse click',async t=>{
   const f=await fixture(t,()=>({text:'Unused'})),terminal=new MemoryTerminal(100,32),ui=new TerminalUI(f.app,{terminal});f.app.ui=ui;t.after(()=>ui.stop());ui.start();ui.editor.setText('Keep this draft\nand this second line');
-  let lines=frame(ui);assert.ok(lines.some(l=>/EXECUTE.*Keep this draft/.test(l)));assert.doesNotMatch(lines.at(-1),/EXECUTE|PLAN/);
-  const row=lines.findIndex(l=>l.includes('EXECUTE'))+1;
-  terminal.input(`\x1b[<0;5;${row}M`);terminal.input(`\x1b[<0;5;${row}m`);await ui.modeSwitch;
-  lines=frame(ui);assert.equal(f.app.engine.config.agentMode,'plan');assert.equal(ui.editor.getText(),'Keep this draft\nand this second line');assert.ok(lines.some(l=>/PLAN.*Keep this draft/.test(l)));
+  let lines=frame(ui);assert.ok(lines.some(l=>/EXECUTE/.test(l)));assert.ok(lines.some(l=>/^ Keep this draft/.test(l)));assert.doesNotMatch(lines.at(-1),/EXECUTE|PLAN/);
+  const row=lines.findIndex(l=>l.includes('EXECUTE'))+1,col=ui.editor.modeBounds.x+2;
+  const count=ui.transcript.children.length;terminal.input(`\x1b[<0;${col};${row}M`);terminal.input(`\x1b[<0;${col};${row}m`);await ui.modeSwitch;
+  lines=frame(ui);assert.equal(f.app.engine.config.agentMode,'plan');assert.equal(ui.editor.getText(),'Keep this draft\nand this second line');assert.ok(lines.some(l=>/PLAN/.test(l)));assert.ok(lines.some(l=>/^ Keep this draft/.test(l)));assert.equal(ui.transcript.children.length,count);
   for(const columns of [28,40,68,100]){terminal.resize(columns,32);frame(ui);assert.ok(ui.tui.getScreenLines().every(l=>visibleWidth(l)<=columns));}
 });
 

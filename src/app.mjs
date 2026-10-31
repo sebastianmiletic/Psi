@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { existsSync } from 'node:fs';
 import { Agents } from './agents.mjs';
+import { Statistics } from './stats.mjs';
 import { registerProgress } from './progress.mjs';
 import { checkUpdate,updateInstallation } from './updates.mjs';
 import { readFile, writeFile, stat, appendFile } from 'node:fs/promises';
@@ -23,7 +24,7 @@ export class App {
   constructor(config, session, options = {}) {
     this.config = config; this.session = session; this.options = options;
     this.home = options.home || psiHome(); this.registry = new Registry(config, this.home); this.accountUsage = new AccountUsage(this.home); this.activeAccount = null; this.activeUsage = null;
-    this.bind();
+    this.statistics=new Statistics(this.home);this.bind();
   }
   bind() {
     this.jobs = new Jobs(this.home, this.session.meta.id);
@@ -86,7 +87,7 @@ export class App {
       if(item.special==='agents'){await this.agentsMenu();continue;}
       if(item.special==='mode'){await this.setMode(c.agentMode==='plan'?'execute':'plan');continue;}
       if(item.special==='model'){await this.selectModel();continue;}
-      if(item.special==='effort'){value=await this.ui.choose('Thinking effort',getSupportedThinkingLevels(this.engine.model).map(v=>({value:v,label:v})));if(!value)continue;}
+      if(item.special==='effort'){await this.effortMenu();continue;}
       else if(item.special==='prices'){
         const key=this.engine.config.model,previous=c.customPrices?.[key]||this.engine.model.cost,prices={};let cancelled=false;
         for(const field of ['input','output','cacheRead','cacheWrite']){const answer=await this.ui.ask({type:'text',message:`${field} USD per million tokens`,placeholder:String(previous[field]||0)});if(answer===null){cancelled=true;break;}const n=Number(answer);if(!Number.isFinite(n)||n<0){this.ui.note('Enter a nonnegative price.',true);cancelled=true;break;}prices[field]=n;}
@@ -190,9 +191,10 @@ export class App {
     }
     const match = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()); const command = match?.[1]; const arg = match?.[2] || '';
     if (this.authController && !['quit', 'help'].includes(command)) throw new Error('Finish or cancel account sign-in first.');
-    if (this.engine.busy && !this.engine.waiting && !['effort','settings','agents','directory','update','logo','usage','tools','project','experiments','cost','status','help','quit'].includes(command)) throw new Error('Press Escape twice to stop, or enter a message to queue it at the next tool boundary.');
+    if (this.engine.busy && !this.engine.waiting && !['stats','effort','settings','agents','directory','update','logo','usage','tools','project','experiments','cost','status','help','quit'].includes(command)) throw new Error('Press Escape twice to stop, or enter a message to queue it at the next tool boundary.');
     if(['continue','stop','jobs','budget','limit','tokens'].includes(command))throw new Error(`/${command} was removed. Use /settings for limits, /agents for workers, or Escape twice to stop.`);
     if(command==='settings')return this.settingsMenu();
+    if(command==='stats')return this.ui.statsMenu(()=>this.statistics.read());
     if(command==='agents')return this.agentsMenu();
     if(command==='directory')return this.directoryCommand(arg);
     if(command==='update'){if(this.engine.busy)throw new Error('Stop the active run before updating Psi.');this.ui.note('Checking GitHub releases…');this.ui.note((await updateInstallation(this.home)).message);return;}
@@ -211,9 +213,7 @@ export class App {
     if (command === 'accounts' || command === 'login') return this.accountMenu(command === 'login' ? 'login' : arg);
     if (command === 'provider') return this.addProvider();
     if (command === 'effort') {
-      const levels = getSupportedThinkingLevels(this.engine.model);
-      const effort = arg || await this.ui.choose('Thinking effort', levels.map(value => ({value,label:value})),{status:()=>`OVERKILL ${this.engine.config.overkill?'ON':'off'} · tab toggle · /agents configure`,onTab:async()=>this.update({overkill:!this.engine.config.overkill})});
-      if(effort){await this.update({effort});this.ui.note(`Thinking: ${effort}`);}return;
+      if(arg)await this.update({effort:arg});else await this.effortMenu();return;
     }
     if (command === 'profile') { if (!['battlecode', 'general'].includes(arg)) throw new Error('Use /profile battlecode or /profile general.'); await this.update({ profile: arg }); this.ui.note(`Profile: ${arg}`); return; }
     if (command === 'usage') {
@@ -249,7 +249,8 @@ export class App {
     if (command === 'export') { const path = resolve(this.session.meta.cwd, arg || `psi-${this.session.meta.id}.md`); await writeFile(path, this.exportMarkdown(), { mode: 0o600 }); this.ui.note(`Exported: ${path}`); return; }
     throw new Error(`Unknown command: /${command}. Use /help.`);
   }
-  async setMode(mode){if(mode==='plan')await this.agents.stopAll({wait:true});await this.update({agentMode:mode});this.ui?.note(`${mode==='plan'?'Plan mode: inspect and prepare a plan.':'Execute mode: work within the allowed directories.'}`);}
+  async effortMenu(){const c={...this.engine.config,...this.engine.pendingSettings};const result=await this.ui.effortMenu({levels:getSupportedThinkingLevels(this.engine.model),effort:c.effort,overkill:c.overkill});if(result)await this.update(result);}
+  async setMode(mode){if(mode==='plan')await this.agents.stopAll({wait:true});await this.update({agentMode:mode});}
   async directoryCommand(arg){
     const match=/^(add|remove)(?:\s+([\s\S]+))?$/.exec(arg.trim());
     if(!arg.trim()){this.ui.note('Allowed directories:\n'+(await this.tools.policy.roots()).join('\n')+'\n/directory add <path> · /directory remove <path>');return;}

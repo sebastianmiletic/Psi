@@ -61,7 +61,7 @@ export class Engine {
     const visual=Object.keys(patch).every(k=>['accent','showLogo','animations','showUsage','debug','checkForUpdates','autoUpdate'].includes(k));
     if(this.busy&&!this.waiting&&!immediate&&!visual){
       Object.assign(this.pendingSettings,patch);await this.session.event({type:'state',state:{pendingSettings:this.pendingSettings}});
-      this.onEvent({type:'settings_queued',settings:this.pendingSettings});return;
+      this.onEvent({type:'settings_queued',settings:this.pendingSettings,patch:{...patch}});return;
     }
     const change=async()=>{
       await this.session.assertLatest();
@@ -126,7 +126,7 @@ export class Engine {
       const billing={mode:this.registry.billingMode(account),known:reportedCost!==null||this.registry.pricesKnown(model),source:reportedCost!==null?'provider_reported':'usage_at_model_rates'};
       if(reportedCost!==null&&result.usage?.cost)result.usage.cost.total=reportedCost;
       if (result.usage) {
-        await this.session.event({ type: 'usage', usage: result.usage, accountId: account.id, provider: model.provider, requestId, billing });
+        await this.session.event({ type: 'usage', usage: result.usage, accountId: account.id, provider: model.provider,model:modelName,requestId, billing });
         const accountUsage = await this.accountUsage.record(account, { usage: result.usage, limits, requestId, model: modelName });
         this.onEvent({ type: 'usage', totals: this.session.totals, usage: result.usage, account, accountUsage, billing });
       }
