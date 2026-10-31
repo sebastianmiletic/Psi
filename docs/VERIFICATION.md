@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **97 passing tests**.
+- `npm run verify`: syntax checks and **105 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -108,3 +108,10 @@ Actual API invoices and real competition transactions were not exercised in this
 - Input and usage-bar waves move 35% slower, with a narrower brightness range. The existing reduced-motion and animation/timer checks pass; logo motion is unchanged.
 - Account switch/remove rows show only provider and account name. Codex is shortened to `codex`; active markers, authentication type, account IDs and usage details are omitted. A focused regression verifies the list still uses stable IDs internally.
 - Read-only inspection confirmed the unwanted entry was already absent from the local Psi store. The separate Pi source login was left intact. No account-removal code or personal account names were added to the product.
+
+## Models and automatic subagents (0.2.9)
+
+- Eight integration checks verify short model labels, full route preservation, real-composer filtering, duplicate-label collapse, draft restoration, keyboard selection, right-aligned clickable OVERKILL and narrow bounds.
+- Real local child processes verify automatic bounded startup, role/task names, per-profile models/effort, plan-only advisory permissions, result integration before final completion, usage deduplication, mid-request enabling, parent resume and double-Escape cancellation. Fixtures use no paid inference or live competition calls.
+- Subagent activity is written at state/tool transitions and observed through filesystem events. Job completion is event-driven; observers close on exit/session changes. Results are persisted and delivered once per recorded job identity.
+- Models, effort and worker-row screenshots come from actual terminal frames with illustrative data. Manual execution delegation remains supported; automatic kickoff workers inspect without concurrent project edits.

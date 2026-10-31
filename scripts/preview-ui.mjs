@@ -34,14 +34,15 @@ try {
   browser=await chromium.launch({executablePath:process.env.PSI_CHROME_PATH||'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',headless:true});
   const page=await browser.newPage({viewport:{width:1040,height:744},deviceScaleFactor:2});
   await mkdir(new URL('../docs/',import.meta.url),{recursive:true});
-  for (const [name,animation] of [['terminal',false],['logo-3d',true],['settings',false],['conversation',false],['effort',false],['stats',false],['reset',false],['tools',false],['subagents',false],['overkill',false]]) {
+  for (const [name,animation] of [['terminal',false],['logo-3d',true],['settings',false],['conversation',false],['models',false],['effort',false],['stats',false],['reset',false],['tools',false],['subagents',false],['overkill',false]]) {
     let settings;
+    if(name==='models'){ui.clear();settings=app.selectModel('5.6 luna');await new Promise(r=>setTimeout(r,10));}
     if(name==='reset'){ui.clear();const now=Date.now();const data={account:{id:'preview',name:'Personal',provider:'openai-codex',type:'oauth'},mode:'codex',credits:{availableCount:2,credits:[{status:'available',expiresAt:now/1000+10*86400}]},usage:{limits:[{kind:'quota',label:'5h',usedPercent:91,resetAt:now/1000+5400},{kind:'quota',label:'7d',usedPercent:17,resetAt:now/1000+3*86400}]}};settings=ui.resetMenu({account:data.account,read:async()=>data,use:async()=>data,onUsage:d=>{app.activeAccount=d.account;app.activeUsage=d.usage;}});await new Promise(r=>setTimeout(r,0));}
     if(name==='tools'){ui.clear();settings=ui.toolsMenu(app.tools.definitions());}
     if(name==='subagents'){ui.clear();settings=app.agentsMenu();await new Promise(r=>setTimeout(r,5));}
     if(name==='effort'){ui.clear();settings=ui.effortMenu({levels:['off','low','medium','high','xhigh','max'],effort:'medium',overkill:true});}
     if(name==='stats'){ui.clear();const now=Date.now();const days={};for(let i=0;i<112;i++){const d=new Date(now);d.setDate(d.getDate()-i);days[`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`]=i%11===0?0:((i*7919)%140000);}const data=['week','month','all'].map((period,i)=>{const tokens=[286400,1283000,4821000][i];return{period,now,tokens,input:tokens*0.45,output:tokens*0.2,cacheRead:tokens*0.35,cachePercent:44,requests:[34,186,642][i],sessions:[5,24,87][i],workers:[9,41,138][i],tools:[206,984,3612][i],goals:[3,18,61][i],activeMs:[9600000,48600000,168200000][i],agentMs:[16400000,89100000,296100000][i],providers:{'openai-codex':{tokens:tokens*0.74,requests:400},anthropic:{tokens:tokens*0.26,requests:242}},days,unknownDatedRequests:0,malformed:0};});settings=ui.statsMenu(async()=>data);await new Promise(r=>setTimeout(r,0));}
-    if(name==='overkill'){ui.clear();app.engine.config.overkill=true;ui.syncMotion();ui.editor.setText('/model');}
+    if(name==='overkill'){ui.clear();app.engine.config.overkill=true;ui.syncMotion();ui.editor.setText('Compare the next experiment.');for(const [i,name,activity,status]of[[1,'Replay audit · Research','read','running'],[2,'Fixture risks · Review','reasoning','running'],[3,'Build approach · Builder',null,'completed']])ui.event({type:'agent_status',agent:{id:'preview-'+i,name,activity,status,model:'openai-codex/gpt-5.6-luna',createdAt:new Date(Date.now()-45000).toISOString()}});}
     if(name==='settings'){ui.hideLogo();settings=app.settingsMenu();}
     if(name==='conversation'){
       ui.clear();ui.user('Inspect the baseline and prepare the next experiment.',{animate:false});

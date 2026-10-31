@@ -16,15 +16,16 @@ export class EffortPanel {
  publish(){this.ui.effortPreview={effort:this.levels[this.index],overkill:this.overkill};this.ui.syncMotion();this.ui.render();}
  invalidate(){}
  render(width){
-  const paint=this.ui.paint,cell=Math.floor((Math.min(78,width)-4)/this.levels.length),horizontal=cell>=6;
+  const paint=this.ui.paint,button=this.overkill?accentBadge(' OVERKILL ON ',this.ui.app.engine.config):dim('○ OVERKILL');
+  const right=visibleWidth(button),left=Math.max(8,width-right-5),cell=Math.floor(left/this.levels.length),horizontal=cell>=6;
   const labels=this.levels.map((v,i)=>i===this.index?paint(bold(v)):dim(v));
-  const track=this.levels.map((_,i)=>i===this.index?paint('●'):dim('○')).join('━');
-  const scale=horizontal?[
-   labels.map((v,i)=>v+' '.repeat(Math.max(0,cell-visibleWidth(this.levels[i])))).join(''),
-   this.levels.map((_,i)=>(i===this.index?paint('●'):dim('○'))+dim('─'.repeat(Math.max(0,cell-1)))).join('')
-  ]:[paint(bold('← '+this.levels[this.index]+' →'))+'  '+track];
-  return [row(bold('Effort'),width),...scale.map(s=>row(s,width)),row(this.overkill?accentBadge(' OVERKILL ON ',this.ui.app.engine.config):dim('○ OVERKILL'),width),row(dim(hints),width)];
+  const labelLine=horizontal?labels.map((v,i)=>v+' '.repeat(Math.max(0,cell-visibleWidth(this.levels[i])))).join(''):paint(bold('← '+this.levels[this.index]+' →'));
+  const track=this.levels.map((_,i)=>(i===this.index?paint('●'):dim('○'))+dim('─'.repeat(Math.max(0,(horizontal?cell:2)-1)))).join('');
+  const line=truncateToWidth(labelLine,left)+' '.repeat(Math.max(1,width-4-right-Math.min(left,visibleWidth(labelLine))))+button;
+  this.buttonBounds={x:width-right-2,y:1,width:right};
+  return [row(bold('Effort'),width),row(line,width),row(track,width),row(dim(hints),width)];
  }
+ handleMouse(event){const b=this.buttonBounds;if(b&&event.type==='click'&&event.button==='left'&&event.y===b.y&&event.x>=b.x&&event.x<b.x+b.width){this.overkill=!this.overkill;this.publish();return{handled:true,render:true};}}
  handleInput(data){
   if(matchesKey(data,'escape')){this.cancel();return;}
   if(matchesKey(data,'enter')){this.resolve({effort:this.levels[this.index],overkill:this.overkill});return;}

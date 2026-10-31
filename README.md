@@ -20,7 +20,7 @@ Psi connects models, project files, build tools, browser research and experiment
 | :--- | :--- |
 | **Persistent goals** | Recover through provider failures and quota waits. Resume the journal after an interruption. |
 | **Accounts that travel with the task** | Multiple providers and multiple accounts per provider, reported quotas and optional failover. |
-| **Subagents on demand** | Independent roles, models and effort. Turn on OVERKILL from `/effort`. |
+| **Subagents on demand** | Task-named workers start automatically with OVERKILL. Independent roles, models and effort. |
 | **Tools in your workspace** | Read, edit, search, run builds, extract websites, browse and launch detached benchmarks. |
 | **Battlecode evidence** | Isolated candidates, durable experiments, replay checks and fresh-fixture confirmation. |
 
@@ -53,7 +53,7 @@ Installers verify GitHub's archive digest and preserve accounts/settings under `
 
 ## Less text. More control.
 
-The Ψ header stays visible above compact bottom menus. Effort is a slider. Statistics are a heatmap. Weekly quota sits beside your account as **percent left**; the bottom meter prioritizes the five-hour window. OVERKILL makes the prompt, meter and terminal logo flow in your chosen accent.
+The Ψ header stays visible above compact bottom menus. Model search lives in the input bar, with names such as `5.6 luna`. Effort is a slider with OVERKILL on the right. Statistics are a heatmap. Weekly quota sits beside your account as **percent left**; the bottom meter prioritizes the five-hour window. OVERKILL makes the prompt, meter and terminal logo flow in your chosen accent.
 
 <table>
 <tr><td><a href="docs/effort.png"><img src="docs/effort.png" alt="Minimal effort slider and OVERKILL switch"></a></td><td><a href="docs/stats.png"><img src="docs/stats.png" alt="Compact statistics panel with a calendar heatmap"></a></td></tr>
@@ -71,6 +71,8 @@ The Ψ header stays visible above compact bottom menus. Effort is a slider. Stat
 | `/reset` | Reset times and available account resets |
 | `/settings` · `/refresh` | Configure Psi or reload disk settings |
 | `/help` | Every command |
+
+With **OVERKILL** on, each task starts advisory subagents up to your configured concurrency. Their task names, activity, model and completion status appear beneath the input. Reports return to the main agent before it finishes; implementation can then be delegated with explicit ownership. Subagents use their configured models and selected provider accounts and consume normal provider usage.
 
 **Shift+Tab** switches plan/execute. **Escape** closes menus; **double Escape** stops the AI. Enter a message during work to queue it at the next tool boundary. Tools run without approval dialogs inside the directories you grant.
 

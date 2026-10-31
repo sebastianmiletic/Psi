@@ -3,6 +3,7 @@ import {
   CombinedAutocompleteProvider, matchesKey, truncateToWidth, CURSOR_MARKER,
   colorToRgb, parseColor, visibleWidth,
 } from '@earendil-works/pi-tui';
+import { modelLabel } from './model-label.mjs';
 import { accentText,accentBadge } from './theme.mjs';
 import { usageLabel,applicableQuota } from './usage.mjs';
 import { EffortPanel,StatsPanel,ToolsPanel,ResetPanel } from './panels.mjs';
@@ -48,7 +49,7 @@ class SecretInput {
 export class TerminalUI {
   constructor(app, { terminal = new ProcessTerminal(), now=()=>performance.now() } = {}) {
     this.app = app; this.terminal = terminal; this.tui = new TuiAltScreen(terminal);
-    this.now=now;this.openTools=new Map();
+    this.now=now;this.openTools=new Map();this.workerRows=new Map();
     this.paint=t=>accentText(t,app.engine.config);
     this.selectionTheme={...selectionTheme,selectedPrefix:this.paint,selectedText:t=>this.paint(bold(t))};
     this.markdownTheme={...markdownTheme,link:this.paint,code:this.paint,listBullet:this.paint};
@@ -56,6 +57,7 @@ export class TerminalUI {
     this.editor = new Composer(this, { borderColor: dim, selectList: this.selectionTheme });
     this.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, app.session.meta.cwd));
     this.editor.onSubmit = text => {
+      if(this.modelSearch)return;
       if (!text.trim()) return;
       this.editor.addToHistory(text); this.editor.setText('');
       void app.submit(text).catch(e => this.note(e.message, true));
@@ -63,8 +65,7 @@ export class TerminalUI {
     this.header = new PsiHeader({ app, onActivate: () => this.showLogo(), format: t => bold(safe(t)), subdued: t => dim(safe(t)),terminal,glow:()=>this.isOverkill()?(app.engine.config.animations===false?0:this.now()/360):null });
     this.footer = { invalidate() {}, render: width => {
       const c = app.engine.config;
-      const slash = c.model.indexOf('/');
-      const model = safe(slash >= 0 ? c.model.slice(slash + 1) : c.model);
+      const model=safe(modelLabel(c.model));
       const state={...c,...app.engine.pendingSettings,...this.effortPreview};
       const right = truncateToWidth(`${safe(state.effort)}${state.overkill?' · OVERKILL':''}`, Math.max(0,width-(state.overkill?5:3)));
       const rightWidth=visibleWidth(right)+(state.overkill?2:0);
@@ -72,6 +73,13 @@ export class TerminalUI {
       const gap = Math.max(1,width-visibleWidth(left)-rightWidth-1);
       return [left+' '.repeat(gap)+(state.overkill?accentBadge(' '+right+' ',c):dim(right)), ...(app.engine.config.showUsage===false?[]:[truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage,{sessionCost:app.session.meteredCost,costKnown:app.session.meteredCostKnown,remaining:true,compact:true,weeklyOnly:true}))),width)])];
     } };
+    this.subagentBar={invalidate(){},render:width=>{
+      const all=[...this.workerRows.values()],active=all.filter(r=>['running','queued','waiting'].includes(r.status)),idle=all.filter(r=>!['running','queued','waiting'].includes(r.status));
+      const max=Math.max(1,Math.min(3,Math.floor(this.terminal.rows/10))),rows=[...active,...idle.slice(-max).reverse()].slice(0,max);
+      return rows.map((r,i)=>{const extra=i===rows.length-1&&active.length>rows.length?` · +${active.length-rows.length}`:'';const running=['running','queued','waiting'].includes(r.status),icon=running?'●':r.status==='completed'?'✓':'!';const elapsed=Math.max(0,Math.floor((Date.now()-Date.parse(r.createdAt||new Date()))/1000));
+        return truncateToWidth('  '+this.paint(icon)+' '+safe(r.name)+' · '+dim(`${r.activity&&running?r.activity:r.status} · ${modelLabel(r.model)}${running?' · '+elapsed+'s':''}${extra}`),width);
+      });
+    }};
     this.progressBar={invalidate(){},render:width=>{
       const quota=applicableQuota(app.activeUsage),state=app.session.state.progress;
       const pct=Math.round(Math.max(0,Math.min(100,100-(quota?.usedPercent??state?.percent??0))));
@@ -87,6 +95,7 @@ export class TerminalUI {
       { component: this.scroll, basis: 0, grow: 1, minSize: 1 },
       { component: this.panelScroll, basis: 'auto', shrink: 1, minSize: 0 },
       { component: this.editor, basis: 'auto', shrink: 1, minSize: 3 },
+      { component:this.subagentBar,basis:'auto',shrink:0,minSize:0 },
       { component: this.footer, basis: 'auto', shrink: 0, minSize: 1 },
       { component: this.progressBar, basis: 1, shrink: 0, minSize: 1 },
     ]);
@@ -156,7 +165,7 @@ export class TerminalUI {
     if(event.type==='settings'){this.syncMotion();this.tui.invalidate();this.tui.requestRender(true);}
     if(event.type==='waiting'){this.finishResponse('partial response');this.note(event.reason+' · Escape twice to stop; /settings or /accounts can resolve the wait.');}
     if(event.type==='account_switched')this.note(`Switched account: ${event.previous} → ${event.account.name}`);
-    if(event.type==='model_fallback')this.note(`Using configured fallback: ${event.model}`);
+    if(event.type==='model_fallback')this.note(`Using configured fallback: ${modelLabel(event.model)}`);
     if(event.type==='account_exhausted')this.note(`${event.account.name}: checking another configured account.`);
     if (event.type === 'request_start') {
       this.finishResponse('partial response');this.activity=event.summary?'compacting':'thinking';this.streamText='';
@@ -184,8 +193,7 @@ export class TerminalUI {
     if (event.type === 'queued') this.note('Message queued for the next tool boundary.');
     if (event.type === 'stopped') this.note('Stopped. Queued messages and unfinished goals are saved.');
     if(event.type==='progress'){this.note(event.update);if(this.app.engine.config.agentMode==='plan')this.markdown(event.steps.map((s,i)=>`${i+1}. ${s.title}`).join('\n'),false);}
-    if(event.type==='agent_started')this.note(`Worker started: ${event.agent.name} · ${event.agent.model}`);
-    if(event.type==='agent_finished')this.note(`Worker ${event.agent.name}: ${event.agent.status}`);
+    if(['agent_started','agent_finished','agent_status'].includes(event.type)){this.workerRows.set(event.agent.id,{...event.agent,status:event.agent.status||(event.type==='agent_started'?'running':'completed')});if(this.workerRows.size>32)this.workerRows.delete(this.workerRows.keys().next().value);}
     if (event.type === 'error') this.note(event.error, true);
     if (event.type === 'goal_complete') this.note(`Objective complete. ${event.summary}`);
     if (event.type === 'run_end') {this.finishResponse(event.status==='stopped'?'stopped':['error','limited'].includes(event.status)?'partial response':'');this.activity='';this.openTools.clear();this.syncMotion();}
@@ -194,7 +202,7 @@ export class TerminalUI {
   panelRows(){
     const header=this.app.engine.config.showLogo===false||this.terminal.rows<10?0:this.header.render(this.terminal.columns).length;
     const editor=Math.min(6,this.editor.render(this.terminal.columns).length);
-    return Math.max(3,this.terminal.rows-header-editor-this.footer.render(this.terminal.columns).length-2);
+    return Math.max(3,this.terminal.rows-header-editor-this.footer.render(this.terminal.columns).length-this.subagentBar.render(this.terminal.columns).length-2);
   }
   async choose(title,items,options={}){
     if(!items.length){this.note('No items');return null;}
@@ -215,6 +223,21 @@ export class TerminalUI {
       };return component;
     });
   }
+  async modelMenu(items,query=''){
+    if(this.pending)throw new Error('Finish the current selection first.');
+    const draft=this.editor.getText(),previousChange=this.editor.onChange,previousSubmit=this.editor.onSubmit;
+    const previousAutocomplete=this.editor.autocompleteProvider;
+    let list,finish;
+    const make=source=>{const value=new SelectList(source,Math.max(1,Math.min(7,this.panelRows()-2)),this.selectionTheme);value.onSelect=item=>finish(item.value);value.onCancel=()=>finish(null);return value;};
+    try{return await this.interact('',({resolve,cancel})=>{
+      finish=value=>value===null?cancel():resolve(value);
+      const filter=text=>{const parts=text.toLowerCase().trim().split(/\s+/).filter(Boolean);const seen=new Set();list=make(items.filter(item=>parts.every(q=>(item.search||item.label).toLowerCase().includes(q))).filter(item=>{const key=item.label.toLowerCase();if(seen.has(key))return false;seen.add(key);return true;}));this.render();};
+      const handleInput=data=>{if(['up','down','enter','escape','pageUp','pageDown','tab'].some(k=>matchesKey(data,k))){list.handleInput(matchesKey(data,'tab')?'\x1b[B':data);this.render();return true;}return false;};
+      this.modelSearch={handleInput};this.editor.onChange=filter;this.editor.onSubmit=()=>{};this.editor.setAutocompleteProvider({getSuggestions:async()=>null,applyCompletion:()=>{throw new Error('No model completion');}});this.editor.setText(query);filter(query);
+      return{focused:true,invalidate(){},render:width=>{list.maxVisible=Math.max(1,Math.min(7,this.panelRows()-2));return[truncateToWidth('  '+bold('Model'),width),...list.render(width),truncateToWidth(dim('  ↑ ↓ · ↵ · esc'),width)];},handleInput};
+    },undefined,{editorFocus:true});}
+    finally{this.modelSearch=null;this.editor.onChange=previousChange;this.editor.onSubmit=previousSubmit;if(previousAutocomplete)this.editor.setAutocompleteProvider(previousAutocomplete);this.editor.setText(draft);this.render();}
+  }
   async effortMenu(options){
     try{return await this.interact('',({resolve,cancel})=>new EffortPanel(this,{...options,resolve,cancel}));}
     finally{this.effortPreview=null;this.syncMotion();this.render();}
@@ -229,7 +252,7 @@ export class TerminalUI {
       input.onSubmit = resolve; input.onEscape = cancel; return input;
     }, prompt.signal);
   }
-  interact(title, make, signal, {overlay=false}={}) {
+  interact(title, make, signal, {overlay=false,editorFocus=false}={}) {
     if(this.closed)return Promise.resolve(null);
     if (this.pending) throw new Error('Finish the current selection first.');
     if (signal?.aborted) return Promise.resolve(null);
@@ -243,8 +266,8 @@ export class TerminalUI {
       if(title)this.panel.addChild(new Text(`  ${bold(safe(title))}`, 0, 0));
       component = make({ resolve: finish, cancel });
       if(overlay)handle=this.tui.showOverlay(component,{width:'100%',maxHeight:'100%',row:0,col:0,margin:0});else this.panel.addChild(component);
-      this.editor.disableSubmit = true; this.tui.setFocus(component); this.render();
+      this.editor.disableSubmit = true; this.tui.setFocus(editorFocus?this.editor:component); this.render();
     });
   }
-  clear() {this.response=null;this.stream=null;this.lastUser=null;this.openTools.clear();this.stopMotion();this.transcript.clear();this.scroll.scrollToEnd();this.tui.resetTextSelection();this.render();}
+  clear() {this.response=null;this.stream=null;this.lastUser=null;this.openTools.clear();this.stopMotion();this.workerRows.clear();this.transcript.clear();this.scroll.scrollToEnd();this.tui.resetTextSelection();this.render();}
 }
