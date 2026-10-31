@@ -182,8 +182,9 @@ export class App {
     }
     const match = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()); const command = match?.[1]; const arg = match?.[2] || '';
     if (this.authController && !['quit', 'help'].includes(command)) throw new Error('Finish or cancel account sign-in first.');
-    if (this.engine.busy && !this.engine.waiting && !['reset','stats','effort','settings','subagents','refresh','directory','update','logo','usage','tools','project','experiments','cost','status','help','quit'].includes(command)) throw new Error('Press Escape twice to stop, or enter a message to queue it at the next tool boundary.');
+    if (this.engine.busy && !this.engine.waiting && !['name','reset','stats','effort','settings','subagents','refresh','directory','update','logo','usage','tools','project','experiments','cost','status','help','quit'].includes(command)) throw new Error('Press Escape twice to stop, or enter a message to queue it at the next tool boundary.');
     if(['continue','stop','jobs','budget','limit','tokens','agents','provider','cd','summary-model','checkpoint'].includes(command))throw new Error(`/${command} was removed. Use /settings for limits, /subagents for workers, or Escape twice to stop.`);
+    if(command==='name'){const value=arg||await this.ui.ask({type:'text',message:'Session name',placeholder:this.session.meta.title});if(value===null)return;this.ui.note('Session: '+await this.session.rename(value,{duringRun:this.engine.busy}));return;}
     if(command==='settings')return this.settingsMenu();
     if(command==='reset')return this.resetMenu();
     if(command==='stats')return this.ui.statsMenu(()=>this.statistics.read());
@@ -195,7 +196,7 @@ export class App {
     if(command==='experiments'){const list=arg?await this.battlecode.reconcile(arg):await this.battlecode.store.list(this.session.meta.cwd);this.ui.note(JSON.stringify(list,null,2));return;}
     if (command === 'logo') { this.ui.showLogo(); return; }
     if (command === 'quit' || command === 'exit') return this.close();
-    if (command === 'help') { const { commands } = await import('./ui.mjs'); this.ui.markdown(commands.map(c => `**/${c.name}**  ${c.description}`).join('\n\n')); return; }
+    if (command === 'help') { const { commands } = await import('./ui.mjs'); this.ui.markdown(commands.map(c => `**/${c.name}**  ${c.description}`).join('\n\n')+'\n\nCtrl+T: tool details. Shift+Tab: plan/execute. Double Escape: stop.'); return; }
     if (command === 'model') return this.selectModel(arg);
     if (command === 'accounts' || command === 'login') return this.accountMenu(command === 'login' ? 'login' : arg);
     if (command === 'effort') {
@@ -214,7 +215,7 @@ export class App {
       const u = this.session.totals; const cached = u.input + u.cacheRead ? Math.round(u.cacheRead / (u.input + u.cacheRead) * 100) : 0;
       this.ui.note(`${u.requests} requests · ${u.input.toLocaleString()} input · ${u.output.toLocaleString()} output · ${u.cacheRead.toLocaleString()} cache read (${cached}%)\nEstimated catalog cost: $${u.cost.toFixed(5)}. Subscription quotas, tiered pricing and unknown/custom prices are not measured.`); return;
     }
-    if (command === 'status') { this.ui.note(JSON.stringify({ session: this.session.meta.id, cwd: this.session.meta.cwd, directories:await this.tools.policy.roots(),status: this.session.status,mode:this.engine.config.agentMode,overkill:this.engine.config.overkill,model: this.engine.config.model, effort: this.engine.config.effort, profile: this.engine.config.profile, budget: this.engine.config.budget || 'unlimited', maxSteps: this.engine.config.maxSteps || 'unlimited', access: 'approved directories; no approval prompts', objective: this.session.state.loopGoal || null }, null, 2)); return; }
+    if (command === 'status') { this.ui.note(JSON.stringify({ session: this.session.meta.id,name:this.session.meta.title, cwd: this.session.meta.cwd, directories:await this.tools.policy.roots(),status: this.session.status,mode:this.engine.config.agentMode,overkill:this.engine.config.overkill,model: this.engine.config.model, effort: this.engine.config.effort, profile: this.engine.config.profile, budget: this.engine.config.budget || 'unlimited', maxSteps: this.engine.config.maxSteps || 'unlimited', access: 'approved directories; no approval prompts', objective: this.session.state.loopGoal || null }, null, 2)); return; }
     if (command === 'loop') { const objective=arg || await this.ui.ask({type:'text',message:'What should Psi achieve?',placeholder:'Describe the goal and how success can be verified'}); if(!objective?.trim())return; this.ui.user(objective); await this.engine.run(objective, { loop: true }).catch(() => {}); return; }
     if (command === 'compact') { await this.engine.run(null, { compactOnly: true }).catch(() => {}); return; }
     if (command === 'new') return this.changeSession(await Session.create(this.session.meta.cwd, this.home));
@@ -300,7 +301,7 @@ export class App {
     }
   }
   exportMarkdown() {
-    return `# Ψ Psi session\n\nWorkspace: ${this.session.meta.cwd}\nSession: ${this.session.meta.id}\n\n` + this.session.messages.map(m => {
+    return `# Ψ Psi session\n\nName: ${redact(this.session.meta.title)}\nWorkspace: ${this.session.meta.cwd}\nSession: ${this.session.meta.id}\n\n` + this.session.messages.map(m => {
       const content = typeof m.content === 'string' ? m.content : m.content.map(c => c.type === 'text' ? c.text : c.type === 'toolCall' ? `Tool: ${c.name}\n\n${JSON.stringify(c.arguments)}` : c.type === 'image' ? '[Image]' : '').join('\n');
       return `## ${m.role}${m.toolName ? `: ${m.toolName}` : ''}\n\n${redact(content)}\n`;
     }).join('\n');

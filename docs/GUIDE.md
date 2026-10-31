@@ -63,7 +63,7 @@ Use `/model` to type a search in the main input bar. The list and footer show mo
 
 Open `/effort` for a compact slider: **←/→** adjust effort, **Tab** stages the right-aligned **OVERKILL** toggle, **Enter** applies and **Escape** cancels. OVERKILL adds a flowing glow in your selected accent around the input bar. Disable Motion for a static accent. Use `/subagents` or the worker entry in `/settings` to set concurrency and edit each worker's name, job, model, thinking, plan/execute mode, request limit and budget independently. With OVERKILL enabled, every new task automatically starts available role-specific advisory workers, up to the configured concurrency. Automatic workers inspect in plan mode, which prevents conflicting edits/builds; the main agent owns implementation and can use `agent` to delegate explicitly scoped execution afterward. The configured profile mode still applies to manually delegated workers.
 
-Worker rows beneath the input show task names, model, active tool/response state, elapsed time and completion/failure. At most three rows are shown; extra active workers are counted and `/subagents` exposes all runs. Completion uses filesystem events rather than inference polling. Reports are delivered at safe model boundaries and must be reviewed before the parent finishes. Interrupted parents can recover reports and deduplicated token receipts from saved journals. Double Escape stops the parent and workers.
+Worker rows below the usage bar show task names, model, active tool/response state, elapsed time and completion/failure. At most three rows are shown; extra active workers are counted and `/subagents` exposes all runs. Completion uses filesystem events rather than inference polling. Reports are delivered at safe model boundaries and must be reviewed before the parent finishes. Interrupted parents can recover reports and deduplicated token receipts from saved journals. Double Escape stops the parent and workers.
 
 Workers inherit the approved directories, use separate durable model sessions, and cannot create nested workers. A plan-mode parent always forces read-only workers. The AI can spawn, send follow-ups, inspect, await and stop them through `agent`; completed workers can resume for follow-up tasks. Returned worker usage is included exactly once in parent session accounting. Per-worker budgets are capped to a share of the parent's remaining configured budget when a worker starts.
 
@@ -131,6 +131,7 @@ Custom endpoint prices default to unknown. Use `/settings` → **API rates** to 
 | `/cost` | Usage, cache reads and estimated cost |
 | `/compact` | Summarize older context while preserving the full journal |
 | `/profile battlecode\|general` | Change system guidance |
+| `/name [title]` | Rename the current session, or prompt for a title |
 | `/new` | Start a fresh session |
 | `/resume [id]` | Search saved sessions |
 | `/refresh` | Reload settings, accounts, providers and tools |
@@ -145,7 +146,9 @@ Type to filter pickers, use arrows to navigate and Enter to select. Tab complete
 
 Stopping the AI also signals its subagents. Standalone detached jobs can continue; inspect them with `psi jobs` and terminate them with `psi jobs stop <id>`. Revoking a directory stops active session jobs before changing the allowlist. Live-controller cleanup can take several minutes.
 
-Messages use a brief eased send indicator and a compact **Ψ Psi** response header. Active model/tool work pulses subtly; text streams immediately. Tool rows update in place with their outcome, duration and a short preview, including background job IDs. Disable **Motion** in `/settings` for static activity labels. OVERKILL gives the input borders, usage meter and original terminal Ψ mark a brighter flowing accent, with a filled ON badge. Motion can be disabled for a static accent.
+Messages use a brief eased send marker, followed by clean Markdown responses with an inline bullet and aligned continuation lines. There is no repeated assistant-name heading or streaming-phase label above each response. The live Thinking/Working indicator sits above the composer and disappears after work stops.
+
+Consecutive reads/searches/fetches form a compact **Exploring / Explored** group. Commands show **Running / Ran** with indented output; edit previews show removed/added text. Failures, nonzero exit codes, background job identities and stopped outcomes remain explicit. **Ctrl+T** toggles inline tool details without another model call. Compact output is bounded; expanded output remains a preview, with full journal/artifact evidence on disk. Disable **Motion** in Settings for static indicators. OVERKILL retains its slower flowing accent.
 
 ![Psi conversation and inline mode control](conversation.png)
 
@@ -287,4 +290,8 @@ See [Reset details](RESETS.md) for banked Codex resets, provider reset schedules
 
 ![Model search in the actual composer](models.png)
 
-![Automatic worker activity beneath the input](overkill.png)
+![Automatic worker activity below the usage bar](overkill.png)
+
+## Session names
+
+`/name My experiment` renames the current session. `/name` without an argument opens a title prompt. Names persist in the journal and session metadata, appear in `/resume` and session listings, and are included in exports. Naming does not clear context, goals, account data or files and works while inference is active. Escape cancels the prompt. Names are one line, up to 120 characters.

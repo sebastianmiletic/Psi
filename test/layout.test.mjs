@@ -76,7 +76,7 @@ test('the composer mode chip preserves full draft width and switches silently wi
 test('message motion changes only presentation, keeps complete streamed content and stops when work ends',async t=>{
   const f=await fixture(t,()=>({text:'Unused'})),terminal=new MemoryTerminal(100,32);let now=0;const ui=new TerminalUI(f.app,{terminal,now:()=>now});f.app.ui=ui;t.after(()=>ui.stop());ui.start();
   ui.user('Send this complete message');frame(ui);const sent=ui.tui.getScreenLines();assert.ok(ui.motionTimer);now=160;const settled=frame(ui);assert.notDeepEqual(sent,ui.tui.getScreenLines());assert.match(settled.join('\n'),/Send this complete message/);
-  ui.event({type:'request_start'});const initial=ui.response.render(80);now=640;assert.notDeepEqual(initial,ui.response.render(80));
+  ui.event({type:'request_start'});const initial=ui.activityLines(80);now=640;assert.notDeepEqual(initial,ui.activityLines(80));
   ui.event({type:'text_delta',delta:'A complete **answer**, with '});ui.event({type:'text_delta',delta:'all incoming text visible immediately.'});assert.equal(ui.response.text,'A complete **answer**, with all incoming text visible immediately.');
   const component=ui.response;ui.event({type:'request_end'});ui.event({type:'run_end',status:'idle'});assert.equal(ui.motionTimer,null);assert.equal(component.active,false);assert.doesNotMatch(component.render(80).join('\n'),/responding|thinking/);assert.match(frame(ui).join('\n'),/all incoming text visible immediately/);
   ui.event({type:'request_start'});assert.ok(ui.motionTimer);ui.event({type:'waiting',reason:'Waiting for quota'});assert.equal(ui.motionTimer,null);assert.equal(ui.response,null);
@@ -85,10 +85,10 @@ test('message motion changes only presentation, keeps complete streamed content 
 
 test('reduced motion keeps response and tool state visible without animation timers or empty reply remnants',async t=>{
   const f=await fixture(t,()=>({text:'Unused'})),terminal=new MemoryTerminal(100,32),ui=new TerminalUI(f.app,{terminal});f.app.ui=ui;t.after(()=>ui.stop());ui.start();f.app.engine.config.animations=false;
-  ui.user('A static send');ui.event({type:'request_start'});assert.ok(!ui.motionTimer);assert.match(frame(ui).join('\n'),/Psi.*thinking/);
+  ui.user('A static send');ui.event({type:'request_start'});assert.ok(!ui.motionTimer);assert.match(frame(ui).join('\n'),/Thinking/);
   ui.event({type:'request_end'});assert.equal(ui.transcript.children.length,1);
-  const call={id:'read-1',name:'read',arguments:{path:'src/main.cpp'}};ui.event({type:'tool_start',call});assert.match(frame(ui).join('\n'),/read.*src\/main.cpp.*running/);assert.ok(!ui.motionTimer);
-  ui.event({type:'tool_end',call,duration:200,result:{isError:false,content:[{type:'text',text:'Verified source'}]}});assert.equal(ui.transcript.children.length,2);assert.match(frame(ui).join('\n'),/read.*done.*0.2s/);assert.match(frame(ui).join('\n'),/Verified source/);
+  const call={id:'read-1',name:'read',arguments:{path:'src/main.cpp'}};ui.event({type:'tool_start',call});assert.match(frame(ui).join('\n'),/Read.*src\/main.cpp/);assert.ok(!ui.motionTimer);
+  ui.event({type:'tool_end',call,duration:200,result:{isError:false,content:[{type:'text',text:'Verified source'}]}});assert.equal(ui.transcript.children.length,2);assert.match(frame(ui).join('\n'),/Explored/);assert.doesNotMatch(frame(ui).join('\n'),/Verified source/);terminal.input('\x14');assert.match(frame(ui).join('\n'),/Verified source/);terminal.input('\x14');
   const background={id:'shell-1',name:'bash',arguments:{command:'run a long benchmark'}};ui.event({type:'tool_start',call:background});ui.event({type:'tool_end',call:background,duration:100,result:{isError:false,content:[{type:'text',text:JSON.stringify({id:'durable-job-1',status:'running',output:'Benchmark started'})}]}});assert.match(frame(ui).join('\n'),/job durable-job-1.*running/);
   f.session.state.progress={percent:60};const progress=stripTerminalSequences(ui.progressBar.render(100)[0]);assert.match(progress,/█+░+/);assert.match(progress,/40% left/);
 });

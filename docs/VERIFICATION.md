@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **105 passing tests**.
+- `npm run verify`: syntax checks and **111 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -115,3 +115,11 @@ Actual API invoices and real competition transactions were not exercised in this
 - Real local child processes verify automatic bounded startup, role/task names, per-profile models/effort, plan-only advisory permissions, result integration before final completion, usage deduplication, mid-request enabling, parent resume and double-Escape cancellation. Fixtures use no paid inference or live competition calls.
 - Subagent activity is written at state/tool transitions and observed through filesystem events. Job completion is event-driven; observers close on exit/session changes. Results are persisted and delivered once per recorded job identity.
 - Models, effort and worker-row screenshots come from actual terminal frames with illustrative data. Manual execution delegation remains supported; automatic kickoff workers inspect without concurrent project edits.
+
+## Conversation layout and session names (0.2.10)
+
+- Subagents are verified below the usage bar at 100×32, 68×24 and 28×18, including while a menu is open. Model/account/quota order stays stable.
+- Six new tests exercise inline response bullets and full Markdown streaming, grouped exploration, Ctrl+T disclosure without inference, bounded shell previews, failures, edit snippets, background job identity, interrupted states and persisted session naming.
+- `/name` is verified while busy, through session list/resume, with cancellation, invalid titles and an explicitly named “New session” that cannot be overwritten by later prompts. Context and unfinished objectives remain intact.
+- Presentation follows the public Codex [message](https://github.com/openai/codex/blob/main/codex-rs/tui/src/history_cell/messages.rs) and [execution-cell](https://github.com/openai/codex/blob/main/codex-rs/tui/src/exec_cell/render.rs) conventions: bullet responses, grouped exploration and indented command output. Psi retains its renderer, logo, tools and account features; this is not a copy of the Codex implementation.
+- The conversation screenshot uses actual rendered frames with illustrative checks, not a live competition result.

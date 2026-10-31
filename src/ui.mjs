@@ -8,7 +8,7 @@ import { accentText,accentBadge } from './theme.mjs';
 import { usageLabel,applicableQuota } from './usage.mjs';
 import { EffortPanel,StatsPanel,ToolsPanel,ResetPanel } from './panels.mjs';
 import { PsiHeader, PsiAnimation } from './logo.mjs';
-import { Composer,flowAccent,UserMessage,AssistantMessage,ToolMessage } from './message-ui.mjs';
+import { Composer,flowAccent,UserMessage,AssistantMessage,ToolMessage,ExplorationGroup,exploration } from './message-ui.mjs';
 import { cleanTerminal, redact } from './storage.mjs';
 
 const rgb = colorToRgb(parseColor('oklch(68% 0.105 162)'));
@@ -25,7 +25,7 @@ const markdownTheme = {
 };
 export const commands = [
  ['model','Model'],['effort','Effort + OVERKILL'],['accounts','Accounts'],['directory','Working directories'],['settings','Settings'],['subagents','Subagents'],
- ['loop','Persistent goal'],['stats','Activity'],['tools','Tools'],['usage','Account usage'],['reset','Quota resets'],['cost','Session cost'],['new','New session'],['resume','Resume'],
+ ['loop','Persistent goal'],['stats','Activity'],['tools','Tools'],['usage','Account usage'],['reset','Quota resets'],['cost','Session cost'],['new','New session'],['resume','Resume'],['name','Rename session'],
  ['refresh','Reload Psi'],['compact','Compact context'],['project','Battlecode project'],['experiments','Experiments'],['profile','Agent profile'],
  ['logo','3D logo'],['update','Update Psi'],['status','Session status'],['export','Export session'],['help','Commands'],['quit','Quit']
 ].map(([name,description])=>({name,description}));
@@ -94,10 +94,11 @@ export class TerminalUI {
       { component: this.header, basis: 'auto', shrink: 0, minSize: 0, visible: viewport => viewport.height >= 10 && app.engine.config.showLogo!==false },
       { component: this.scroll, basis: 0, grow: 1, minSize: 1 },
       { component: this.panelScroll, basis: 'auto', shrink: 1, minSize: 0 },
+      {component:{invalidate(){},render:width=>this.activityLines(width)},basis:'auto',shrink:0,minSize:0},
       { component: this.editor, basis: 'auto', shrink: 1, minSize: 3 },
-      { component:this.subagentBar,basis:'auto',shrink:0,minSize:0 },
-      { component: this.footer, basis: 'auto', shrink: 0, minSize: 1 },
+            { component: this.footer, basis: 'auto', shrink: 0, minSize: 1 },
       { component: this.progressBar, basis: 1, shrink: 0, minSize: 1 },
+      { component:this.subagentBar,basis:'auto',shrink:0,minSize:0 },
     ]);
     this.tui.setLayoutRoot(this.layout);
     this.tui.setFocus(this.editor);
@@ -111,6 +112,7 @@ export class TerminalUI {
         else void app.close();
         return { consume: true };
       }
+      if(matchesKey(data,'ctrl+t')&&!this.pending){this.expandedTools=!this.expandedTools;this.tui.invalidate();this.render();return{consume:true};}
       if(matchesKey(data,'shift+tab')&&!this.pending){this.toggleMode();return{consume:true};}
       if(matchesKey(data,'escape')&&!this.pending&&app.engine.busy){const now=Date.now();if(now-(this.lastEscape||0)<600){this.lastEscape=0;app.engine.stop();}else this.lastEscape=now;return{consume:true};}
       if (matchesKey(data, 'ctrl+d') && !this.pending && !this.editor.getText()) { void app.close(); return { consume: true }; }
@@ -153,7 +155,18 @@ export class TerminalUI {
     if(this.closed)return;
     if (!this.renderTimer) this.renderTimer = setTimeout(() => { this.renderTimer = null; this.tui.requestRender(); }, 35);
   }
-  note(text, isError = false) { this.transcript.addChild(new Text(`  ${isError ? error(safe(text)) : dim(safe(text))}`, 0, 1)); this.render(); }
+  note(text,isError=false){const body=new Text(safe(text),0,0);this.transcript.addChild({invalidate(){body.invalidate();},render:width=>[...body.render(Math.max(1,width-2)).map((line,i)=>truncateToWidth((i===0?(isError?error('• '):dim('• ')):'  ')+(isError?error(line):dim(line)),width)),'']});this.render();}
+  activityLines(width){
+    if(this.pending||this.response?.text||!this.response?.active&&!this.openTools.size&&!this.app.engine.busy)return[];
+    const phase=this.response?.phase==='compacting context'?'Compacting context':this.openTools.size?'Working':'Thinking';
+    const mark=this.app.engine.config.animations===false?'•':['·','•','●','•'][Math.floor(this.now()/240)%4];
+    return[truncateToWidth(dim(mark+' '+phase+' · esc esc to interrupt'),width)];
+  }
+  addTool(tool){
+    const last=this.transcript.children.at(-1);
+    if(exploration(tool.call)&&last instanceof ExplorationGroup&&last.tools.length<20)last.add(tool);
+    else this.transcript.addChild(exploration(tool.call)?new ExplorationGroup(this,tool):tool);
+  }
   user(text,options) { this.lastUser=new UserMessage(this,text,options);this.transcript.addChild(this.lastUser);if(options?.animate!==false)this.syncMotion();this.render(); }
   markdown(text, label = true) {
     const component = label?new AssistantMessage(this,text):new Markdown(safe(text),5,1,this.markdownTheme);this.transcript.addChild(component);this.render();return component;
@@ -181,11 +194,11 @@ export class TerminalUI {
     if(event.type==='request_end')this.finishResponse();
     if (event.type === 'tool_start') {
       this.activity = event.call.name;
-      const tool=new ToolMessage(this,event);this.openTools.set(event.call.id,tool);this.transcript.addChild(tool);this.syncMotion();
+      const tool=new ToolMessage(this,event);this.openTools.set(event.call.id,tool);this.addTool(tool);this.syncMotion();
     }
     if (event.type === 'tool_end') {
       const tool=this.openTools.get(event.call.id)||new ToolMessage(this,event);
-      if(!this.openTools.has(event.call.id))this.transcript.addChild(tool);
+      if(!this.openTools.has(event.call.id))this.addTool(tool);
       tool.finish(event);this.openTools.delete(event.call.id);this.syncMotion();
     }
     if (event.type === 'retry') {this.finishResponse('partial response');this.note(`Provider retry ${event.attempt} in ${(event.delay / 1000).toFixed(1)}s: ${event.error}`, true);}
@@ -196,7 +209,7 @@ export class TerminalUI {
     if(['agent_started','agent_finished','agent_status'].includes(event.type)){this.workerRows.set(event.agent.id,{...event.agent,status:event.agent.status||(event.type==='agent_started'?'running':'completed')});if(this.workerRows.size>32)this.workerRows.delete(this.workerRows.keys().next().value);}
     if (event.type === 'error') this.note(event.error, true);
     if (event.type === 'goal_complete') this.note(`Objective complete. ${event.summary}`);
-    if (event.type === 'run_end') {this.finishResponse(event.status==='stopped'?'stopped':['error','limited'].includes(event.status)?'partial response':'');this.activity='';this.openTools.clear();this.syncMotion();}
+    if (event.type === 'run_end') {this.finishResponse(event.status==='stopped'?'stopped':['error','limited'].includes(event.status)?'partial response':'');this.activity='';for(const tool of this.openTools.values())tool.interrupt();this.openTools.clear();this.syncMotion();}
     this.render();
   }
   panelRows(){

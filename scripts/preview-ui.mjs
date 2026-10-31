@@ -45,11 +45,14 @@ try {
     if(name==='overkill'){ui.clear();app.engine.config.overkill=true;ui.syncMotion();ui.editor.setText('Compare the next experiment.');for(const [i,name,activity,status]of[[1,'Replay audit · Research','read','running'],[2,'Fixture risks · Review','reasoning','running'],[3,'Build approach · Builder',null,'completed']])ui.event({type:'agent_status',agent:{id:'preview-'+i,name,activity,status,model:'openai-codex/gpt-5.6-luna',createdAt:new Date(Date.now()-45000).toISOString()}});}
     if(name==='settings'){ui.hideLogo();settings=app.settingsMenu();}
     if(name==='conversation'){
-      ui.clear();ui.user('Inspect the baseline and prepare the next experiment.',{animate:false});
-      ui.markdown('I’ll verify the frozen source and inspect the replay evidence before selecting a candidate.');
-      const call={id:'preview-read',name:'read',arguments:{path:'bots/vision-v6/manifest.json'}};
-      ui.event({type:'tool_start',call});ui.event({type:'tool_end',call,duration:180,result:{isError:false,content:[{type:'text',text:'Baseline identity verified. Source hashes match the frozen manifest.'}]}});
-      ui.event({type:'request_start'});ui.event({type:'text_delta',delta:'The baseline is unchanged. I’m checking both sides of the paired fixtures and keeping the candidate separate from the incumbent.'});
+      ui.clear();ui.user('Verify the baseline and check the next experiment.',{animate:false});
+      ui.markdown('I’ll inspect the source identity and paired fixtures, then run the checks.');
+      for(const [i,name,args]of[[1,'read',{path:'bots/vision-v6/manifest.json'}],[2,'search',{pattern:'confirmation',path:'tools/vision'}]]){
+        const call={id:'preview-'+i,name,arguments:args};ui.event({type:'tool_start',call});ui.event({type:'tool_end',call,result:{isError:false,content:[{type:'text',text:'Baseline source and fixture evidence verified.'}]}});
+      }
+      const call={id:'preview-check',name:'bash',arguments:{command:'python3 -m unittest discover -s tests'}};
+      ui.event({type:'tool_start',call});ui.event({type:'tool_end',call,duration:1600,result:{isError:false,content:[{type:'text',text:JSON.stringify({status:'completed',exitCode:0,output:'Ran 9 tests in 1.6s\nOK'})}]}});
+      ui.markdown('Baseline verified. The candidate stays separate from the incumbent.\n\n- Source hashes match the frozen manifest.\n- Both fixture sides are present.\n- All 9 correctness checks passed.');
       app.activeAccount={name:'Personal',type:'oauth',billingMode:'subscription'};app.activeUsage={limitsAt:new Date().toISOString(),limits:[{kind:'quota',label:'5h',usedPercent:31,resetAt:9999999999},{kind:'quota',label:'7d',usedPercent:17,resetAt:9999999999}]};
       session.state.progress={percent:64};ui.editor.setText('Compare both sides before changing the strategy.');
     }

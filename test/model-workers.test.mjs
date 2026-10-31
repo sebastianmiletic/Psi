@@ -50,7 +50,7 @@ test('OVERKILL starts bounded task-named workers automatically and integrates re
  await f.app.engine.run('Inspect baseline behaviour');const records=await f.app.agents.records();assert.equal(records.length,2);assert.equal(workers,2);assert.equal(parentAfterReports,1);assert.ok(parentBeforeReports<=1);assert.equal(f.session.totals.requests,workers+parentAfterReports+parentBeforeReports);
  assert.equal(f.session.state.workerDeliveries.length,2);assert.equal(f.session.messages.filter(m=>typeof m.content==='string'&&m.content.startsWith('Subagent reports (')).length,1);
  for(const r of records){assert.match(r.name,/Inspect baseline behaviour/);assert.equal(r.automatic,true);const spec=JSON.parse(await readFile(join(f.app.home,'sessions',r.sessionId,'worker.json')));assert.equal(spec.config.agentMode,'plan');assert.equal(spec.config.overkill,false);assert.equal(spec.config.subagentDepth,1);assert.equal((await f.app.agents.status(r.id)).status,'completed');}
- const lines=frame(f.ui),editor=lines.findIndex(l=>l.includes('EXECUTE'));assert.ok(lines.findIndex(l=>l.includes('Inspect baseline behaviour'))>editor);assert.match(lines.join('\n'),/completed/);assert.doesNotMatch(lines.slice(editor+1).join('\n'),/fixture\//);
+ const lines=frame(f.ui),editor=lines.findIndex(l=>l.includes('EXECUTE'));assert.ok(lines.findIndex(l=>l.includes('Inspect baseline behaviour'))>lines.findIndex(l=>l.includes('% left')));assert.ok(lines.findIndex(l=>l.includes('Inspect baseline behaviour'))>editor);assert.match(lines.join('\n'),/completed/);assert.doesNotMatch(lines.slice(editor+1).join('\n'),/fixture\//);
  const count=f.session.totals.requests;await f.app.agents.reports({wait:true});assert.equal(f.session.totals.requests,count);
 });
 
