@@ -8,7 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { atomicJSON, readJSON, alive, psiHome, privateDir } from './storage.mjs';
 
 export class Jobs {
-  constructor(home = psiHome(), sessionId) { this.home = home; this.sessionId = sessionId; this.dir = join(home, 'jobs'); }
+  constructor(home = psiHome(), sessionId) { this.home = home; this.sessionId = sessionId; this.dir = join(home, 'jobs');this.isAlive=alive; }
   path(id) { if (!/^[\w-]+$/.test(id)) throw new Error('Invalid job ID.'); return join(this.dir, id); }
   async start(command, cwd, { timeout_ms = 0, label = 'shell', max_log_bytes = 128 * 1024 * 1024, graceful_stop_ms = 2000, infrastructure = false } = {}) {
     const sandbox=this.policy&&!infrastructure?await this.policy.sandbox(command,cwd):null;
@@ -16,8 +16,9 @@ export class Jobs {
     const dir = this.path(id); await privateDir(dir);
     const job = { id, sessionId: this.sessionId, label, command, cwd: resolve(cwd), sandbox, infrastructureArgv:Array.isArray(infrastructure)?infrastructure:undefined, status: 'queued', createdAt: new Date().toISOString(), timeout_ms, max_log_bytes, graceful_stop_ms, log: join(dir, 'output.log') };
     await atomicJSON(join(dir, 'job.json'), job);
-    const child = spawn(process.execPath, [fileURLToPath(new URL('./job-worker.mjs', import.meta.url)), dir], { detached: true, stdio: 'ignore', env: process.env });
-    await new Promise((res, rej) => { child.once('spawn', res); child.once('error', rej); });
+    const diagnostics=await open(join(dir,'worker.log'),'a',0o600);
+    const child = spawn(process.execPath, [fileURLToPath(new URL('./job-worker.mjs', import.meta.url)), dir], { detached: true, stdio: ['ignore',diagnostics.fd,diagnostics.fd], env: process.env });
+    try{await new Promise((res, rej) => { child.once('spawn', res); child.once('error', rej); });}finally{await diagnostics.close();}
     child.unref();
     await atomicJSON(join(dir, 'worker.json'), { pid: child.pid });
     return { ...job, pid: child.pid };
@@ -26,7 +27,10 @@ export class Jobs {
     const job = await readJSON(join(this.path(id), 'job.json'), null);
     if (!job) throw new Error(`Job not found: ${id}`);
     if (!job.pid) job.pid = (await readJSON(join(this.path(id), 'worker.json'), null))?.pid;
-    if (['running', 'queued'].includes(job.status) && job.pid && !alive(job.pid)) {
+    if (['running', 'queued'].includes(job.status) && job.pid && !this.isAlive(job.pid)) {
+      // The worker may have committed completion between our initial read and exit check.
+      const latest=await readJSON(join(this.path(id),'job.json'),null);
+      if(latest&&!['running','queued'].includes(latest.status))return latest;
       job.status = 'interrupted'; job.error = 'Worker exited before recording completion.';
       await atomicJSON(join(this.path(id), 'job.json'), job);
     }

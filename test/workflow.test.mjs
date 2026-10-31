@@ -69,7 +69,7 @@ test('switching to plan during inference prevents the first returned mutation',a
 test('plan-mode parent forces read-only workers and completed workers can receive a new task',async t=>{
  const f=await fixture(t,(_p,n)=>n===1?{call:{name:'write',args:{path:'forbidden-child.txt',content:'no'}}}:{text:'Read-only worker response.'});
  await f.app.update({agentMode:'plan',overkill:true,agents:[{id:'worker',name:'Worker',job:'Inspect the task',model:'fixture/test',effort:'off',mode:'execute',maxSteps:10}]});
- const r=await f.app.agents.spawn({profile:'worker',prompt:'Inspect without changing files.'});await f.app.agents.wait(r.id);await assert.rejects(readFile(join(f.root,'forbidden-child.txt')));await f.app.agents.send(r.id,'Review the previous result again.');const result=await f.app.agents.wait(r.id);assert.equal(result.status,'completed');assert.equal(f.session.totals.requests,3);
+ const r=await f.app.agents.spawn({profile:'worker',prompt:'Inspect without changing files.'});await f.app.agents.wait(r.id);await assert.rejects(readFile(join(f.root,'forbidden-child.txt')));await f.app.agents.send(r.id,'Review the previous result again.');const result=await f.app.agents.wait(r.id);const diagnostic=await readFile(join(f.app.jobs.path(result.jobId),'worker.log'),'utf8').catch(()=> '');assert.equal(result.status,'completed',JSON.stringify(result)+'\n'+diagnostic);assert.equal(f.session.totals.requests,3);
 });
 
 test('isolated Python alias and zsh heredoc use private scratch instead of /tmp',{skip:process.platform!=='darwin'},async t=>{
@@ -93,4 +93,10 @@ test('a previously executing worker resumes read-only when its parent switches t
 test('source updater refuses local changes before fetching or overwriting the checkout',async t=>{
  const f=await fixture(t,()=>({text:'unused'}));const {run,updateInstallation}=await import('../src/updates.mjs');const root=join(f.root,'source');await mkdir(root);await run('git',['init'],root);await run('git',['remote','add','origin','https://github.com/sebastianmiletic/Psi.git'],root);await writeFile(join(root,'local.txt'),'preserve this');
  await assert.rejects(updateInstallation(f.session.home,{root,release:{available:true,latest:'9.0.0',assets:[]}}),/Local changes/);assert.equal(await readFile(join(root,'local.txt'),'utf8'),'preserve this');
+});
+
+test('job completion committed during the exit check is preserved instead of overwritten as interrupted',async t=>{
+ const f=await fixture(t,()=>({text:'unused'})),id='completion-race',path=join(f.app.jobs.path(id),'job.json');await mkdir(f.app.jobs.path(id),{recursive:true});await writeFile(path,JSON.stringify({id,pid:123456,status:'running',sessionId:f.session.meta.id}));
+ const {writeFileSync}=await import('node:fs');f.app.jobs.isAlive=()=>{writeFileSync(path,JSON.stringify({id,pid:123456,status:'completed',sessionId:f.session.meta.id}));return false;};
+ assert.equal((await f.app.jobs.get(id)).status,'completed');assert.equal(JSON.parse(await readFile(path)).status,'completed');
 });
