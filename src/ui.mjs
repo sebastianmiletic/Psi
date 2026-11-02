@@ -5,7 +5,7 @@ import {
 } from '@earendil-works/pi-tui';
 import { modelLabel } from './model-label.mjs';
 import { accentText,accentBadge } from './theme.mjs';
-import { usageLabel,applicableQuota,quotaFreshness,remainingPercent } from './usage.mjs';
+import { usageLabel,applicableQuota,quotaFreshness,remainingPercent,resetCountdown } from './usage.mjs';
 import { EffortPanel,StatsPanel,ToolsPanel,ResetPanel } from './panels.mjs';
 import { PsiHeader, PsiAnimation } from './logo.mjs';
 import { Composer,flowAccent,UserMessage,AssistantMessage,ToolMessage,ExplorationGroup,exploration } from './message-ui.mjs';
@@ -71,7 +71,7 @@ export class TerminalUI {
       const rightWidth=visibleWidth(right)+(state.overkill?2:0);
       const left = truncateToWidth(`  ${model}`, Math.max(0,width-rightWidth-3));
       const gap = Math.max(1,width-visibleWidth(left)-rightWidth-1);
-      return [left+' '.repeat(gap)+(state.overkill?accentBadge(' '+right+' ',c):dim(right)), ...(app.engine.config.showUsage===false?[]:[truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage,{sessionCost:app.session.meteredCost,costKnown:app.session.meteredCostKnown,remaining:true,compact:true,weeklyOnly:true}))),width)])];
+      return [left+' '.repeat(gap)+(state.overkill?accentBadge(' '+right+' ',c):dim(right)), ...(app.engine.config.showUsage===false?[]:[truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage,{sessionCost:app.session.meteredCost,costKnown:app.session.meteredCostKnown,remaining:true,compact:true,weeklyOnly:true,resets:true}))),width)])];
     } };
     this.subagentBar={invalidate(){},render:width=>{
       const active=[...this.workerRows.values()].filter(r=>['running','queued','waiting'].includes(r.status));
@@ -84,7 +84,8 @@ export class TerminalUI {
       const quota=applicableQuota(app.activeUsage),state=app.session.state.progress;
       const pct=remainingPercent(quota?.usedPercent??state?.percent??0);
       const subscription=app.activeAccount?.billingMode==='subscription'||app.activeAccount?.type==='oauth',freshness=quotaFreshness(app.activeUsage);
-      const label=quota?`${pct}% left${freshness?' · '+freshness:''}`:subscription?'Usage unavailable':`Goal · ${pct}% left · est.`;
+      const reset=resetCountdown(quota?.resetAt);
+      const label=quota?`${pct}% left${reset?' ('+reset+')':''}${freshness?' · '+freshness:''}`:subscription?'Usage unavailable':`Goal · ${pct}% left · est.`;
       const available=Math.max(0,width-visibleWidth(label)-6),size=Math.min(30,available),filled=subscription&&!quota?0:Math.round(size*pct/100);
       const blocks='█'.repeat(filled)+'░'.repeat(size-filled),painted=this.isOverkill()?flowAccent(blocks,this,17):this.paint('█'.repeat(filled))+dim(this.paint('░'.repeat(size-filled)));
       return[truncateToWidth('  '+painted+'  '+dim(label),width)];

@@ -5,7 +5,7 @@ import { stripTerminalSequences,visibleWidth } from '@earendil-works/pi-tui';
 import { TerminalUI,commands } from '../src/ui.mjs';
 import { MemoryTerminal } from './terminal.mjs';
 import { fixture } from './helpers.mjs';
-import { applicableQuota } from '../src/usage.mjs';
+import { applicableQuota,resetCountdown } from '../src/usage.mjs';
 import { accentColor } from '../src/theme.mjs';
 const frame=ui=>{ui.tui.renderNow();return ui.tui.getScreenLines().map(stripTerminalSequences);};
 async function setup(t){const f=await fixture(t,()=>({text:'unused'})),terminal=new MemoryTerminal(100,32);let now=0;const ui=new TerminalUI(f.app,{terminal,now:()=>now});f.app.ui=ui;t.after(()=>ui.stop());ui.start();return{...f,terminal,ui,time:n=>now=n};}
@@ -29,6 +29,17 @@ test('the accent quota bar shows five-hour capacity with only weekly quota besid
  let bar=ui.progressBar.render(100)[0];const c=accentColor({accent:'rose'});assert.ok(bar.includes(`\x1b[38;2;${c.r};${c.g};${c.b}m`));assert.match(stripTerminalSequences(bar),/75% left/);assert.match(stripTerminalSequences(ui.footer.render(100)[1]),/7d 60% left/);assert.match(stripTerminalSequences(ui.footer.render(100)[1]),/Personal · 7d 60% left/);assert.doesNotMatch(stripTerminalSequences(ui.footer.render(100)[1]),/5h|75%/);assert.doesNotMatch(stripTerminalSequences(bar),/5h|7d|used/);
  f.app.activeUsage.limits[1].usedPercent=100;assert.doesNotMatch(stripTerminalSequences(ui.progressBar.render(100)[0]),/█/);assert.match(stripTerminalSequences(ui.progressBar.render(100)[0]),/0% left/);f.app.activeUsage.limits[1].usedPercent=0;assert.match(stripTerminalSequences(ui.progressBar.render(100)[0]),/█{30}.*100% left/);
  f.app.activeUsage.limits[1].resetAt=1;assert.match(stripTerminalSequences(ui.progressBar.render(100)[0]),/60% left/);f.app.activeUsage.limits=[];assert.match(stripTerminalSequences(ui.progressBar.render(100)[0]),/Usage unavailable/);assert.equal(applicableQuota(null),null);
+});
+test('footer quota percentages include their own reset countdowns without changing or guessing capacity',async t=>{
+ const {app,ui}=await setup(t),now=Date.now();app.engine.config.animations=false;
+ app.activeAccount={name:'Personal',type:'oauth',billingMode:'subscription'};
+ app.activeUsage={limits:[{kind:'quota',label:'5h',usedPercent:71,resetAt:(now+105*60000)/1000},{kind:'quota',label:'7d',usedPercent:12,resetAt:(now+(2*24+4)*3600000)/1000}]};
+ assert.match(stripTerminalSequences(ui.progressBar.render(100)[0]),/29% left \(1h 45m\)/);
+ assert.match(stripTerminalSequences(ui.footer.render(100)[1]),/7d 88% left \(2d 4h\)/);
+ for(const width of[28,50,100])assert.ok(ui.progressBar.render(width).every(line=>visibleWidth(line)<=width));
+ app.activeUsage.limits[0].resetAt=undefined;app.activeUsage.limits[0].reportedAt=new Date().toISOString();assert.doesNotMatch(stripTerminalSequences(ui.progressBar.render(100)[0]),/\(/);
+ assert.equal(resetCountdown((now+105*60000)/1000,now+60000),'1h 44m');assert.equal(resetCountdown((now+30000)/1000,now),'1m');assert.equal(resetCountdown(now/1000,now),'due');assert.equal(resetCountdown(undefined,now),'');assert.equal(resetCountdown(NaN,now),'');
+ assert.equal(app.activeUsage.limits[0].usedPercent,71);
 });
 test('stats opens a tabbed UI, preserves the draft and closes with one Escape without chat output',async t=>{
  const f=await setup(t),{ui,terminal}=f;ui.editor.setText('/model');const count=ui.transcript.children.length,menu=f.app.submit('/stats');let lines=frame(ui);for(let i=0;i<200&&!lines.some(l=>l.includes('Tokens'));i++){await delay(10);lines=frame(ui);}assert.match(lines.join('\n'),/Stats/);assert.match(lines.join('\n'),/Tokens/);assert.match(lines.join('\n'),/Time/);assert.equal(ui.tui.hasOverlay(),false);assert.match(lines.slice(0,6).join('\n'),/Psi|Ψ PSI/);assert.ok(lines.findIndex(l=>l.includes('Stats'))>6);terminal.input('\t');assert.match(frame(ui).join('\n'),/\[Week\]/);

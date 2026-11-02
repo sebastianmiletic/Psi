@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **151 passing tests**.
+- `npm run verify`: syntax checks and **152 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -184,3 +184,7 @@ Actual API invoices and real competition transactions were not exercised in this
 - Native account routing and two-turn tool/result integration are tested through the full Psi engine with fixture Claude Code output. The CLI owns subscription sign-in; stored account descriptors contain configuration references and no copied OAuth tokens.
 - Tests cover separate account directories, native failure usage receipts, malformed/unavailable tool responses, image rejection, stdin and cancellation, legacy role migration, and removal of name/job fields from settings. Native auth status confirmed an existing sign-in on the development laptop; no live paid inference was run.
 - The laptop configuration explicitly sets the subagent default and all three general-worker presets to openai-codex/gpt-5.6-sol in execute mode. Saved legacy role presets normalize on resume.
+
+## Footer reset countdowns (0.2.22)
+
+- The five-hour meter and weekly account line show their own reset countdown beside percent left, using reported reset timestamps. Tests cover hour/minute and day/hour formatting, elapsed time, missing/invalid resets, unchanged quota values, and narrow terminal widths. The existing usage polling/render loop updates these without model requests.

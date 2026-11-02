@@ -61,18 +61,24 @@ export function quotaFreshness(usage={},now=Date.now()){
  return now-Date.parse(usage.quotaCheckedAt)>60000?'stale':'';
 }
 export const remainingPercent=used=>Math.round(Math.max(0,Math.min(100,100-used))*10)/10;
+export function resetCountdown(resetAt,now=Date.now()){
+ if(!Number.isFinite(resetAt)||resetAt<=0)return '';
+ const left=resetAt*1000-now;if(left<=0)return 'due';
+ const minutes=Math.ceil(left/60000),hours=Math.floor(minutes/60),days=Math.floor(hours/24);
+ return days?`${days}d ${hours%24}h`:hours?`${hours}h ${minutes%60}m`:`${minutes}m`;
+}
 export function applicableQuota(usage={},now=Date.now()){
  usage||={};
  const limits=(usage.limits||[]).filter(l=>l.kind==='quota'&&Number.isFinite(l.usedPercent)&&l.usedPercent>=0&&l.usedPercent<=100&&(l.resetAt?l.resetAt*1000>now:now-Date.parse(l.reportedAt||usage.limitsAt||'')<300000));
  return limits.find(l=>l.label==='5h')||limits.find(l=>['7d','1w','weekly'].includes(l.label))||limits[0]||null;
 }
-export function usageLabel(account, usage = {}, { sessionCost, costKnown=true,omitQuota,remaining=false,compact=false,weeklyOnly=false } = {}) {
+export function usageLabel(account, usage = {}, { sessionCost, costKnown=true,omitQuota,remaining=false,compact=false,weeklyOnly=false,resets=false } = {}) {
   if (!account) return 'No account connected · /accounts';
   const prefix = account.name || 'Environment / local';
   const now = Date.now()/1000;
   const rank=l=>l.label==='5h'?0:['7d','1w','weekly'].includes(l.label)?1:2;
   const quota=(usage.limits || []).filter(l=>l.kind==='quota' && (!weeklyOnly||['7d','1w','weekly'].includes(l.label)) && l.label!==omitQuota && (l.resetAt ? l.resetAt>now : Date.now()-Date.parse(l.reportedAt||usage.limitsAt||'')<300000)).sort((a,b)=>rank(a)-rank(b));
-  if(account.billingMode==='subscription'||(account.billingMode===undefined&&account.type==='oauth')) return prefix+(quota.length?' · '+quota.map(l=>`${l.label} ${remaining?remainingPercent(l.usedPercent):Math.round(l.usedPercent)}% ${remaining?'left':'used'}`).join(' · '):'');
+  if(account.billingMode==='subscription'||(account.billingMode===undefined&&account.type==='oauth')) return prefix+(quota.length?' · '+quota.map(l=>{const reset=resets?resetCountdown(l.resetAt,now*1000):'';return`${l.label} ${remaining?remainingPercent(l.usedPercent):Math.round(l.usedPercent)}% ${remaining?'left':'used'}${reset?' ('+reset+')':''}`;}).join(' · '):'');
   if(sessionCost!==undefined) return `${prefix} · session ${costKnown?'$'+sessionCost.toFixed(4):'cost unavailable'}${compact?'':' · '+compactCount(usage.totalTokens || 0)+' tokens'}`;
   return `${prefix} · ${compactCount(usage.totalTokens || 0)} tokens · ${usage.requests || 0} calls in Psi`;
 }
@@ -84,9 +90,7 @@ export function accountResetLabel(account,usage={},now=Date.now()){
  for(const [labels,label]of[[['5h'],'5h'],[['7d','1w','weekly'],'week']]){
   const window=(usage.limits||[]).find(l=>l.kind==='quota'&&labels.includes(l.label));
   if(!window)continue;
-  const left=window.resetAt*1000-now;
-  let time='?';
-  if(Number.isFinite(window.resetAt)&&window.resetAt>0){const m=Math.ceil(Math.max(0,left)/60000),h=Math.floor(m/60),d=Math.floor(h/24);time=left<=0?'due':d?`${d}d ${h%24}h`:h?`${h}h ${m%60}m`:`${m}m`;}
+  const time=resetCountdown(window.resetAt,now)||'?';
   parts.push(`${label} ${time}`);
  }
  if(Number.isSafeInteger(usage.resetCredits?.availableCount)&&usage.resetCredits.availableCount>=0)parts.push(`resets ${usage.resetCredits.availableCount}`);
