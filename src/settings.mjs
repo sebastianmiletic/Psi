@@ -2,7 +2,7 @@ import { validAccent, accents } from './theme.mjs';
 export const settingItems = [
   {id:'agentMode',label:'Mode',special:'mode'},
   {id:'overkill',label:'OVERKILL',boolean:true},
-  {id:'agents',label:'Subagents',special:'agents',description:'Independent jobs, models, thinking and limits'},
+  {id:'agents',label:'Subagents',special:'agents',description:'Models, thinking and limits'},
   {id:'subagentModel',label:'Subagent model',special:'subagentModel'},
   {id:'subagentConcurrency',label:'Concurrency',number:[1,16]},
   {id:'checkForUpdates',label:'Update checks',boolean:true},
@@ -24,6 +24,7 @@ export const settingItems = [
   {id:'maxSteps',label:'Run limit',number:[0,1000000],description:'Zero is unlimited'},
   {id:'customPrices',label:'API rates',special:'prices',description:'USD per million input/output/cache tokens; used when provider billing is unavailable'},
   {id:'codexCli',label:'Codex CLI path'},
+  {id:'claudeCli',label:'Claude Code path'},
   {id:'battlecodeCli',label:'Battlecode CLI path',description:'Pinned compiler/CLI executable for the project adapter'},
   {id:'profile',label:'Agent profile',values:['battlecode','general']},{id:'debug',label:'Debug logs',boolean:true},
 ];
@@ -39,7 +40,7 @@ export function validateSettings(patch, registry) {
     if(key==='subagentModel'){if(typeof value!=='string'||!value.trim())throw new Error('Choose a subagent model.');registry?.find(value);}
     if(key==='agents'){
       if(!Array.isArray(value)||value.length>32||new Set(value.map(a=>a.id)).size!==value.length)throw new Error('Use up to 32 distinct worker profiles.');
-      for(const a of value){if(!a.id||!a.name?.trim()||!a.job?.trim()||!['plan','execute'].includes(a.mode))throw new Error('Every worker needs a name, job and mode.');if(a.model)registry?.find(a.model);if(!Number.isInteger(a.maxSteps)||a.maxSteps<1||a.maxSteps>100000)throw new Error('Worker request limits must be 1–100000.');if(a.budget!==undefined&&(!Number.isFinite(a.budget)||a.budget<0))throw new Error('Worker budgets must be nonnegative.');}
+      for(const a of value){if(!a.id||!a.name?.trim()||!['plan','execute'].includes(a.mode))throw new Error('Every worker needs a name and mode.');if(a.model)registry?.find(a.model);if(!Number.isInteger(a.maxSteps)||a.maxSteps<1||a.maxSteps>100000)throw new Error('Worker request limits must be 1–100000.');if(a.budget!==undefined&&(!Number.isFinite(a.budget)||a.budget<0))throw new Error('Worker budgets must be nonnegative.');}
     }
     if(key==='customPrices')for(const [model,prices]of Object.entries(value||{})){registry?.find(model);for(const n of Object.values(prices))if(!Number.isFinite(n)||n<0)throw new Error('Prices must be nonnegative USD per million tokens');}
   }

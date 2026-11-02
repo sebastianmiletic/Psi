@@ -46,6 +46,8 @@ irm https://raw.githubusercontent.com/sebastianmiletic/Psi/main/scripts/install.
 
 Open your project and run `psi`. Add an account with `/accounts`, choose a model with `/model`, then type your task.
 
+For a Claude subscription, choose **Claude Code** → **Use existing login**. Psi runs your installed, unmodified `claude` CLI; sign-in and credentials stay with Claude Code. Connect another account with its own Claude Code configuration directory. Anthropic API keys remain a separate connection. [Claude connection details →](docs/CLAUDE_CODE.md)
+
 ```sh
 cd your-project
 psi
@@ -66,7 +68,7 @@ The Ψ header stays visible above compact bottom menus. Chat names sit above the
 | :--- | :--- |
 | `/model` · `/effort` | Model, reasoning and OVERKILL |
 | `/accounts` | Add, switch or remove accounts |
-| `/subagents` | Roles, models, effort and concurrency |
+| `/subagents` | Models, effort, limits and concurrency |
 | `/loop` | Give Psi a persistent objective |
 | `/directory <path>` | Switch working directory |
 | `/stats` · `/tools` | Activity and available tools |

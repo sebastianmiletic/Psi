@@ -21,7 +21,7 @@ import { Session } from './session.mjs';
 import { Jobs } from './jobs.mjs';
 import { Tools } from './tools.mjs';
 import { Engine } from './engine.mjs';
-import { saveConfig,loadConfig, psiHome, cleanTerminal, redact, defaults } from './storage.mjs';
+import { saveConfig,loadConfig, psiHome, cleanTerminal, redact, defaults,unrestrictedPresets } from './storage.mjs';
 
 export class App {
   constructor(config, session, options = {}) {
@@ -30,6 +30,7 @@ export class App {
     this.statistics=new Statistics(this.home);this.bind();
   }
   bind() {
+    if(this.session.state.settings?.agents)this.session.state.settings={...this.session.state.settings,agents:unrestrictedPresets(this.session.state.settings.agents)};
     this.jobs = new Jobs(this.home, this.session.meta.id);
     this.tools = new Tools({ session: this.session, jobs: this.jobs, config: { ...this.config, ...this.session.state.settings }, onEvent: e => this.event(e) });
     this.battlecode=new Battlecode({session:this.session,jobs:this.jobs,config:this.config,home:this.home});this.tools.projectAdapter=this.battlecode;
@@ -148,13 +149,13 @@ export class App {
       if (!id) return;
       const p = this.registry.models.getProvider(id);
       let type = p.auth.oauth ? 'oauth' : 'api_key';
-      if (p.auth.oauth && p.auth.apiKey?.login) type = await this.ui.choose('Connection method', [{ value: 'oauth', label: p.auth.oauth.loginLabel || p.auth.oauth.name }, { value: 'api_key', label: p.auth.apiKey.name }]);
+      if (p.auth.oauth && p.auth.apiKey?.login) type = await this.ui.choose('Connection method', [{ value: 'oauth', label: p.id==='anthropic'?'Claude Code (installed CLI)':p.auth.oauth.loginLabel || p.auth.oauth.name }, { value: 'api_key', label: p.auth.apiKey.name }]);
       if (!type) return;
       const name = await this.ui.ask({ type: 'text', message: 'Name this account', placeholder: 'e.g. Personal, School, Team' });
       if (!name) return;
       const controller = new AbortController(); this.authController = controller;
       try {
-        await this.registry.accounts.login(this.registry, id, name, type, {
+        const connectedId=await this.registry.accounts.login(this.registry, id, name, type, {
           signal: controller.signal,
           prompt: async prompt => { const answer = await this.ui.ask(prompt); if (answer === null) { controller.abort(); throw new Error('Login cancelled.'); } return answer; },
           notify: event => {
@@ -166,7 +167,7 @@ export class App {
           },
         });
         this.ui.note(`Connected ${p.name} · ${name}.`);
-        await this.useProvider(id);
+        await this.useProvider(await this.registry.accounts.use(connectedId));
       } finally { this.authController = null; }
     } else if (action === 'switch' || action === 'remove') {
       const id = await this.accountPicker(action === 'switch' ? 'Switch accounts' : 'Remove account');
@@ -320,9 +321,9 @@ export class App {
       if(action==='enabled'){await this.update({overkill:!c.overkill});continue;}
       if(action==='concurrency'){const text=await this.ui.ask({type:'text',message:'Concurrent workers (1–16)',placeholder:String(c.subagentConcurrency)});if(text!==null)try{await this.update({subagentConcurrency:Number(text)});}catch(e){this.ui.note(e.message,true);}continue;}
       if(action.startsWith('run:')){const r=await this.agents.status(action.slice(4));const choice=await this.ui.choose(r.name,[{value:'status',label:'Show status and result'},{value:'send',label:'Send a follow-up'},{value:'stop',label:'Stop this worker'}]);if(choice==='status')this.ui.note(JSON.stringify(r,null,2));if(choice==='stop')await this.jobs.stop(r.jobId);if(choice==='send'){const prompt=await this.ui.ask({type:'text',message:'Follow-up task'});if(prompt){const entry=this.tools.entries.get('agent');if(entry)await entry.execute({action:'send',id:r.id,prompt});}}continue;}
-      const profiles=c.agents.map(p=>({...p}));let profile=action==='add'?{id:randomUUID(),name:'Worker',job:'Complete the assigned task and report evidence.',model:null,effort:'medium',mode:'execute',maxSteps:80,budget:0}:profiles.find(p=>p.id===action.slice(8));
+      const profiles=c.agents.map(p=>({...p}));let profile=action==='add'?{id:randomUUID(),name:'Worker '+(profiles.length+1),model:null,effort:'medium',mode:'execute',maxSteps:80,budget:0}:profiles.find(p=>p.id===action.slice(8));
       if(action==='add')profiles.push(profile);
-      while(true){const field=await this.ui.choose(profile.name,[...['name','job','model','effort','mode','maxSteps','budget'].map(k=>({value:k,label:k,description:k==='model'?modelLabel(profile.model||c.subagentModel||defaults.subagentModel):String(profile[k]??'')})),{value:'remove',label:'Remove this profile'},{value:'save',label:'Save worker'}]);if(!field)break;if(field==='remove'){await this.update({agents:profiles.filter(p=>p.id!==profile.id)});break;}if(field==='save'){try{await this.update({agents:profiles});}catch(e){this.ui.note(e.message,true);continue;}break;}
+      while(true){const field=await this.ui.choose(profile.name,[...['model','effort','mode','maxSteps','budget'].map(k=>({value:k,label:k,description:k==='model'?modelLabel(profile.model||c.subagentModel||defaults.subagentModel):String(profile[k]??'')})),{value:'remove',label:'Remove this profile'},{value:'save',label:'Save worker'}]);if(!field)break;if(field==='remove'){await this.update({agents:profiles.filter(p=>p.id!==profile.id)});break;}if(field==='save'){try{await this.update({agents:profiles});}catch(e){this.ui.note(e.message,true);continue;}break;}
         let value;if(field==='model'){value=await this.pickModel(c.subagentModel||defaults.subagentModel,'',{inherit:true});if(value!==null)profile.model=value==='default'?null:value;continue;}if(field==='mode')value=await this.ui.choose('Worker mode',['plan','execute'].map(value=>({value,label:value})));else if(field==='effort'){const model=this.registry.find(profile.model||c.subagentModel||defaults.subagentModel);value=await this.ui.choose('Worker thinking',getSupportedThinkingLevels(model).map(value=>({value,label:value})));}else{value=await this.ui.ask({type:'text',message:field,placeholder:String(profile[field]??'same')});if(value!==null){if(['maxSteps','budget'].includes(field))value=Number(value);}}
         if(value!==null)profile[field]=value;
       }

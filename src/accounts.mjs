@@ -14,11 +14,11 @@ export class Accounts {
   }
   async list() {
     const d = await this.data();
-    return d.accounts.map(({ id, provider, name, credential, createdAt }) => ({ id, provider, name, type: credential.type, createdAt, active: d.active[provider] === id }));
+    return d.accounts.map(({ id, provider, name, credential, createdAt }) => ({ id, provider, name, type: credential.type, createdAt, active: d.active[provider] === id,...(provider==='claude-code'?{nativeBilling:credential.env?.PSI_CLAUDE_BILLING_MODE||'subscription'}:{}) }));
   }
   async selected(provider) {
     const data = await this.data(); const a = data.accounts.find(a => a.provider === provider && a.id === data.active[provider]);
-    return a ? { id: a.id, provider: a.provider, name: a.name, type: a.credential.type } : { id: `ambient:${provider}`, provider, name: 'Environment / local', type: 'ambient' };
+    return a ? { id: a.id, provider: a.provider, name: a.name, type: a.credential.type,...(provider==='claude-code'?{nativeBilling:a.credential.env?.PSI_CLAUDE_BILLING_MODE||'subscription'}:{}) } : { id: `ambient:${provider}`, provider, name: 'Environment / local', type: 'ambient' };
   }
   async add(provider, name, credential) {
     if (!name?.trim()) throw new Error('Account name is required.');
@@ -58,6 +58,8 @@ export class Accounts {
     };
   }
   async login(registry, providerId, name, type, interaction) {
+    // Subscription sign-in belongs to the installed, unmodified Claude Code.
+    if(providerId==='anthropic'&&type==='oauth'){providerId='claude-code';type='api_key';}
     const p = registry.models.getProvider(providerId);
     if (!p) throw new Error(`Unknown provider: ${providerId}`);
     const auth = type === 'oauth' ? p.auth.oauth : p.auth.apiKey;

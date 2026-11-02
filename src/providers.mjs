@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createModels, createProvider, envApiKeyAuth, lazyApi } from '@earendil-works/pi-ai';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
 import { Accounts } from './accounts.mjs';
+import { claudeProvider } from './claude-code.mjs';
 
 const apis = {
   'openai-completions': lazyApi(() => import('@earendil-works/pi-ai/api/openai-completions')),
@@ -14,6 +15,7 @@ export class Registry {
     this.accounts = new Accounts(home);
     this.models = builtinModels({ credentials: this.accounts.store(), identity: { version: '0.1.0' } });
     this.config=config;
+    this.models.setProvider(claudeProvider(this.models.getModels('anthropic'),config,home));
     this.catalogDate = catalog.fetchedAt;
     this.unavailable = [];
     for (const p of catalog.providers) {
@@ -46,7 +48,7 @@ export class Registry {
     });
     this.models.setProvider(provider);
   }
-  billingMode(account) {return account.type==='oauth'&&(this.models.getProvider(account.provider)?.auth.oauth?.isSubscription===true||['openai','openai-codex','anthropic','github-copilot'].includes(account.provider))?'subscription':'metered';}
+  billingMode(account) {if(account.provider==='claude-code')return account.nativeBilling||'subscription';return account.type==='oauth'&&(this.models.getProvider(account.provider)?.auth.oauth?.isSubscription===true||['openai','openai-codex','anthropic','github-copilot'].includes(account.provider))?'subscription':'metered';}
   applyPrices(prices) {
     this.config.customPrices=prices;for(const model of this.all()){const p=prices[`${model.provider}/${model.id}`];if(p)model.cost={...model.cost,...p};}
   }
