@@ -36,9 +36,9 @@ test('accepted input and queued follow-ups reach disk before they are displayed,
 });
 test('reload accepts role-free workers and source changes restart only after persisting session and draft',async t=>{
  const f=await fixture(t,()=>({text:'unused'}));await f.session.message({role:'user',content:'Keep my active chat',timestamp:Date.now()});
- await saveConfig({...f.config,agents:defaults.agents.map(p=>({...p,job:undefined}))},f.app.home);
+ await saveConfig({...f.config,agents:[{id:'legacy',name:'Old worker',mode:'execute',maxSteps:10}]},f.app.home);
  const {TerminalUI}=await import('../src/ui.mjs'),{MemoryTerminal}=await import('./terminal.mjs'),ui=new TerminalUI(f.app,{terminal:new MemoryTerminal(100,32)});f.app.ui=ui;ui.start();t.after(()=>ui.stop());
- assert.equal(await f.app.reload(),true);assert.equal(f.app.engine.config.agents[0].job,undefined);
+ assert.equal(await f.app.reload(),true);assert.equal(f.app.engine.config.agents,undefined);
  ui.editor.setText('Unsent draft');let restarted;f.app.options.buildIdentity=async()=> 'changed';f.app.options.onRestart=async data=>{restarted=data;};assert.equal(await f.app.reload(),true);assert.equal(restarted.sessionId,f.session.meta.id);
  const restored=await Session.load(f.session.meta.id,f.app.home);assert.equal(restored.state.composerDraft,'Unsent draft');assert.equal(restored.meta.hasMessages,true);
 });

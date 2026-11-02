@@ -4,6 +4,7 @@ import {
   colorToRgb, parseColor, visibleWidth,
 } from '@earendil-works/pi-tui';
 import { modelLabel } from './model-label.mjs';
+import {activeWorker,workerDisplay} from './subagents-ui.mjs';
 import { accentText,accentBadge } from './theme.mjs';
 import { usageLabel,applicableQuota,quotaFreshness,remainingPercent,resetCountdown } from './usage.mjs';
 import { EffortPanel,StatsPanel,ToolsPanel,ResetPanel } from './panels.mjs';
@@ -26,7 +27,7 @@ const markdownTheme = {
 export const commands = [
  ['model','Model'],['effort','Effort + OVERKILL'],['accounts','Accounts'],['directory','Working directory'],['settings','Settings'],['subagents','Subagents'],
  ['loop','Persistent goal'],['stats','Activity'],['tools','Tools'],['usage','Account usage'],['reset','Quota resets'],['cost','Session cost'],['new','New session'],['resume','Resume'],['name','Rename session'],
- ['reload','Reload Psi'],['refresh','Reload Psi'],['compact','Compact context'],['project','Battlecode project'],['experiments','Experiments'],['profile','Agent profile'],
+ ['reload','Reload Psi'],['refresh','Reload Psi'],['compact','Compact context'],['project','Battlecode project'],['experiments','Experiments'],['profile','Workflow'],
  ['logo','3D logo'],['update','Update Psi'],['status','Session status'],['export','Export session'],['help','Commands'],['quit','Quit']
 ].map(([name,description])=>({name,description}));
 
@@ -74,10 +75,13 @@ export class TerminalUI {
       return [left+' '.repeat(gap)+(state.overkill?accentBadge(' '+right+' ',c):dim(right)), ...(app.engine.config.showUsage===false?[]:[truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage,{sessionCost:app.session.meteredCost,costKnown:app.session.meteredCostKnown,remaining:true,compact:true,weeklyOnly:true,resets:true}))),width)])];
     } };
     this.subagentBar={invalidate(){},render:width=>{
-      const active=[...this.workerRows.values()].filter(r=>['running','queued','waiting'].includes(r.status));
-      const max=Math.max(1,Math.min(3,Math.floor(this.terminal.rows/10))),rows=active.slice(0,max);
-      return rows.map((r,i)=>{const extra=i===rows.length-1&&active.length>rows.length?` · +${active.length-rows.length}`:'';const elapsed=Math.max(0,Math.floor((Date.now()-Date.parse(r.createdAt||new Date()))/1000));
-        return truncateToWidth('  '+this.paint('●')+' '+safe(r.name)+' · '+dim(`${r.activity||r.status} · ${modelLabel(r.model)} · ${elapsed}s${extra}`),width);
+      const max=Math.max(1,Math.min(3,Math.floor(this.terminal.rows/10)));
+      return workerDisplay([...this.workerRows.values()],max).map(entry=>{
+        const r=entry.workers[0],count=entry.workers.length;
+        const elapsed=Math.max(0,Math.floor((Date.now()-Date.parse(r.createdAt||new Date()))/1000));
+        const extra=entry.hidden?` · +${entry.hidden} more`:'';
+        const detail=entry.grouped?`${count} active · ${r.name}${count>1?` +${count-1}`:''}`:`${r.activity||r.status} · ${modelLabel(r.model)} · ${elapsed}s`;
+        return truncateToWidth('  '+this.paint('●')+' '+safe(entry.name)+' · '+dim(safe(detail+extra)),width);
       });
     }};
     this.progressBar={invalidate(){},render:width=>{
@@ -208,7 +212,7 @@ export class TerminalUI {
     if (event.type === 'queued') this.note('Message queued for the next tool boundary.');
     if (event.type === 'stopped') this.note('Stopped. Queued messages and unfinished goals are saved.');
     if(event.type==='progress'){this.note(event.update);if(this.app.engine.config.agentMode==='plan')this.markdown(event.steps.map((s,i)=>`${i+1}. ${s.title}`).join('\n'),false);}
-    if(['agent_started','agent_finished','agent_status'].includes(event.type)){this.workerRows.set(event.agent.id,{...event.agent,status:event.agent.status||(event.type==='agent_started'?'running':'completed')});if(this.workerRows.size>32)this.workerRows.delete(this.workerRows.keys().next().value);}
+    if(['agent_started','agent_finished','agent_status'].includes(event.type)){const worker={...this.workerRows.get(event.agent.id),...event.agent,status:event.agent.status||(event.type==='agent_started'?'running':'completed')};if(activeWorker(worker))this.workerRows.set(worker.id,worker);else this.workerRows.delete(worker.id);}
     if (event.type === 'error') this.note(event.error, true);
     if(event.type==='final_response'){this.finishResponse();this.markdown(event.text);}
     if (event.type === 'run_end') {this.finishResponse(event.status==='stopped'?'stopped':['error','limited'].includes(event.status)?'partial response':'');this.activity='';for(const tool of this.openTools.values())tool.interrupt();this.openTools.clear();this.syncMotion();}

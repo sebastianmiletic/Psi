@@ -1,8 +1,8 @@
-import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { existsSync } from 'node:fs';
 import { canonical } from './directories.mjs';
 import { Agents } from './agents.mjs';
+import {activeWorker,workerGroups} from './subagents-ui.mjs';
 import {buildIdentity,loadedBuildIdentity} from './build.mjs';
 import { modelLabel } from './model-label.mjs';
 import { Resets } from './resets.mjs';
@@ -22,7 +22,7 @@ import { Session } from './session.mjs';
 import { Jobs } from './jobs.mjs';
 import { Tools } from './tools.mjs';
 import { Engine } from './engine.mjs';
-import { saveConfig,loadConfig, psiHome, cleanTerminal, redact, defaults,unrestrictedPresets,withLock } from './storage.mjs';
+import { saveConfig,loadConfig, psiHome, cleanTerminal, redact, defaults,withoutWorkerProfiles,withLock } from './storage.mjs';
 
 export class App {
   constructor(config, session, options = {}) {
@@ -31,7 +31,9 @@ export class App {
     this.statistics=new Statistics(this.home);this.bind();
   }
   bind() {
-    if(this.session.state.settings?.agents)this.session.state.settings={...this.session.state.settings,agents:unrestrictedPresets(this.session.state.settings.agents)};
+    this.config=withoutWorkerProfiles(this.config);
+    this.session.state.settings=withoutWorkerProfiles(this.session.state.settings);
+    this.session.state.pendingSettings=withoutWorkerProfiles(this.session.state.pendingSettings);
     this.jobs = new Jobs(this.home, this.session.meta.id);
     this.tools = new Tools({ session: this.session, jobs: this.jobs, config: { ...this.config, ...this.session.state.settings }, onEvent: e => this.event(e) });
     this.battlecode=new Battlecode({session:this.session,jobs:this.jobs,config:this.config,home:this.home});this.tools.projectAdapter=this.battlecode;
@@ -79,7 +81,7 @@ export class App {
     const { TerminalUI } = await import('./ui.mjs'); this.ui = new TerminalUI(this); this.ui.start();await this.agents.restore();this.startUsageMonitor();
     if(this.session.state.composerDraft)this.ui.editor.setText(this.session.state.composerDraft);
     this.updateInfo=await readJSON(join(this.home,'update-check.json'),null).catch(()=>null);this.ui.render();
-    if(this.engine.config.checkForUpdates){void this.checkUpdates();this.updateTimer=setInterval(()=>void this.checkUpdates(),3600000);this.updateTimer.unref();}
+    if(this.engine.config.checkForUpdates){void this.checkUpdates({force:true});this.updateTimer=setInterval(()=>void this.checkUpdates(),3600000);this.updateTimer.unref();}
     if (this.session.messages.length) {
       this.ui.note(`Resumed ${this.session.meta.id}. ${this.session.messages.length} context messages.`);
       this.showHistory();
@@ -98,7 +100,7 @@ export class App {
   async settingsMenu() {
     while(true){
       const c={...this.engine.config,...this.engine.pendingSettings};
-      const selected=await this.ui.choose('Settings',settingItems.map(item=>({value:item.id,label:item.label,description:`${item.special==='prices'?'configure':item.special==='agents'?`${c.agents.length} profiles`:['model','subagentModel','summaryModel'].includes(item.id)?c[item.id]?modelLabel(c[item.id]):'same':Array.isArray(c[item.id])?c[item.id].join(', ')||'none':typeof c[item.id]==='boolean'?(c[item.id]?'on':'off'):c[item.id]??'default'}`})));
+      const selected=await this.ui.choose('Settings',settingItems.map(item=>({value:item.id,label:item.label,description:`${item.special==='prices'?'configure':item.special==='agents'?'':['model','subagentModel','summaryModel'].includes(item.id)?c[item.id]?modelLabel(c[item.id]):'same':Array.isArray(c[item.id])?c[item.id].join(', ')||'none':typeof c[item.id]==='boolean'?(c[item.id]?'on':'off'):c[item.id]??'default'}`})));
       if(!selected)return;
       const item=settingItems.find(i=>i.id===selected);let value;
       if(item.special==='agents'){await this.agentsMenu();continue;}
@@ -325,19 +327,33 @@ export class App {
     while(this.engine.busy)await delay(25);
     await this.session.directory(cwd,roots);await this.changeSession(this.session,{preserveTranscript:true});
   }
-  async checkUpdates(){try{const update=await checkUpdate(this.home);if(this.closing)return;this.updateInfo=update;this.ui?.render();if(update.available&&this.engine.config.autoUpdate&&!this.engine.busy&&!this.autoUpdatedVersion){const result=await updateInstallation(this.home,{release:update});if(result.updated){this.autoUpdatedVersion=update.latest;this.updateInfo={...update,installed:true};this.ui?.note(result.message);this.ui?.render();}}}catch{/* Retain a known update notice while offline. */}}
+  async checkUpdates({force=false}={}){try{const update=await checkUpdate(this.home,{force});if(this.closing)return;this.updateInfo=update;this.ui?.render();if(update.available&&this.engine.config.autoUpdate&&!this.engine.busy&&!this.autoUpdatedVersion){const result=await updateInstallation(this.home,{release:update});if(result.updated){this.autoUpdatedVersion=update.latest;this.updateInfo={...update,installed:true};this.ui?.note(result.message);this.ui?.render();}}}catch{/* Retain a known update notice while offline. */}}
   async agentsMenu(){
-    while(true){const c={...this.engine.config,...this.engine.pendingSettings},runs=await this.agents.records();
-      const action=await this.ui.choose('Subagents',[{value:'enabled',label:`OVERKILL ${c.overkill?'ON':'off'}`},{value:'default-model',label:'Default model',description:modelLabel(c.subagentModel||defaults.subagentModel)},{value:'concurrency',label:'Concurrent workers',description:String(c.subagentConcurrency)},{value:'add',label:'Add subagent'},...c.agents.map(p=>({value:'profile:'+p.id,label:p.name,description:`${p.mode} · ${modelLabel(p.model||c.subagentModel||defaults.subagentModel)}`})),...runs.map(r=>({value:'run:'+r.id,label:'Run · '+r.name,description:modelLabel(r.model)}))]);if(!action)return;
+    while(true){
+      const c={...this.engine.config,...this.engine.pendingSettings};
+      const runs=await Promise.all((await this.agents.records()).map(r=>this.agents.view(r)));
+      const active=runs.filter(r=>activeWorker(r)),finished=runs.filter(r=>!activeWorker(r));
+      const groups=workerGroups(active),grouped=active.length>3;
+      let action=await this.ui.choose('Subagents',[
+        {value:'enabled',label:`OVERKILL ${c.overkill?'ON':'off'}`},
+        {value:'default-model',label:'Default model',description:modelLabel(c.subagentModel||defaults.subagentModel)},
+        ...(grouped?groups.map((g,i)=>({value:'group:'+i,label:g.name,description:`${g.workers.length} active`})):active.map(r=>({value:'run:'+r.id,label:r.name,description:modelLabel(r.model)}))),
+        ...(finished.length?[{value:'history',label:'History',description:String(finished.length)}]:[])
+      ]);
+      if(!action)return;
       if(action==='default-model'){const model=await this.pickModel(c.subagentModel||defaults.subagentModel);if(model)await this.update({subagentModel:model});continue;}
       if(action==='enabled'){await this.update({overkill:!c.overkill});continue;}
-      if(action==='concurrency'){const text=await this.ui.ask({type:'text',message:'Concurrent workers (1–16)',placeholder:String(c.subagentConcurrency)});if(text!==null)try{await this.update({subagentConcurrency:Number(text)});}catch(e){this.ui.note(e.message,true);}continue;}
-      if(action.startsWith('run:')){const r=await this.agents.status(action.slice(4));const choice=await this.ui.choose(r.name,[{value:'status',label:'Show status and result'},{value:'send',label:'Send a follow-up'},{value:'stop',label:'Stop this worker'}]);if(choice==='status')this.ui.note(JSON.stringify(r,null,2));if(choice==='stop')await this.jobs.stop(r.jobId);if(choice==='send'){const prompt=await this.ui.ask({type:'text',message:'Follow-up task'});if(prompt){const entry=this.tools.entries.get('agent');if(entry)await entry.execute({action:'send',id:r.id,prompt});}}continue;}
-      const profiles=c.agents.map(p=>({...p}));let profile=action==='add'?{id:randomUUID(),name:'Worker '+(profiles.length+1),model:null,effort:'medium',mode:'execute',maxSteps:80,budget:0}:profiles.find(p=>p.id===action.slice(8));
-      if(action==='add')profiles.push(profile);
-      while(true){const field=await this.ui.choose(profile.name,[...['model','effort','mode','maxSteps','budget'].map(k=>({value:k,label:k,description:k==='model'?modelLabel(profile.model||c.subagentModel||defaults.subagentModel):String(profile[k]??'')})),{value:'remove',label:'Remove this profile'},{value:'save',label:'Save worker'}]);if(!field)break;if(field==='remove'){await this.update({agents:profiles.filter(p=>p.id!==profile.id)});break;}if(field==='save'){try{await this.update({agents:profiles});}catch(e){this.ui.note(e.message,true);continue;}break;}
-        let value;if(field==='model'){value=await this.pickModel(c.subagentModel||defaults.subagentModel,'',{inherit:true});if(value!==null)profile.model=value==='default'?null:value;continue;}if(field==='mode')value=await this.ui.choose('Worker mode',['plan','execute'].map(value=>({value,label:value})));else if(field==='effort'){const model=this.registry.find(profile.model||c.subagentModel||defaults.subagentModel);value=await this.ui.choose('Worker thinking',getSupportedThinkingLevels(model).map(value=>({value,label:value})));}else{value=await this.ui.ask({type:'text',message:field,placeholder:String(profile[field]??'same')});if(value!==null){if(['maxSteps','budget'].includes(field))value=Number(value);}}
-        if(value!==null)profile[field]=value;
+      if(action==='history'||action.startsWith('group:')){
+        const group=groups[Number(action.slice(6))];
+        action=await this.ui.choose(action==='history'?'History':group.name,(action==='history'?finished:group.workers).map(r=>({value:'run:'+r.id,label:r.name,description:`${r.status} · ${modelLabel(r.model)}`})));
+        if(!action)continue;
+      }
+      if(action.startsWith('run:')){
+        const r=await this.agents.status(action.slice(4));
+        const choice=await this.ui.choose(r.name,[{value:'status',label:'Result'},{value:'send',label:'Follow-up'},{value:'stop',label:'Stop'}]);
+        if(choice==='status')this.ui.note(JSON.stringify(await this.agents.view(r),null,2));
+        if(choice==='stop')await this.jobs.stop(r.jobId);
+        if(choice==='send'){const prompt=await this.ui.ask({type:'text',message:'Follow-up task'});if(prompt)await this.agents.send(r.id,prompt);}
       }
     }
   }

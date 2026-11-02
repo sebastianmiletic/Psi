@@ -50,12 +50,11 @@ test('native Claude subprocess handles stdin and cancellation without invoking a
  const controller=new AbortController(),pending=runClaude(process.execPath,['-e','setInterval(()=>{},1000)'],{signal:controller.signal});setTimeout(()=>controller.abort(new Error('User stopped')),30);await assert.rejects(pending,/User stopped/);
 });
 
-test('legacy role presets become unrestricted workers on load and resume, and settings omit role and job fields',async t=>{
- const f=await fixture(t,()=>({text:'unused'})),legacy=[{id:'researcher',name:'Researcher',job:'Research only',model:null,mode:'plan',effort:'medium',maxSteps:80},{id:'builder',name:'Builder',job:'Build only',model:null,mode:'execute',effort:'high',maxSteps:150}];
- await writeFile(join(f.app.home,'config.json'),JSON.stringify({...f.config,agents:legacy}));
- const c=await loadConfig(f.app.home);assert.deepEqual(c.agents.map(p=>[p.id,p.name,p.mode,p.job]),[['worker-1','Worker 1','execute',undefined],['worker-2','Worker 2','execute',undefined]]);
- f.session.state.settings={agents:legacy};f.app.bind();assert.equal(f.app.engine.config.agents[0].mode,'execute');assert.equal(f.app.engine.config.agents[0].name,'Worker 1');
- let steps=['profile:worker-1',null,null],profileItems;
- f.app.ui={stop(){},choose:async(title,items)=>{if(title==='Worker 1')profileItems=items;return steps.shift();}};await f.app.agentsMenu();assert.ok(profileItems.some(i=>i.value==='model'));assert.ok(!profileItems.some(i=>['name','job','role'].includes(i.value)));assert.equal(f.requests.length,0);
- await saveConfig({subagentModel:'openai-codex/gpt-5.6-sol',agents:c.agents},f.app.home);assert.equal((await loadConfig(f.app.home)).subagentModel,'openai-codex/gpt-5.6-sol');
+test('legacy worker profiles are ignored on load and resume without affecting the default model',async t=>{
+ const f=await fixture(t,()=>({text:'unused'})),legacy=[{id:'researcher',name:'Researcher',job:'Research only',model:null,mode:'plan',effort:'medium',maxSteps:80}];
+ await writeFile(join(f.app.home,'config.json'),JSON.stringify({...f.config,agents:legacy,subagentConcurrency:1}));
+ const c=await loadConfig(f.app.home);assert.equal(c.agents,undefined);assert.equal(c.subagentConcurrency,undefined);
+ f.session.state.settings={agents:legacy,subagentConcurrency:1};f.app.bind();assert.equal(f.app.engine.config.agents,undefined);assert.equal(f.app.engine.config.subagentConcurrency,undefined);
+ let items;f.app.ui={stop(){},choose:async(_title,rows)=>{items=rows;return null;}};await f.app.agentsMenu();assert.ok(items.some(i=>i.value==='default-model'));assert.ok(!items.some(i=>/profile|add|concurrency/.test(i.value)));assert.equal(f.requests.length,0);
+ await saveConfig({subagentModel:'openai-codex/gpt-5.6-sol'},f.app.home);const saved=JSON.parse(await readFile(join(f.app.home,'config.json')));assert.equal(saved.subagentModel,'openai-codex/gpt-5.6-sol');assert.equal(saved.agents,undefined);
 });

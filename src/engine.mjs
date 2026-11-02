@@ -7,7 +7,7 @@ import { AccountRouter, QuotaMonitor, exhausted } from './quota.mjs';
 import { validateSettings } from './settings.mjs';
 import { AccountUsage, limitsFromHeaders } from './usage.mjs';
 import { Type, getSupportedThinkingLevels, clampThinkingLevel } from '@earendil-works/pi-ai';
-import { withLock, redact } from './storage.mjs';
+import { withLock, redact, withoutWorkerProfiles } from './storage.mjs';
 import { requestMetrics } from './request-metrics.mjs';
 import { evidenceReceipt } from './evidence.mjs';
 import { systemPrompt,runtimeContext,COMPACTION_PROMPT } from './prompt.mjs';
@@ -37,10 +37,10 @@ export class LimitError extends Error {}
 export class AccountUnavailableError extends Error {constructor(message,retryAt){super(message);this.retryAt=retryAt;}}
 export class Engine {
   constructor({ registry, session, tools, config, onEvent = () => {} }) {
-    this.registry = registry; this.session = session; this.tools = tools; this.config = { ...config, ...session.state.settings }; this.onEvent = onEvent;
+    this.registry = registry; this.session = session; this.tools = tools; this.config = withoutWorkerProfiles({ ...config, ...session.state.settings }); this.onEvent = onEvent;
     this.accountUsage = new AccountUsage(session.home);
     this.router=new AccountRouter(registry,this.accountUsage,this.config);this.quota=new QuotaMonitor(registry,this.config,session.home);
-    this.pendingSettings={...session.state.pendingSettings};
+    this.pendingSettings=withoutWorkerProfiles(session.state.pendingSettings);
     this.busy = false; this.queue = [...session.state.queuedMessages||[]]; this.controller = null;
     tools.add('session_title','Set a concise chat title once after the first user message. User-set names are protected; never rename later.',{title:Type.String({minLength:1,maxLength:80})},async({title})=>({renamed:await session.autoName(title),title:session.meta.title}));
     tools.add('finish', 'Complete verified work. Include report: the full user-facing Markdown final review (outcome, scope, evidence/findings, verification, limitations and relevant next steps). Psi displays report after validation without another model request. Never finish with only a progress update. Evidence must be existing regular files; use only when the objective is actually achieved.', { summary: Type.String({minLength:1}), evidence: Type.Array(Type.String(),{minItems:1}), report:Type.Optional(Type.String({minLength:1,maxLength:100000})), experiment_id:Type.Optional(Type.String()) }, async (args,signal) => {
@@ -75,6 +75,7 @@ export class Engine {
     await this.publishReview(text,c);
   }
   async settings(patch, immediate=false) {
+    patch=withoutWorkerProfiles(patch);
     validateSettings(patch,this.registry);
     if (patch.model) {
       const model = this.registry.find(patch.model); const levels = getSupportedThinkingLevels(model);

@@ -57,18 +57,18 @@ export const defaults = {
   debug: true, customProviders: [], accent: 'sage', showLogo: true, animations: true,
   autoSwitchAccounts: false, accountSwitchThreshold: 100, quotaRefreshSeconds: 15,
   fallbackModels: [], loopRetrySeconds: 30, showUsage: true, customPrices: {},
-  agentMode:'execute', overkill:false, subagentConcurrency:3, subagentDepth:0, checkForUpdates:true, autoUpdate:false,
+  agentMode:'execute', overkill:false, subagentDepth:0, checkForUpdates:true, autoUpdate:false,
   claudeCli:'claude',
-  agents:[1,2,3].map(i=>({id:'worker-'+i,name:'Worker '+i,model:null,effort:'medium',mode:'execute',maxSteps:150})),
 };
-export function unrestrictedPresets(agents){
- const legacy=new Set(['researcher','builder','reviewer']),used=new Set(agents.filter(p=>!legacy.has(p.id)).map(p=>p.id));
- return agents.map(({job,...p},i)=>{if(!legacy.has(p.id))return p;let n=i+1;while(used.has('worker-'+n))n++;used.add('worker-'+n);return{...p,id:'worker-'+n,name:'Worker '+n,mode:'execute'};});
+// Retired presets and worker-count settings must not restrict resumed chats.
+export function withoutWorkerProfiles(config = {}) {
+  const { agents, subagentConcurrency, ...current } = config || {};
+  return current;
 }
-export async function loadConfig(home = psiHome()) { const c={ ...defaults, ...await readJSON(join(home, 'config.json'), {}) };return{...c,agents:unrestrictedPresets(c.agents)}; }
+export async function loadConfig(home = psiHome()) { return withoutWorkerProfiles({ ...defaults, ...await readJSON(join(home, 'config.json'), {}) }); }
 export async function saveConfig(patch, home = psiHome()) {
   return withLock(join(home, 'config.lock'), async () => {
-    const next = { ...await loadConfig(home), ...patch };
+    const next = withoutWorkerProfiles({ ...await loadConfig(home), ...patch });
     await atomicJSON(join(home, 'config.json'), next); return next;
   });
 }

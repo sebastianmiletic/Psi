@@ -68,7 +68,7 @@ The Ψ header stays visible above compact bottom menus. Chat names sit above the
 | :--- | :--- |
 | `/model` · `/effort` | Model, reasoning and OVERKILL |
 | `/accounts` | Add, switch or remove accounts |
-| `/subagents` | Models, effort, limits and concurrency |
+| `/subagents` | Default model, active task groups and history |
 | `/loop` | Give Psi a persistent objective |
 | `/directory <path>` | Switch working directory |
 | `/stats` · `/tools` | Activity and available tools |
@@ -77,7 +77,7 @@ The Ψ header stays visible above compact bottom menus. Chat names sit above the
 | `/name [title]` | Rename the current session |
 | `/help` | Every command |
 
-With **OVERKILL** on, the main AI decides when useful independent work should be delegated, up to your configured concurrency. Sending a prompt does not launch workers. Every worker has a unique task name of one to five words and can implement, debug, test, benchmark or research. Their task names, activity and model appear below the usage bar while active; finished workers hide automatically, with results retained in `/subagents`. Completed tasks automatically include an evidence-backed final review. Updates explain work along the way, and sending a message returns to the latest chat content. Reports return to the main agent before it finishes; each assignment includes clear ownership. Subagent histories and results stay inside the parent session, so workers do not create extra chats. Subagents use their configured models and selected provider accounts and consume normal provider usage.
+With **OVERKILL** on, the main AI decides when useful independent work should be delegated, with no fixed worker-count cap. Sending a prompt does not launch workers. Every worker has a unique task name of one to five words and can implement, debug, test, benchmark or research. Their task names, activity and model appear below the usage bar while active. When more than three workers are active, related assignments share compact task-group rows; `/subagents` opens each group and its individual workers. Finished workers hide automatically, with results retained in History. There are no worker profiles or preset roles. The default model is 5.6 Sol; an assignment can override its model and effort. Completed tasks automatically include an evidence-backed final review. Updates explain work along the way, and sending a message returns to the latest chat content. Reports return to the main agent before it finishes; each assignment includes clear ownership. Subagent histories and results stay inside the parent session, so workers do not create extra chats. Subagents use their configured models and selected provider accounts and consume normal provider usage.
 
 Answers use clean Markdown without repeated assistant headings. Reads and searches group under **Exploring / Explored**; commands use **Running / Ran** with indented output. **Ctrl+T** expands tool details.
 

@@ -2,9 +2,8 @@ import { validAccent, accents } from './theme.mjs';
 export const settingItems = [
   {id:'agentMode',label:'Mode',special:'mode'},
   {id:'overkill',label:'OVERKILL',boolean:true},
-  {id:'agents',label:'Subagents',special:'agents',description:'Models, thinking and limits'},
+  {id:'subagents',label:'Subagents',special:'agents'},
   {id:'subagentModel',label:'Subagent model',special:'subagentModel'},
-  {id:'subagentConcurrency',label:'Concurrency',number:[1,16]},
   {id:'checkForUpdates',label:'Update checks',boolean:true},
   {id:'autoUpdate',label:'Auto-update',boolean:true,description:'Managed releases or clean source checkouts; restart to apply'},
   {id:'accent',label:'Accent colour',values:[...Object.keys(accents),'custom'],description:'Selection, links and the 3D Psi mark'},
@@ -26,7 +25,7 @@ export const settingItems = [
   {id:'codexCli',label:'Codex CLI path'},
   {id:'claudeCli',label:'Claude Code path'},
   {id:'battlecodeCli',label:'Battlecode CLI path',description:'Pinned compiler/CLI executable for the project adapter'},
-  {id:'profile',label:'Agent profile',values:['battlecode','general']},{id:'debug',label:'Debug logs',boolean:true},
+  {id:'profile',label:'Workflow',values:['battlecode','general']},{id:'debug',label:'Debug logs',boolean:true},
 ];
 export function validateSettings(patch, registry) {
   for(const [key,value] of Object.entries(patch)) {
@@ -38,10 +37,6 @@ export function validateSettings(patch, registry) {
     if(key==='fallbackModels') {if(!Array.isArray(value)||value.some(x=>typeof x!=='string'))throw new Error('Fallbacks must be provider/model names');for(const m of value)registry?.find(m);}
     if(key==='agentMode'&&!['plan','execute'].includes(value))throw new Error('Choose plan or execute mode.');
     if(key==='subagentModel'){if(typeof value!=='string'||!value.trim())throw new Error('Choose a subagent model.');registry?.find(value);}
-    if(key==='agents'){
-      if(!Array.isArray(value)||value.length>32||new Set(value.map(a=>a.id)).size!==value.length)throw new Error('Use up to 32 distinct worker profiles.');
-      for(const a of value){if(!a.id||!a.name?.trim()||!['plan','execute'].includes(a.mode))throw new Error('Every worker needs a name and mode.');if(a.model)registry?.find(a.model);if(!Number.isInteger(a.maxSteps)||a.maxSteps<1||a.maxSteps>100000)throw new Error('Worker request limits must be 1–100000.');if(a.budget!==undefined&&(!Number.isFinite(a.budget)||a.budget<0))throw new Error('Worker budgets must be nonnegative.');}
-    }
     if(key==='customPrices')for(const [model,prices]of Object.entries(value||{})){registry?.find(model);for(const n of Object.values(prices))if(!Number.isFinite(n)||n<0)throw new Error('Prices must be nonnegative USD per million tokens');}
   }
   return patch;

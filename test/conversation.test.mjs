@@ -50,11 +50,11 @@ test('stopped tools remain interrupted and subagents always sit below the usage 
 test('finished subagents hide immediately while active overflow and saved worker details remain',async t=>{
  const {ui}=await setup(t);
  for(let i=0;i<4;i++)ui.event({type:'agent_status',agent:{id:'worker-'+i,name:'Audit '+i,model:'fixture/test',status:'running'}});
- assert.match(frame(ui).join('\n'),/Audit 2.*\+1/);
+ assert.match(frame(ui).join('\n'),/Other tasks.*4 active.*\+3/);
  ui.event({type:'agent_finished',agent:{id:'worker-0',name:'Audit 0',model:'fixture/test',status:'completed'}});
- let screen=frame(ui).join('\n');assert.doesNotMatch(screen,/Audit 0/);assert.match(screen,/Audit 3/);assert.equal(ui.workerRows.get('worker-0').status,'completed');
+ let screen=frame(ui).join('\n');assert.doesNotMatch(screen,/Audit 0/);assert.match(screen,/Audit 3/);assert.equal(ui.workerRows.has('worker-0'),false);
  for(const [i,status]of[[1,'failed'],[2,'cancelled'],[3,'completed']])ui.event({type:'agent_finished',agent:{id:'worker-'+i,name:'Audit '+i,model:'fixture/test',status}});
- assert.equal(ui.subagentBar.render(100).length,0);assert.doesNotMatch(frame(ui).join('\n'),/Audit [0-3]/);assert.equal(ui.workerRows.size,4);
+ assert.equal(ui.subagentBar.render(100).length,0);assert.doesNotMatch(frame(ui).join('\n'),/Audit [0-3]/);assert.equal(ui.workerRows.size,0);
  ui.event({type:'agent_started',agent:{id:'worker-0',name:'Follow-up audit',model:'fixture/test',status:'running'}});assert.match(frame(ui).join('\n'),/Follow-up audit/);
 });
 

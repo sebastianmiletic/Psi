@@ -31,16 +31,15 @@ test('/model passes only model names to its picker while retaining exact provide
  await f.app.selectModel('5.6 luna');const item=seen.items.find(i=>i.value==='openai-codex/gpt-5.6-luna');assert.ok(item);assert.equal(item.label,'5.6 luna');assert.equal(item.description,undefined);assert.equal(seen.query,'5.6 luna');assert.equal(f.requests.length,0);
 });
 
-test('subagent settings expose searchable models, persist defaults and per-worker overrides, and preserve selection on Escape',async t=>{
+test('subagent settings expose searchable models, persist defaults without profiles, and preserve selection on Escape',async t=>{
  const f=await fixture(t,()=>({text:'unused'})),sol='openai-codex/gpt-5.6-sol',luna='openai-codex/gpt-5.6-luna';
  assert.equal(defaults.subagentModel,sol);
  let actions=['subagentModel',null],picked=sol,menus=[];
  f.app.ui={stop(){},render(){},event(){},choose:async(title,items)=>{menus.push({title,items});return actions.shift();},modelMenu:async items=>{assert.ok(items.some(i=>i.value===sol&&i.label==='5.6 sol'));assert.ok(items.some(i=>i.value===luna&&i.label==='5.6 luna'));return picked;}};
  await f.app.settingsMenu();assert.equal(f.app.engine.config.subagentModel,sol);assert.equal((await loadConfig(f.app.home)).subagentModel,sol);assert.equal(f.app.engine.config.model,'fixture/test');
- actions=['profile:worker-1','model','save',null];picked=luna;await f.app.agentsMenu();assert.equal(f.app.engine.config.agents[0].model,luna);assert.match(menus.find(m=>m.title==='Subagents').items.find(i=>i.value==='profile:worker-1').description,/5.6 sol/);
- actions=['profile:worker-1','model','save',null];picked=null;await f.app.agentsMenu();assert.equal(f.app.engine.config.agents[0].model,luna);
- actions=['profile:worker-1','model','save',null];picked='default';await f.app.agentsMenu();assert.equal(f.app.engine.config.agents[0].model,null);
- actions=['default-model',null];picked=luna;await f.app.agentsMenu();assert.equal((await loadConfig(f.app.home)).subagentModel,luna);assert.equal(f.requests.length,0);
+ actions=['default-model',null];picked=luna;await f.app.agentsMenu();assert.equal((await loadConfig(f.app.home)).subagentModel,luna);
+ actions=['default-model',null];picked=null;await f.app.agentsMenu();assert.equal(f.app.engine.config.subagentModel,luna);
+ const items=menus.find(m=>m.title==='Subagents').items;assert.ok(items.some(i=>i.value==='default-model'));assert.ok(!items.some(i=>/profile:|add|concurrency/.test(i.value)));assert.equal(f.requests.length,0);
  await assert.rejects(f.app.update({subagentModel:'missing/model'}),/Model not found/);
 });
 
@@ -50,7 +49,7 @@ test('delegation uses the subagent default independently of the parent and honor
  // Capture real manifests without launching inference or contacting either provider.
  f.app.jobs.start=async()=>({id:'captured-'+Math.random()});f.app.agents.track=()=>{};
  const a=await f.app.agents.spawn({name:'Inspect default routing',prompt:'Inspect default routing.'});
- const b=await f.app.agents.spawn({profile:'override',name:'Inspect override routing',prompt:'Inspect override routing.'});
+ const b=await f.app.agents.spawn({model:luna,effort:'medium',name:'Inspect override routing',prompt:'Inspect override routing.'});
  assert.equal(a.model,sol);assert.equal(b.model,luna);assert.equal(f.app.engine.config.model,'fixture/test');
  for(const r of[a,b]){const spec=JSON.parse(await readFile(join(f.session.dir,'agents',r.sessionId,'worker.json')));assert.equal(spec.config.model,r.model);}
  f.app.engine.config.subagentModel=undefined;
@@ -70,7 +69,7 @@ test('OVERKILL waits for model delegation, uses distinct task names, and integra
  const f=await setup(t,async p=>{
   const task=p.messages.find(m=>typeof m.content==='string'&&m.content.startsWith('Task from parent:'))?.content;
   if(task){workers++;const file=task.includes('counter.txt')?'counter.txt':'schema.txt',n=(turns.get(file)||0)+1;turns.set(file,n);return n===1?{call:{name:'write',args:{path:file,content:'verified '+file}}}:{text:'Implemented and verified '+file};}
-  if(++parents===1){arrived();await gate;return{calls:[{name:'agent',args:{action:'spawn',why:'Run a useful independent assignment alongside parent work.',profile:'preset',mode:'execute',name:'Build counter parser',prompt:'Implement counter.txt and verify it.'}},{name:'agent',args:{action:'spawn',why:'Run a useful independent assignment alongside parent work.',profile:'preset',mode:'execute',name:'Fix replay schema',prompt:'Implement schema.txt and verify it.'}}]};}
+  if(++parents===1){arrived();await gate;return{calls:[{name:'agent',args:{action:'spawn',why:'Run a useful independent assignment alongside parent work.',mode:'execute',name:'Build counter parser',prompt:'Implement counter.txt and verify it.'}},{name:'agent',args:{action:'spawn',why:'Run a useful independent assignment alongside parent work.',mode:'execute',name:'Fix replay schema',prompt:'Implement schema.txt and verify it.'}}]};}
   return{text:p.messages.some(m=>typeof m.content==='string'&&m.content.startsWith('Subagent reports ('))?'Integrated worker evidence.':'Continue while workers finish.'};
  });t.after(()=>release());
  await f.app.update({overkill:true,subagentConcurrency:2,agents:[{id:'preset',name:'Researcher',job:'Read existing evidence only.',model:'fixture/test',effort:'off',mode:'plan',maxSteps:5}]});
@@ -110,7 +109,7 @@ test('enabling OVERKILL during inference exposes delegation without starting una
 
 test('completed worker findings and exact-once accounting survive a resumed parent session',async t=>{
  const f=await fixture(t,()=>({text:'Durable findings.'}));await f.app.update({overkill:true,agents:[{id:'one',name:'Research',job:'Read',mode:'plan',effort:'off',maxSteps:5}]});
- const r=await f.app.agents.spawn({profile:'one',name:'Inspect saved evidence',prompt:'Inspect saved evidence'});await f.app.agents.wait(r.id);
+ const r=await f.app.agents.spawn({name:'Inspect saved evidence',prompt:'Inspect saved evidence'});await f.app.agents.wait(r.id);
  const {Session}=await import('../src/session.mjs');const resumed=await Session.load(f.session.meta.id,f.app.home);await f.app.changeSession(resumed);
  const rows=await f.app.agents.reports({wait:true});assert.equal(rows.length,1);assert.match(rows[0].summary,/Durable findings/);assert.equal(resumed.totals.requests,1);await f.app.agents.delivered(rows);assert.deepEqual(await f.app.agents.reports({wait:true}),[]);assert.equal(resumed.totals.requests,1);
 });
@@ -122,5 +121,5 @@ test('worker names must describe distinct tasks in fewer than six words, includi
  assert.equal((await f.app.agents.records()).length,0);
  const results=await Promise.allSettled([f.app.agents.spawn({name:'Build replay explorer',prompt:'Build a replay explorer.'}),f.app.agents.spawn({name:'build replay explorer',prompt:'Duplicate task.'})]);assert.equal(results[0].status,'fulfilled');assert.equal(results[1].status,'rejected');assert.match(results[1].reason.message,/already named/);
  await f.app.agents.wait(results[0].value.id);await assert.rejects(f.app.agents.spawn({name:'Build replay explorer!',prompt:'Reuse a completed name.'}),/already named/);
- const next=await f.app.agents.spawn({name:'Fix fixture parser',prompt:'Fix the fixture parser.'});await f.app.agents.wait(next.id);assert.equal(next.profile,null);assert.equal(next.model,'fixture/test');assert.equal((await f.app.agents.records()).length,2);
+ const next=await f.app.agents.spawn({name:'Fix fixture parser',prompt:'Fix the fixture parser.'});await f.app.agents.wait(next.id);assert.equal(next.profile,undefined);assert.equal(next.model,'fixture/test');assert.equal((await f.app.agents.records()).length,2);
 });

@@ -4,7 +4,7 @@ The following slash commands are removed. Their alternatives are explicit; none 
 
 | Removed | What it did and how it was used | Recommendation |
 | --- | --- | --- |
-| `/agents` | Opened worker roles, models, effort and concurrency. | Renamed to `/subagents`; keep the new name. All functionality remains. |
+| `/agents` | Opened worker roles, models, effort and concurrency. | Renamed to `/subagents`. Profiles and fixed worker-count controls were removed in 0.2.23; the AI assigns tasks and groups workers as needed. |
 | `/provider` | Interactive setup for a custom endpoint, e.g. a local vLLM server. | Keep removed for a quieter command list. Advanced setup still works with `psi provider add --id local --url http://localhost:8000/v1 --model my-model --keyless`. |
 | `/cd <path>` | Started a new session rooted in another project directory. | Convenient when moving between projects, but optional. Use `psi -C /path` from the shell; `/directory add` grants additional tool access without changing the session root. |
 | `/summary-model provider/model` | Selected a separate model for context compaction; `same` reused the main model. | Keep in `/settings` → Compaction model. A cheaper summarizer can reduce long-loop cost, but this rarely needs its own command. |
