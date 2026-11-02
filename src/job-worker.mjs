@@ -8,12 +8,16 @@ const path = join(dir, 'job.json');
 const job = await readJSON(path, null);
 if (!job) process.exit(1);
 job.pid = process.pid; job.status = 'running'; job.startedAt = new Date().toISOString();
-await atomicJSON(path, job);
+let writes=Promise.resolve();
+const save=()=>{const snapshot={...job};writes=writes.then(()=>atomicJSON(path,snapshot));return writes;};
+await save();
 const log = createWriteStream(job.log, { flags: 'a', mode: 0o600 });
 let bytes = 0, capped = false, reason, timer, escalation;
 const argv=job.sandbox?.argv||job.infrastructureArgv;
 const child = spawn(argv?.[0] || process.env.SHELL || (process.platform==='win32'?process.env.COMSPEC||'cmd.exe':'/bin/sh'), argv?argv.slice(1):process.platform==='win32'?['/d','/s','/c',job.command]:['-lc', job.command], { cwd: job.cwd, env: job.sandbox?.env || {...process.env,PSI_JOB_CONTROL_DIR:dir}, stdio: ['ignore', 'pipe', 'pipe'] });
-job.childPid = child.pid; await atomicJSON(path, job);
+// Install completion/error listeners before awaiting any I/O. Fast commands
+// can otherwise exit while the child-PID snapshot is being written.
+job.childPid = child.pid;void save();
 function output(chunk) {
   if (capped) return;
   const remaining = Math.max(0, job.max_log_bytes - bytes);
@@ -44,7 +48,7 @@ child.on('close', async (code, signal) => {
   job.status = reason || (spawnError || code !== 0 ? 'failed' : 'completed');
   job.exitCode = code; job.signal = signal; job.error = spawnError; job.logCapped = capped; job.bytes = bytes; job.finishedAt = new Date().toISOString();
   await new Promise(res => log.end(res));
-  await atomicJSON(path, job);
+  await save();
   // Leave the escalation timer in place for descendants that ignore SIGTERM.
   if (reason && (job.graceful_stop_ms||2000) <= 2000) await new Promise(res => setTimeout(res, 2000));
   clearTimeout(escalation);
