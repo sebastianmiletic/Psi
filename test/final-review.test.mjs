@@ -20,7 +20,7 @@ test('verified finish publishes the complete final review without another reques
 
 test('finish without report receives one text-only final request; later actions are skipped',async t=>{
  const f=await fixture(t,(_p,n)=>n===1?{calls:[{name:'finish',args:{summary:'Done',evidence:['proof.txt']}},{name:'write',args:{path:'late.txt',content:'must not run'}}]}:{text:report});await writeFile(join(f.root,'proof.txt'),'verified');
- await f.app.engine.run('Complete work',{loop:true});assert.equal(f.requests.length,2);assert.ok(!f.requests[1].tools?.length);await assert.rejects(readFile(join(f.root,'late.txt')));assert.equal(f.session.conversation.at(-1).content[0].text,report);assert.ok(f.session.messages.some(m=>m.role==='toolResult'&&m.toolName==='write'&&m.isError));
+ await f.app.engine.run('Complete work',{loop:true});assert.equal(f.requests.length,2);assert.equal(f.requests[1].tool_choice,'none');assert.deepEqual(f.requests[1].tools,f.requests[0].tools);await assert.rejects(readFile(join(f.root,'late.txt')));assert.equal(f.session.conversation.at(-1).content[0].text,report);assert.ok(f.session.messages.some(m=>m.role==='toolResult'&&m.toolName==='write'&&m.isError));
 });
 
 test('failed completion never publishes the supplied success review',async t=>{

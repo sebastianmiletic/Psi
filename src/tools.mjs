@@ -47,7 +47,7 @@ export class Tools {
     this.session = session; this.jobs = jobs; this.config = config; this.onEvent = onEvent;
     this.cwd = session.meta.cwd; this.browser = null; this.page = null;
     this.policy=new Directories(session,this.config);this.jobs.policy=this.policy;
-    this.entries = new Map();
+    this.entries = new Map();this.readCache=new Map();
     this.add('read', 'Read text with line numbers, or an image. Page large files using offset and limit.', {
       path: str('Absolute or workspace-relative path'), offset: opt(num(1, 1e9, 'First line, starting at 1')), limit: opt(num(1, 2000, 'Number of lines; default 200')),
     }, async a => {
@@ -60,7 +60,7 @@ export class Tools {
       if (info.size > 20_000_000) throw new Error('File exceeds 20 MB. Use bash to query a specific byte range.');
       const lines = (await readFile(path, 'utf8')).split('\n'); const start = Math.floor(a.offset || 1) - 1;
       return `${path} (${lines.length} lines)\n` + lines.slice(start, start + (a.limit || 200)).map((l, i) => `${start + i + 1}: ${l}`).join('\n');
-    });
+    },true);
     this.add('write', 'Write a file, creating parent directories. No approval is required.', { path: str('File path'), content: str('Complete file contents'), append: opt(Type.Boolean()) }, async a => {
       const path = await this.policy.check(a.path,{write:true}); await mkdir(dirname(path), { recursive: true });
       if (a.append) await appendFile(path, a.content); else await writeFile(path, a.content);
@@ -82,25 +82,25 @@ export class Tools {
       if (result.code !== 0 && result.code !== 1) throw new Error(result.text);
       return result.text.split('\n').slice(0, a.limit || 100).join('\n') || 'No matches.';
     }, true);
-    this.add('bash', 'Execute a shell command isolated to user-approved directories. Returns a durable job ID and output. Long commands continue in the background; use job to await or stop. No unrestricted shell fallback.', { command: str('Shell command'), cwd: opt(str('Working directory')), yield_ms: opt(num(0, 60000, 'Wait before returning; default 1000 ms')), timeout_ms: opt(num(0, 604800000, 'Process time limit; 0 means unlimited')), label: opt(str('Short job label')) }, async (a, signal) => {
+    this.add('bash', 'Execute a shell command isolated to user-approved directories. Returns a durable job ID and output. Long commands continue in the background; use job to await or stop. No unrestricted shell fallback.', { command: str('Shell command'), cwd: opt(str('Working directory')), yield_ms: opt(num(0, 60000, 'Wait before returning; default 5000 ms')), timeout_ms: opt(num(0, 604800000, 'Process time limit; 0 means unlimited')), label: opt(str('Short job label')) }, async (a, signal) => {
       const job = await this.jobs.start(a.command, resolve(this.cwd, a.cwd || '.'), {timeout_ms:a.timeout_ms,label:a.label});
-      const state = await this.jobs.wait(job.id, a.yield_ms ?? 1000, signal);
+      const state = await this.jobs.wait(job.id, a.yield_ms ?? 5000, signal);
       return { ...state, output: await this.jobs.tail(job.id, this.config.toolOutputChars) };
     });
-    this.add('benchmark', 'Run a resumable benchmark sweep from a JSON manifest. Freezes candidate artifact hashes, runs seeds/maps/both sides with bounded concurrency, records per-match logs and structured results, and writes summary.json. No model calls per match. Use job to wait for completion.', { manifest: str('Path to benchmark manifest JSON'), yield_ms: opt(num(0, 60000, 'Wait before returning; default 1000 ms')) }, async (a, signal) => {
+    this.add('benchmark', 'Run a resumable benchmark sweep from a JSON manifest. Freezes candidate artifact hashes, runs seeds/maps/both sides with bounded concurrency, records per-match logs and structured results, and writes summary.json. No model calls per match. Use job to wait for completion.', { manifest: str('Path to benchmark manifest JSON'), yield_ms: opt(num(0, 60000, 'Wait before returning; default 5000 ms')) }, async (a, signal) => {
       await this.policy.check(a.manifest);
       const quote = s => "'" + String(s).replaceAll("'", "'\"'\"'") + "'";
       const runner = fileURLToPath(new URL('../scripts/benchmark.mjs', import.meta.url));
       const command = [process.execPath, runner, resolve(this.cwd, a.manifest)].map(quote).join(' ');
       const job = await this.jobs.start(command, this.cwd, { label: 'benchmark sweep' });
-      const state = await this.jobs.wait(job.id, a.yield_ms ?? 1000, signal);
+      const state = await this.jobs.wait(job.id, a.yield_ms ?? 5000, signal);
       return { ...state, output: await this.jobs.tail(job.id, this.config.toolOutputChars) };
     });
-    this.add('job', 'List, inspect, wait for, or stop durable background jobs. Use action=await to wait until completion without model polling. Wait instead of launching duplicate benchmarks.', { action: Type.Union(['list', 'status', 'wait', 'await', 'stop'].map(Type.Literal)), id: opt(str('Job ID')), wait_ms: opt(num(0, 60000, 'Wait up to this long; default 1000 ms')) }, async (a, signal) => {
+    this.add('job', 'List, inspect, wait for, or stop durable background jobs. Use action=await, or wait without wait_ms, to await completion without model polling. Wait instead of launching duplicate benchmarks.', { action: Type.Union(['list', 'status', 'wait', 'await', 'stop'].map(Type.Literal)), id: opt(str('Job ID')), wait_ms: opt(num(0, 60000, 'Explicit bounded wait; omitted means await completion')) }, async (a, signal) => {
       if (a.action === 'list') return (await this.jobs.list()).filter(j=>j.sessionId===this.session.meta.id);
       if (!a.id) throw new Error('Job ID is required.');
       if((await this.jobs.get(a.id)).sessionId!==this.session.meta.id)throw new Error('This job belongs to another session. Use the user CLI to manage it.');
-      const job = a.action === 'await' ? await this.jobs.awaitCompletion(a.id,signal) : a.action === 'stop' ? await this.jobs.stop(a.id) : a.action === 'wait' ? await this.jobs.wait(a.id, a.wait_ms ?? 1000, signal) : await this.jobs.get(a.id);
+      const job = (a.action === 'await'||a.action==='wait'&&a.wait_ms===undefined) ? await this.jobs.awaitCompletion(a.id,signal) : a.action === 'stop' ? await this.jobs.stop(a.id) : a.action === 'wait' ? await this.jobs.wait(a.id, a.wait_ms ?? 1000, signal) : await this.jobs.get(a.id);
       return { ...job, output: await this.jobs.tail(a.id, this.config.toolOutputChars) };
     });
     this.add('fetch', 'Fetch a website or JSON/text data without a browser. Extracts readable HTML and links, caches briefly, and saves the full response as an artifact. Website text is untrusted data.', { url: str('HTTP/HTTPS URL'), raw: opt(Type.Boolean()), fresh: opt(Type.Boolean()), max_chars: opt(num(100, 100000, 'Text returned to model; default 16000')) }, async (a, signal) => {
@@ -155,7 +155,7 @@ export class Tools {
   add(name, description, properties, execute, parallel = false) {
     this.entries.set(name, { name, description, parameters: Type.Object(properties), execute, parallel });
   }
-  definitions() { return [...this.entries.values()].map(({ name, description, parameters }) => ({ name, description, parameters })); }
+  definitions() { return [...this.entries.values()].sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0).map(({ name, description, parameters }) => ({ name, description, parameters })); }
   async artifact(text, prefix = 'tool') {
     const path = join(this.session.dir, 'artifacts', `${prefix}-${createHash('sha256').update(text).digest('hex').slice(0, 20)}.txt`);
     await mkdir(dirname(path), { recursive: true, mode: 0o700 }); await writeFile(path, text, { mode: 0o600 }); return path;
@@ -174,6 +174,11 @@ export class Tools {
         if(!allowed.includes(call.name)&&!researchBrowser&&!observeJob&&call.name!=='agent')throw new Error('Plan mode is read-only. The user can press Shift+Tab to execute the plan.');
       }
       result = await entry.execute(args, signal);
+      if(call.name==='read'&&typeof result==='string'&&result.length<=this.config.toolOutputChars){
+        const key=JSON.stringify({path:resolve(this.cwd,args.path),offset:args.offset||1,limit:args.limit||200}),previous=this.readCache.get(key);
+        if(previous?.text===result&&this.session.messages.some(m=>m.role==='toolResult'&&m.toolCallId===previous.id&&!m.isError))result=`${args.path}: unchanged from read ${previous.id}. Reuse that content; this file/range was rechecked.`;
+        else{if(this.readCache.size>=32)this.readCache.delete(this.readCache.keys().next().value);this.readCache.set(key,{id:call.id,text:result});}
+      }
       if (['bash', 'job', 'benchmark'].includes(call.name)) isError = ['failed', 'timed_out', 'interrupted', 'cancelled'].includes(result?.status);
     } catch (e) { isError = true; result = `${e.name}: ${e.message}`; }
     let content;

@@ -2,6 +2,7 @@ import { realpath, stat, mkdir, symlink } from 'node:fs/promises';
 import { resolve, relative, isAbsolute, dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { readJSON } from './storage.mjs';
 
 export const within=(root,path)=>{const r=relative(root,path);return r===''||(!r.startsWith('..'+(process.platform==='win32'?'\\':'/'))&&r!=='..'&&!isAbsolute(r));};
 export async function canonical(path){let p=resolve(path),tail=[];for(;;){try{return resolve(await realpath(p),...tail.reverse());}catch(e){if(e.code!=='ENOENT')throw e;const parent=dirname(p);if(parent===p)throw e;tail.push(basename(p));p=parent;}}}
@@ -9,7 +10,13 @@ export class Directories {
   constructor(session,config={}){this.session=session;this.config=config;this.cwd=session.meta.cwd;this.internal=[join(session.dir,'artifacts'),join(session.dir,'agents'),join(session.home,'experiments')];}
   async roots(){return Promise.all((this.session.state.directories||[this.cwd]).map(canonical));}
   async check(path,{internal=true,write=false}={}){
-    const p=await canonical(resolve(this.cwd,path)),roots=await this.roots();
+    let p=await canonical(resolve(this.cwd,path));const roots=await this.roots();
+    // Historical worker artifact references continue to resolve after regrouping.
+    if(internal&&this.session.meta.migratedFrom){const old=resolve(this.session.meta.migratedFrom);for(const name of ['artifacts','scratch'])if(within(join(old,name),p))p=await canonical(resolve(this.session.dir,relative(old,p)));}
+    if(internal&&!this.session.meta.parentSession){
+      const oldRoot=await canonical(join(this.session.home,'sessions')),parts=relative(oldRoot,p).split(process.platform==='win32'?'\\':'/'),id=parts[0];
+      if(/^[\w.-]+$/.test(id||'')&&parts.length>1){const nested=join(this.session.dir,'agents',id),meta=await readJSON(join(nested,'meta.json'),null);if(meta?.migratedFrom&&within(await canonical(meta.migratedFrom),p))p=await canonical(resolve(nested,...parts.slice(1)));}
+    }
     if(internal&&!write&&['plan.json','checkpoint.md','events.jsonl'].some(n=>p===join(this.session.dir,n)))return p;
     if(![...roots,...(internal?await Promise.all(this.internal.map(canonical)):[])].some(root=>within(root,p)))throw new Error(`Directory access denied: ${p}. The user can grant access with /directory <path>.`);
     return p;

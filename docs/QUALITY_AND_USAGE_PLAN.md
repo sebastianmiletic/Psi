@@ -48,3 +48,9 @@ OVERKILL is off in the requested comparison. Measure OVERKILL separately: spawn 
 5. Promote only after at least 40% lower weighted usage, equal or better full-success rate, preserved evidence/review quality and no new scope, recovery or account-routing regressions. Use paired uncertainty intervals; a point estimate from three tasks is insufficient.
 
 Do not infer the exact five-hour or weekly quota formula from token totals. The public credit-rate estimate and rounded provider quota snapshots answer different questions. No further paid/subscription inference is required to write this plan or run local fixture tests.
+
+## Implementation update, 2 November 2026 (0.2.19)
+
+Implemented stable core instructions with append-only runtime state, sorted tool definitions, request-prefix fingerprints and size telemetry, separate compaction instructions/cache identity, retained final-review schemas with tool invocation disabled, concurrent independent file reads, short progress receipts, context-aware unchanged-read reuse and locally awaited jobs. Delegations now require rationale, reject duplicate active prompts and overlapping reserved paths, return compact reports with exact verification receipts, and use a bounded general-worker request limit. Completion evidence is hashed and must be regular files.
+
+Workers now reside within parent sessions; idle legacy workers migrate with intact journals/results, and statistics include nested usage without double counting. These changes were checked with local fixtures and file/process tests. The recorded 0.2.15 benchmark remains unchanged. No paid benchmark was rerun, no percentage of model-usage savings is claimed, and the 40% target remains unproven.

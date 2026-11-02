@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { loadConfig, saveConfig, psiHome, cleanTerminal, redact } from '../src/storage.mjs';
 import { Session } from '../src/session.mjs';
 import { App } from '../src/app.mjs';
+import { migrateWorkers } from '../src/worker-storage.mjs';
 
 const help = `Ψ  Psi ${version}
 
@@ -63,6 +64,7 @@ try {
   const home = psiHome(); const config = await loadConfig(home);
   if(positionals[0]==='update'){console.log(v.check?JSON.stringify(await checkUpdate(home,{force:true}),null,2):(await updateInstallation(home)).message);process.exit(0);}
   if(v.mode){if(!['plan','execute'].includes(v.mode))throw new Error('Use --mode plan or --mode execute.');config.agentMode=v.mode;}if(v.overkill)config.overkill=true;
+  await migrateWorkers(home);
   for (const [flag, setting] of [['budget', 'budget'], ['max-steps', 'maxSteps'], ['tokens', 'maxOutputTokens']]) {
     if (v[flag] !== undefined) {
       const n = Number(v[flag]);

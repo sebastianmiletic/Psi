@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **135 passing tests**.
+- `npm run verify`: syntax checks and **144 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -166,3 +166,10 @@ Actual API invoices and real competition transactions were not exercised in this
 
 - Session history requires a real message and a title. The first message persists its generated title; settings-only and named-but-empty sessions remain drafts. Empty sessions are removed on close and session switching after checking the durable journal, lock and active jobs.
 - Tests cover empty/named drafts, first-message saving, `/new`, preserving a message committed by another writer, active locks, and legacy snapshots. No inference was used.
+
+## Caching, bounded delegation and nested workers (0.2.19)
+
+- Cache fixtures compare actual serialized instruction/tool prefixes across naming, mode changes and resumed runs. Runtime state appends without entering visible history. Final-review schemas remain stable with tool choice none; compaction has its own short prefix. Hash/size telemetry contains no prompt text or credentials.
+- Independent reads overlap in one response. Progress receipts avoid repeating plans. Repeated reads return an unchanged reference only if the complete earlier result remains in context; edits and compaction return fresh content. Default job waits await locally without polling inference.
+- Nested worker tests verify one parent chat, preserved results/follow-ups, and exact-once token accounting. Migration tests compare original journal bytes and verify preserved artifacts, legacy path resolution, idempotence and active-lock skips.
+- Delegation guards reject duplicate active task prompts, overlapping reserved execution paths and missing rationale. Real worker subprocesses report requested-but-unexecuted checks as unverified. Completion receipts hash regular evidence files; directory evidence is rejected. No paid/subscription inference was used for this update, and historical benchmark results are unchanged.

@@ -2,6 +2,7 @@ import { readdir, stat } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { join } from 'node:path';
 import { atomicJSON,readJSON,withLock,alive } from './storage.mjs';
+import { Session } from './session.mjs';
 
 const count=n=>Number.isFinite(n)&&n>=0?n:0;
 export const dayKey=t=>{const d=new Date(t);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
@@ -44,16 +45,15 @@ export class Statistics {
  async read({now=Date.now()}={}){
   return withLock(join(this.home,'stats.lock'),async()=>{
    const old=await readJSON(this.path,null),cache=old?.schema===1?old:{schema:1,sessions:{}};
-   const names=(await readdir(join(this.home,'sessions')).catch(e=>{if(e.code==='ENOENT')return[];throw e;})).filter(n=>/^[\w.-]+$/.test(n)),present=new Set(names);let changed=false;
+   const entries=await Session.storageEntries(this.home),present=new Set(entries.map(e=>e.id));let changed=false;
    for(const id of Object.keys(cache.sessions))if(!present.has(id)){delete cache.sessions[id];changed=true;}
    const live={};
-   for(const id of names){
-    const dir=join(this.home,'sessions',id),path=join(dir,'events.jsonl');
+   for(const {id,dir,meta} of entries){
+    const path=join(dir,'events.jsonl');
     const info=await stat(path).catch(()=>null);if(!info)continue;
-    const meta=await readJSON(join(dir,'meta.json'),null);if(!meta)continue;
     let row=cache.sessions[id];
     if(!row||row.ino!==info.ino||info.size<row.size||(info.size===row.size&&info.mtimeMs!==row.mtime)){
-     row=entry(meta,!!await stat(join(dir,'worker.json')).catch(()=>null),info);cache.sessions[id]=row;changed=true;
+     row=entry(meta,!!meta.parentSession||!!await stat(join(dir,'worker.json')).catch(()=>null),info);cache.sessions[id]=row;changed=true;
     }
     if(info.size>row.offset){await appendEvents(path,row,info.size);row.size=info.size;row.mtime=info.mtimeMs;changed=true;}
     if(row.activeStart!==null){const lock=await readJSON(join(dir,'run.lock'),null).catch(()=>null);live[id]=!!lock?.pid&&alive(lock.pid);}

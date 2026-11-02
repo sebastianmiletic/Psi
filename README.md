@@ -73,7 +73,7 @@ The Ψ header stays visible above compact bottom menus. Chat names sit above the
 | `/name [title]` | Rename the current session |
 | `/help` | Every command |
 
-With **OVERKILL** on, the main AI decides when useful independent work should be delegated, up to your configured concurrency. Sending a prompt does not launch workers. Every worker has a unique task name of one to five words and can implement, debug, test, benchmark or research. Their task names, activity and model appear below the usage bar while active; finished workers hide automatically, with results retained in `/subagents`. Completed tasks automatically include an evidence-backed final review. Updates explain work along the way, and sending a message returns to the latest chat content. Reports return to the main agent before it finishes; each assignment includes clear ownership. Subagents use their configured models and selected provider accounts and consume normal provider usage.
+With **OVERKILL** on, the main AI decides when useful independent work should be delegated, up to your configured concurrency. Sending a prompt does not launch workers. Every worker has a unique task name of one to five words and can implement, debug, test, benchmark or research. Their task names, activity and model appear below the usage bar while active; finished workers hide automatically, with results retained in `/subagents`. Completed tasks automatically include an evidence-backed final review. Updates explain work along the way, and sending a message returns to the latest chat content. Reports return to the main agent before it finishes; each assignment includes clear ownership. Subagent histories and results stay inside the parent session, so workers do not create extra chats. Subagents use their configured models and selected provider accounts and consume normal provider usage.
 
 Answers use clean Markdown without repeated assistant headings. Reads and searches group under **Exploring / Explored**; commands use **Running / Ran** with indented output. **Ctrl+T** expands tool details.
 
@@ -99,4 +99,4 @@ npm run verify
 npm start
 ```
 
-[Full guide](docs/GUIDE.md) · [Battlecode workflow](docs/BATTLECODE_WORKFLOW.md) · [Harness-Bench results](docs/HARNESS_BENCH.md) · [Codex usage comparison](docs/CODEX_USAGE_COMPARISON.md) · [Quality and usage plan](docs/QUALITY_AND_USAGE_PLAN.md) · [Verification](docs/VERIFICATION.md) · [Pi / Codex feature gaps](docs/PARITY.md) · [Command changes](docs/COMMAND_CHANGES.md)
+[Full guide](docs/GUIDE.md) · [Battlecode workflow](docs/BATTLECODE_WORKFLOW.md) · [Harness-Bench results](docs/HARNESS_BENCH.md) · [Codex usage comparison](docs/CODEX_USAGE_COMPARISON.md) · [Quality and usage plan](docs/QUALITY_AND_USAGE_PLAN.md) · [Implemented efficiency changes](docs/EFFICIENCY.md) · [Verification](docs/VERIFICATION.md) · [Pi / Codex feature gaps](docs/PARITY.md) · [Command changes](docs/COMMAND_CHANGES.md)

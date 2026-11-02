@@ -323,7 +323,7 @@ export class App {
   async exportMarkdown() {
     let text=`# Ψ Psi session\n\nName: ${redact(this.session.meta.title)}\nWorkspace: ${this.session.meta.cwd}\nSession: ${this.session.meta.id}\n\n`;
     for await(const event of this.session.events()){
-      const m=event.type==='message'?event.message:event.type==='final_response'?{role:'assistant',content:[{type:'text',text:event.text}]}:null;if(!m)continue;
+      const m=event.type==='message'?event.message:event.type==='final_response'?{role:'assistant',content:[{type:'text',text:event.text}]}:null;if(!m||m.internal)continue;
       const content=typeof m.content==='string'?m.content:m.content.map(c=>{if(c.type==='text')return c.text;if(c.type==='image')return '[Image]';if(c.type==='toolCall'){const args={...c.arguments};if(c.name==='finish')delete args.report;return `Tool: ${c.name}\n\n${JSON.stringify(args)}`;}return '';}).join('\n');
       text+=`## ${m.role}${m.toolName?': '+m.toolName:''}\n\n${redact(content)}\n\n`;
     }

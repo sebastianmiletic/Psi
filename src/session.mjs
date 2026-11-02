@@ -5,29 +5,36 @@ import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { privateDir, atomicJSON,cleanTerminal, readJSON, psiHome, withLock, durableJournalSize } from './storage.mjs';
 
-const meaningful=m=>['user','assistant'].includes(m?.role)&&(typeof m.content==='string'?!!m.content.trim():Array.isArray(m.content)&&m.content.some(c=>c.type==='image'||c.type==='text'&&c.text?.trim()));
+const meaningful=m=>!m?.internal&&['user','assistant'].includes(m?.role)&&(typeof m.content==='string'?!!m.content.trim():Array.isArray(m.content)&&m.content.some(c=>c.type==='image'||c.type==='text'&&c.text?.trim()));
 const titled=meta=>typeof meta.title==='string'&&!!meta.title.trim()&&(meta.title!=='New session'||meta.named||meta.autoNamed||meta.seedNamed);
 
 export class Session {
   constructor(home, meta) {
-    this.home = home; this.meta = meta; this.dir = join(home, 'sessions', meta.id);
+    this.home = home; this.meta = meta; this.dir = Session.path(home,meta.id,meta.parentSession);
     this.messages = []; this.totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, requests: 0 };
     this.conversation = [];
     this.accountTotals = {}; this.meteredCost = 0; this.meteredCostKnown = true;
     this.seenUsage=new Set();
     this.state = {}; this.status = 'idle'; this.journalSize = 0; this.writeChain=Promise.resolve();
   }
-  static async create(cwd, home = psiHome()) {
-    const meta = { id: `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`, cwd: resolve(cwd), createdAt: new Date().toISOString(), title: 'New session',draft:true,hasMessages:false };
+  static path(home,id,parentSession){
+    if(!/^(?!\.{1,2}$)[\w.-]+$/.test(id)||parentSession&&!/^(?!\.{1,2}$)[\w.-]+$/.test(parentSession))throw new Error('Invalid session ID.');
+    return parentSession?join(home,'sessions',parentSession,'agents',id):join(home,'sessions',id);
+  }
+  static async create(cwd, home = psiHome(), {parentSession}={}) {
+    const meta = { id: `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`, cwd: resolve(cwd), createdAt: new Date().toISOString(), title: 'New session',draft:true,hasMessages:false,...(parentSession?{parentSession}:{}) };
     const session = new Session(home, meta);
     await privateDir(session.dir); await atomicJSON(join(session.dir, 'meta.json'), meta); return session;
   }
-  static async load(id, home = psiHome()) {
+  static async load(id, home = psiHome(), {parentSession}={}) {
     if (!/^[\w.-]+$/.test(id)) throw new Error('Invalid session ID.');
-    return withLock(join(home, 'sessions', id, 'run.lock'), async () => {
-      const meta = await readJSON(join(home, 'sessions', id, 'meta.json'), null);
+    let dir=Session.path(home,id,parentSession);
+    if(parentSession&&!await stat(join(dir,'meta.json')).catch(()=>null))dir=Session.path(home,id);
+    return withLock(join(dir, 'run.lock'), async () => {
+      const meta = await readJSON(join(dir,'meta.json'), null);
       if (!meta) throw new Error(`Session not found: ${id}`);
       const session = new Session(home, meta);
+      session.dir=dir;
       session.journalSize = await durableJournalSize(join(session.dir, 'events.jsonl'));
       let lineNumber = 0;
       for await (const line of session.events()) {
@@ -67,7 +74,7 @@ export class Session {
       this.messages.push(event.message);
       const m=event.message;
       if(meaningful(m))this.meta.hasMessages=true;
-      if(m.role==='user'||m.role==='assistant'&&(typeof m.content==='string'?m.content.trim():m.content.some(c=>c.type==='text'&&c.text.trim())))this.rememberVisible(m);
+      if(!m.internal&&(m.role==='user'||m.role==='assistant'&&(typeof m.content==='string'?m.content.trim():m.content.some(c=>c.type==='text'&&c.text.trim()))))this.rememberVisible(m);
     }
     if(event.type==='final_response'){
       if(event.text?.trim())this.meta.hasMessages=true;
@@ -90,6 +97,7 @@ export class Session {
     if(event.type==='session_auto_name'&&!this.meta.named){this.meta.title=event.name;this.meta.autoNamed=true;}
     if(event.type==='session_directory'){this.meta.cwd=event.cwd;if(event.directories)this.state.directories=event.directories;}
     if (event.type === 'state') Object.assign(this.state, event.state);
+    if(event.type==='request_metrics')this.state.requestPrefixes={...this.state.requestPrefixes,[event.route+':'+event.purpose]:event.prefixHash};
     if (event.type === 'status') this.status = event.status;
   }
   async event(event) {
@@ -103,7 +111,7 @@ export class Session {
   async message(message) {
     const hadMessages=this.meta.hasMessages;
     await this.event({ type: 'message', message });
-    if (message.role === 'user' && this.meta.title === 'New session'&&!this.meta.named&&!this.meta.seedNamed) {
+    if (message.role === 'user'&&!message.internal && this.meta.title === 'New session'&&!this.meta.named&&!this.meta.seedNamed) {
       await this.enqueue(async()=>{if(this.meta.named||this.meta.seedNamed||this.meta.title!=='New session')return;this.meta.seedNamed=true;this.meta.title=cleanTerminal(typeof message.content==='string'?message.content:message.content.filter(c=>c.type==='text').map(c=>c.text).join(' ')).replace(/\s+/g,' ').trim().slice(0,100)||'Attached content';await this.saveMeta();});
     }
     else if(!hadMessages&&this.meta.hasMessages)await this.enqueue(()=>this.saveMeta());
@@ -139,14 +147,27 @@ export class Session {
     if(removed)await rmdir(this.dir).catch(e=>{if(!['ENOENT','ENOTEMPTY','EEXIST'].includes(e.code))throw e;});return removed;
   }
   static async list(home = psiHome()) {
-    const names = await readdir(join(home, 'sessions')).catch(e => { if (e.code === 'ENOENT') return []; throw e; });
+    const names = (await readdir(join(home, 'sessions'),{withFileTypes:true}).catch(e => { if (e.code === 'ENOENT') return []; throw e; })).filter(e=>e.isDirectory()).map(e=>e.name);
     const data = await Promise.all(names.map(async n=>{
-      const meta=await readJSON(join(home,'sessions',n,'meta.json'),null);if(!meta||!titled(meta))return null;
+      const meta=await readJSON(join(home,'sessions',n,'meta.json'),null);if(!meta||!titled(meta)||meta.parentSession||await stat(join(home,'sessions',n,'worker.json')).catch(()=>null))return null;
       if(meta.hasMessages)return meta;
       // Read old snapshots or a first message committed just before a crash.
       for await(const e of new Session(home,meta).events())if(e.type==='message'&&meaningful(e.message)||e.type==='final_response'&&e.text?.trim())return meta;
       return null;
     }));
     return data.filter(Boolean).sort((a, b) => b.id.localeCompare(a.id));
+  }
+  static async storageEntries(home=psiHome()){
+    const entries=[];
+    for(const {name:id} of (await readdir(join(home,'sessions'),{withFileTypes:true}).catch(()=>[])).filter(e=>e.isDirectory())){
+      if(!/^[\w.-]+$/.test(id))continue;
+      const dir=Session.path(home,id),meta=await readJSON(join(dir,'meta.json'),null);if(!meta)continue;
+      entries.push({id,dir,meta});
+      for(const {name:worker} of (await readdir(join(dir,'agents'),{withFileTypes:true}).catch(()=>[])).filter(e=>e.isDirectory())){
+        if(!/^[\w.-]+$/.test(worker)||worker.includes('.migrating-'))continue;
+        const path=Session.path(home,worker,id),child=await readJSON(join(path,'meta.json'),null);if(child?.id===worker)entries.push({id:worker,dir:path,meta:child});
+      }
+    }
+    return entries;
   }
 }

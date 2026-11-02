@@ -43,13 +43,13 @@ test('OVERKILL waits for model delegation, uses distinct task names, and integra
  const f=await setup(t,async p=>{
   const task=p.messages.find(m=>typeof m.content==='string'&&m.content.startsWith('Task from parent:'))?.content;
   if(task){workers++;const file=task.includes('counter.txt')?'counter.txt':'schema.txt',n=(turns.get(file)||0)+1;turns.set(file,n);return n===1?{call:{name:'write',args:{path:file,content:'verified '+file}}}:{text:'Implemented and verified '+file};}
-  if(++parents===1){arrived();await gate;return{calls:[{name:'agent',args:{action:'spawn',profile:'preset',mode:'execute',name:'Build counter parser',prompt:'Implement counter.txt and verify it.'}},{name:'agent',args:{action:'spawn',profile:'preset',mode:'execute',name:'Fix replay schema',prompt:'Implement schema.txt and verify it.'}}]};}
+  if(++parents===1){arrived();await gate;return{calls:[{name:'agent',args:{action:'spawn',why:'Run a useful independent assignment alongside parent work.',profile:'preset',mode:'execute',name:'Build counter parser',prompt:'Implement counter.txt and verify it.'}},{name:'agent',args:{action:'spawn',why:'Run a useful independent assignment alongside parent work.',profile:'preset',mode:'execute',name:'Fix replay schema',prompt:'Implement schema.txt and verify it.'}}]};}
   return{text:p.messages.some(m=>typeof m.content==='string'&&m.content.startsWith('Subagent reports ('))?'Integrated worker evidence.':'Continue while workers finish.'};
  });t.after(()=>release());
  await f.app.update({overkill:true,subagentConcurrency:2,agents:[{id:'preset',name:'Researcher',job:'Read existing evidence only.',model:'fixture/test',effort:'off',mode:'plan',maxSteps:5}]});
  const running=f.app.engine.run('Implement counter and schema changes');await ready;assert.equal((await f.app.agents.records()).length,0);assert.equal(f.ui.workerRows.size,0);release();await running;
  const records=await f.app.agents.records();assert.deepEqual(records.map(r=>r.name),['Build counter parser','Fix replay schema']);assert.equal(workers,4);assert.equal(f.session.state.workerDeliveries.length,2);assert.equal(f.session.totals.requests,workers+parents);assert.ok(f.session.messages.some(m=>typeof m.content==='string'&&m.content.startsWith('Subagent reports (')));
- for(const r of records){assert.ok(r.name.split(/\s+/).length<6);const spec=JSON.parse(await readFile(join(f.app.home,'sessions',r.sessionId,'worker.json')));assert.equal(JSON.parse(await readFile(join(f.app.home,'sessions',r.sessionId,'meta.json'))).title,r.name);assert.equal(spec.config.agentMode,'execute');assert.equal(spec.config.overkill,false);assert.equal(spec.config.subagentDepth,1);assert.doesNotMatch(spec.prompt,/Assigned role|advisory|Read existing evidence only/);}
+ for(const r of records){assert.ok(r.name.split(/\s+/).length<6);const spec=JSON.parse(await readFile(join(f.session.dir,'agents',r.sessionId,'worker.json')));assert.equal(JSON.parse(await readFile(join(f.session.dir,'agents',r.sessionId,'meta.json'))).title,r.name);assert.equal(spec.config.agentMode,'execute');assert.equal(spec.config.overkill,false);assert.equal(spec.config.subagentDepth,1);assert.doesNotMatch(spec.prompt,/Assigned role|advisory|Read existing evidence only/);}
  assert.equal(await readFile(join(f.root,'counter.txt'),'utf8'),'verified counter.txt');assert.equal(await readFile(join(f.root,'schema.txt'),'utf8'),'verified schema.txt');assert.equal(f.ui.subagentBar.render(100).length,0);const count=f.session.totals.requests;await f.app.agents.reports({wait:true});assert.equal(f.session.totals.requests,count);
 });
 
@@ -57,7 +57,7 @@ test('a delegated plan worker stays read-only and a goal cannot finish before it
  let children=0,parents=0,release;const gate=new Promise(r=>release=r);t.after(()=>release());
  const f=await fixture(t,async p=>{
   if(p.messages.some(m=>typeof m.content==='string'&&m.content.startsWith('Task from parent:'))){if(++children===1){await gate;return{call:{name:'write',args:{path:'forbidden.txt',content:'wrong'}}};}return{text:'Write denied; evidence inspected.'};}
-  if(++parents===1)return{call:{name:'agent',args:{action:'spawn',name:'Verify completion evidence',mode:'plan',prompt:'Inspect evidence without changing files.'}}};
+  if(++parents===1)return{call:{name:'agent',args:{action:'spawn',why:'Run a useful independent assignment alongside parent work.',name:'Verify completion evidence',mode:'plan',prompt:'Inspect evidence without changing files.'}}};
   release();return{call:{name:'finish',args:{summary:'Verified with worker evidence',report:'Verified with worker evidence.\n\n### What I examined\n\nWorker findings and the saved evidence file.\n\n### Limitations\n\nLocal fixture only.',evidence:['evidence.txt']}}};
  });
  const {writeFile}=await import('node:fs/promises');await writeFile(join(f.root,'evidence.txt'),'verified');await f.app.update({overkill:true,agents:[]});await f.app.engine.run('Verify the evidence',{loop:true});
@@ -67,7 +67,7 @@ test('a delegated plan worker stays read-only and a goal cannot finish before it
 test('double Escape stops model-delegated workers and active task names appear below usage',async t=>{
  let release;const gate=new Promise(r=>release=r);let started=0;
  const f=await setup(t,async p=>{
-  if(!p.messages.some(m=>typeof m.content==='string'&&m.content.startsWith('Task from parent:'))&&!p.messages.some(m=>m.role==='tool'))return{call:{name:'agent',args:{action:'spawn',name:'Audit cancellation paths',prompt:'Inspect cancellation paths.'}}};
+  if(!p.messages.some(m=>typeof m.content==='string'&&m.content.startsWith('Task from parent:'))&&!p.messages.some(m=>m.role==='tool'))return{call:{name:'agent',args:{action:'spawn',why:'Run a useful independent assignment alongside parent work.',name:'Audit cancellation paths',prompt:'Inspect cancellation paths.'}}};
   started++;await gate;return{text:'Done'};
  });t.after(()=>release());await f.app.update({overkill:true,subagentConcurrency:1});const running=f.app.engine.run('Inspect cancellation paths');await until(()=>started>=2);
  const records=await f.app.agents.records();assert.equal(records.length,1);await until(()=>[...f.ui.workerRows.values()].some(r=>r.activity==='reasoning'));const lines=frame(f.ui);assert.ok(lines.findLastIndex(l=>l.includes('Audit cancellation paths'))>lines.findIndex(l=>l.includes('% left')));

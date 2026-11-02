@@ -29,7 +29,7 @@ jobs:
         run: npm test
       - name: Portable core and workflow tests
         if: runner.os != 'macOS'
-        run: node --test --test-timeout=30000 test/usage.test.mjs test/workflow.test.mjs test/layout.test.mjs test/panels.test.mjs test/stats.test.mjs test/resets.test.mjs test/model-workers.test.mjs test/conversation.test.mjs test/final-review.test.mjs test/usage-comparison.test.mjs test/session-drafts.test.mjs
+        run: node --test --test-timeout=30000 test/usage.test.mjs test/workflow.test.mjs test/layout.test.mjs test/panels.test.mjs test/stats.test.mjs test/resets.test.mjs test/model-workers.test.mjs test/conversation.test.mjs test/final-review.test.mjs test/usage-comparison.test.mjs test/session-drafts.test.mjs test/efficiency.test.mjs
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: test
