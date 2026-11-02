@@ -21,7 +21,7 @@ import { Session } from './session.mjs';
 import { Jobs } from './jobs.mjs';
 import { Tools } from './tools.mjs';
 import { Engine } from './engine.mjs';
-import { saveConfig,loadConfig, psiHome, cleanTerminal, redact } from './storage.mjs';
+import { saveConfig,loadConfig, psiHome, cleanTerminal, redact, defaults } from './storage.mjs';
 
 export class App {
   constructor(config, session, options = {}) {
@@ -93,10 +93,11 @@ export class App {
   async settingsMenu() {
     while(true){
       const c={...this.engine.config,...this.engine.pendingSettings};
-      const selected=await this.ui.choose('Settings',settingItems.map(item=>({value:item.id,label:item.label,description:`${item.special==='prices'?'configure':item.special==='agents'?`${c.agents.length} profiles`:['model','summaryModel'].includes(item.id)?c[item.id]?modelLabel(c[item.id]):'same':Array.isArray(c[item.id])?c[item.id].join(', ')||'none':typeof c[item.id]==='boolean'?(c[item.id]?'on':'off'):c[item.id]??'default'}`})));
+      const selected=await this.ui.choose('Settings',settingItems.map(item=>({value:item.id,label:item.label,description:`${item.special==='prices'?'configure':item.special==='agents'?`${c.agents.length} profiles`:['model','subagentModel','summaryModel'].includes(item.id)?c[item.id]?modelLabel(c[item.id]):'same':Array.isArray(c[item.id])?c[item.id].join(', ')||'none':typeof c[item.id]==='boolean'?(c[item.id]?'on':'off'):c[item.id]??'default'}`})));
       if(!selected)return;
       const item=settingItems.find(i=>i.id===selected);let value;
       if(item.special==='agents'){await this.agentsMenu();continue;}
+      if(item.special==='subagentModel'){const model=await this.pickModel(c.subagentModel);if(model)await this.update({subagentModel:model});continue;}
       if(item.special==='mode'){await this.setMode(c.agentMode==='plan'?'execute':'plan');continue;}
       if(item.special==='model'){await this.selectModel();continue;}
       if(item.special==='effort'){await this.effortMenu();continue;}
@@ -125,11 +126,17 @@ export class App {
       let model; try { model = this.registry.find(query); } catch (e) { if (!this.ui) throw e; }
       if (model) { await this.update({ model: `${model.provider}/${model.id}` }); this.ui?.note(`Model: ${modelLabel(this.engine.config.model)}`); return; }
     }
+    const choice=await this.pickModel(this.engine.config.model,query);
+    if (choice) { await this.update({ model: choice }); this.ui.note(`Model: ${modelLabel(choice)}`); }
+  }
+  async pickModel(current,query='',{inherit=false}={}) {
     const accounts = await this.registry.accounts.list(); const connected = new Set(accounts.map(a => a.provider));
     const models = [...this.registry.all()];
-    models.sort((a, b) => Number(b.provider===this.engine.model.provider)-Number(a.provider===this.engine.model.provider)||Number(connected.has(b.provider)) - Number(connected.has(a.provider)) || `${a.provider}/${a.id}`.localeCompare(`${b.provider}/${b.id}`));
-    const choice=await this.ui.modelMenu(models.map(m=>({value:`${m.provider}/${m.id}`,label:modelLabel(m),search:`${modelLabel(m)} ${m.name} ${m.id} ${m.provider}`})),query);
-    if (choice) { await this.update({ model: choice }); this.ui.note(`Model: ${modelLabel(choice)}`); }
+    const provider=this.registry.find(current||defaults.subagentModel).provider;
+    models.sort((a, b) => Number(`${b.provider}/${b.id}`===current)-Number(`${a.provider}/${a.id}`===current)||Number(b.provider===provider)-Number(a.provider===provider)||Number(connected.has(b.provider)) - Number(connected.has(a.provider)) || `${a.provider}/${a.id}`.localeCompare(`${b.provider}/${b.id}`));
+    const items=models.map(m=>({value:`${m.provider}/${m.id}`,label:modelLabel(m),search:`${modelLabel(m)} ${m.name} ${m.id} ${m.provider}`}));
+    if(inherit)items.unshift({value:'default',label:`Default · ${modelLabel(current||defaults.subagentModel)}`});
+    return this.ui.modelMenu(items,query);
   }
   async accountMenu(action) {
     if (this.engine.busy&&!this.engine.waiting) throw new Error('Press Escape twice to stop before changing accounts, or wait for a quota pause.');
@@ -308,15 +315,16 @@ export class App {
   async checkUpdates(){try{const update=await checkUpdate(this.home);if(!update.available||this.closing)return;if(this.engine.config.autoUpdate&&!this.engine.busy){this.ui.note((await updateInstallation(this.home,{release:update})).message);}else this.ui.note(`Psi ${update.latest} is available. Run /update or psi update, then restart.`);}catch{/* Offline startup remains quiet and fast. */}}
   async agentsMenu(){
     while(true){const c={...this.engine.config,...this.engine.pendingSettings},runs=await this.agents.records();
-      const action=await this.ui.choose('Subagents',[{value:'enabled',label:`OVERKILL ${c.overkill?'ON':'off'}`},{value:'concurrency',label:'Concurrent workers',description:String(c.subagentConcurrency)},{value:'add',label:'Add subagent'},...c.agents.map(p=>({value:'profile:'+p.id,label:p.name,description:`${p.mode} · ${p.model?modelLabel(p.model):'main model'}`})),...runs.map(r=>({value:'run:'+r.id,label:'Run · '+r.name,description:modelLabel(r.model)}))]);if(!action)return;
+      const action=await this.ui.choose('Subagents',[{value:'enabled',label:`OVERKILL ${c.overkill?'ON':'off'}`},{value:'default-model',label:'Default model',description:modelLabel(c.subagentModel||defaults.subagentModel)},{value:'concurrency',label:'Concurrent workers',description:String(c.subagentConcurrency)},{value:'add',label:'Add subagent'},...c.agents.map(p=>({value:'profile:'+p.id,label:p.name,description:`${p.mode} · ${modelLabel(p.model||c.subagentModel||defaults.subagentModel)}`})),...runs.map(r=>({value:'run:'+r.id,label:'Run · '+r.name,description:modelLabel(r.model)}))]);if(!action)return;
+      if(action==='default-model'){const model=await this.pickModel(c.subagentModel||defaults.subagentModel);if(model)await this.update({subagentModel:model});continue;}
       if(action==='enabled'){await this.update({overkill:!c.overkill});continue;}
       if(action==='concurrency'){const text=await this.ui.ask({type:'text',message:'Concurrent workers (1–16)',placeholder:String(c.subagentConcurrency)});if(text!==null)try{await this.update({subagentConcurrency:Number(text)});}catch(e){this.ui.note(e.message,true);}continue;}
       if(action.startsWith('run:')){const r=await this.agents.status(action.slice(4));const choice=await this.ui.choose(r.name,[{value:'status',label:'Show status and result'},{value:'send',label:'Send a follow-up'},{value:'stop',label:'Stop this worker'}]);if(choice==='status')this.ui.note(JSON.stringify(r,null,2));if(choice==='stop')await this.jobs.stop(r.jobId);if(choice==='send'){const prompt=await this.ui.ask({type:'text',message:'Follow-up task'});if(prompt){const entry=this.tools.entries.get('agent');if(entry)await entry.execute({action:'send',id:r.id,prompt});}}continue;}
       const profiles=c.agents.map(p=>({...p}));let profile=action==='add'?{id:randomUUID(),name:'Worker',job:'Complete the assigned task and report evidence.',model:null,effort:'medium',mode:'execute',maxSteps:80,budget:0}:profiles.find(p=>p.id===action.slice(8));
       if(action==='add')profiles.push(profile);
-      while(true){const field=await this.ui.choose(profile.name,[...['name','job','model','effort','mode','maxSteps','budget'].map(k=>({value:k,label:k,description:k==='model'&&profile[k]?modelLabel(profile[k]):String(profile[k]??'main model')})),{value:'remove',label:'Remove this profile'},{value:'save',label:'Save worker'}]);if(!field)break;if(field==='remove'){await this.update({agents:profiles.filter(p=>p.id!==profile.id)});break;}if(field==='save'){try{await this.update({agents:profiles});}catch(e){this.ui.note(e.message,true);continue;}break;}
-        let value;if(field==='mode')value=await this.ui.choose('Worker mode',['plan','execute'].map(value=>({value,label:value})));else if(field==='effort'){const model=profile.model?this.registry.find(profile.model):this.engine.model;value=await this.ui.choose('Worker thinking',getSupportedThinkingLevels(model).map(value=>({value,label:value})));}else{value=await this.ui.ask({type:'text',message:field,placeholder:String(profile[field]??'same')});if(value!==null){if(['maxSteps','budget'].includes(field))value=Number(value);if(field==='model'&&(!value||value==='same'))value=null;}}
-        if(value!==null||field==='model')profile[field]=value;
+      while(true){const field=await this.ui.choose(profile.name,[...['name','job','model','effort','mode','maxSteps','budget'].map(k=>({value:k,label:k,description:k==='model'?modelLabel(profile.model||c.subagentModel||defaults.subagentModel):String(profile[k]??'')})),{value:'remove',label:'Remove this profile'},{value:'save',label:'Save worker'}]);if(!field)break;if(field==='remove'){await this.update({agents:profiles.filter(p=>p.id!==profile.id)});break;}if(field==='save'){try{await this.update({agents:profiles});}catch(e){this.ui.note(e.message,true);continue;}break;}
+        let value;if(field==='model'){value=await this.pickModel(c.subagentModel||defaults.subagentModel,'',{inherit:true});if(value!==null)profile.model=value==='default'?null:value;continue;}if(field==='mode')value=await this.ui.choose('Worker mode',['plan','execute'].map(value=>({value,label:value})));else if(field==='effort'){const model=this.registry.find(profile.model||c.subagentModel||defaults.subagentModel);value=await this.ui.choose('Worker thinking',getSupportedThinkingLevels(model).map(value=>({value,label:value})));}else{value=await this.ui.ask({type:'text',message:field,placeholder:String(profile[field]??'same')});if(value!==null){if(['maxSteps','budget'].includes(field))value=Number(value);}}
+        if(value!==null)profile[field]=value;
       }
     }
   }

@@ -51,7 +51,7 @@ export async function withLock(path, fn, { signal, timeout = 60_000 } = {}) {
   try { return await fn(); } finally { await handle.close(); await unlink(path).catch(() => {}); }
 }
 export const defaults = {
-  model: 'openai-codex/gpt-5.6-sol', effort: 'medium', profile: 'battlecode',
+  model: 'openai-codex/gpt-5.6-sol', subagentModel: 'openai-codex/gpt-5.6-sol', effort: 'medium', profile: 'battlecode',
   maxSteps: 0, budget: 0, maxOutputTokens: 8192, contextFraction: 0.72,
   toolOutputChars: 16000, concurrency: 4, retries: 4, cacheRetention: 'long',
   debug: true, customProviders: [], accent: 'sage', showLogo: true, animations: true,

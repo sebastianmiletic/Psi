@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash,randomUUID } from 'node:crypto';
 import { Session } from './session.mjs';
-import { atomicJSON,readJSON } from './storage.mjs';
+import { atomicJSON,readJSON,defaults } from './storage.mjs';
 import { shellCommand } from './battlecode.mjs';
 import { workerDirectory } from './worker-storage.mjs';
 export class Agents {
@@ -30,7 +30,7 @@ export class Agents {
   const child=await Session.create(a.session.meta.cwd,this.home,{parentSession:a.session.meta.id}),id=randomUUID(),manifest=join(child.dir,'worker.json');
   await child.rename(displayName);
   await child.event({type:'state',state:{directories:await a.tools.policy.roots()}});
-  const model=spec?.model||c.model;a.registry.find(model);
+  const model=spec?.model||c.subagentModel||defaults.subagentModel;a.registry.find(model);
   const remaining=c.budget>0?Math.max(0,c.budget-a.session.totals.cost):0;if(c.budget>0&&remaining===0)throw new Error('The parent budget is exhausted.');
   const cap=Math.min(spec?.budget>0?spec.budget:Infinity,remaining?remaining/c.subagentConcurrency:Infinity);
   const config={...c,model,effort:spec?.effort||c.effort,agentMode:workerMode,subagentDepth:(c.subagentDepth||0)+1,overkill:false,maxSteps:spec?.maxSteps||32,budget:Number.isFinite(cap)?cap:0};
@@ -94,8 +94,8 @@ export class Agents {
  async view(r){
   const state=await this.status(r.id);return{id:r.id,name:r.name,status:state.status,model:r.model,mode:r.mode,files:r.files||[],summary:(state.result?.summary||state.result?.error||'').slice(0,4000),verification:state.result?.verification,report:join(await this.directory(r),'worker-result.json'),usage:state.result?.totals};
  }
- register(){const tools=this.app.tools,str=Type.String();tools.add('agent','Delegate any concrete task to an OVERKILL worker after deciding useful independent work. Spawn requires a unique task name of 1 to 5 words, a concrete prompt and why delegation helps. Optionally reserve disjoint files and state success checks. No workers start automatically. Omit profile to use the main model or select a configured model/effort preset; profiles do not restrict task roles. Choose plan or execute mode. List, send follow-up, status, await without polling or stop. Workers inherit directory boundaries, cannot nest, and plan-mode parents force read-only children.',{action:Type.Union(['list','spawn','send','status','await','stop'].map(Type.Literal)),profile:Type.Optional(str),name:Type.Optional(Type.String({minLength:1,maxLength:64})),why:Type.Optional(Type.String({minLength:1,maxLength:1000})),files:Type.Optional(Type.Array(str,{maxItems:50})),checks:Type.Optional(Type.Array(str,{maxItems:20})),mode:Type.Optional(Type.Union(['plan','execute'].map(Type.Literal))),prompt:Type.Optional(str),id:Type.Optional(str)},async(a,signal)=>{
-  if(a.action==='list')return{profiles:this.app.engine.config.agents.map(({id,name,model,effort,mode,maxSteps,budget})=>({id,name,model:model||'main',effort,mode,maxSteps,budget:budget||0})),runs:await Promise.all((await this.records()).map(async r=>{const {summary,verification,...view}=await this.view(r);return view;}))};
+ register(){const tools=this.app.tools,str=Type.String();tools.add('agent','Delegate any concrete task to an OVERKILL worker after deciding useful independent work. Spawn requires a unique task name of 1 to 5 words, a concrete prompt and why delegation helps. Optionally reserve disjoint files and state success checks. No workers start automatically. Omit profile to use the configured subagent model or select a configured model/effort preset; profiles do not restrict task roles. Choose plan or execute mode. List, send follow-up, status, await without polling or stop. Workers inherit directory boundaries, cannot nest, and plan-mode parents force read-only children.',{action:Type.Union(['list','spawn','send','status','await','stop'].map(Type.Literal)),profile:Type.Optional(str),name:Type.Optional(Type.String({minLength:1,maxLength:64})),why:Type.Optional(Type.String({minLength:1,maxLength:1000})),files:Type.Optional(Type.Array(str,{maxItems:50})),checks:Type.Optional(Type.Array(str,{maxItems:20})),mode:Type.Optional(Type.Union(['plan','execute'].map(Type.Literal))),prompt:Type.Optional(str),id:Type.Optional(str)},async(a,signal)=>{
+  if(a.action==='list')return{profiles:this.app.engine.config.agents.map(({id,name,model,effort,mode,maxSteps,budget})=>({id,name,model:model||this.app.engine.config.subagentModel||defaults.subagentModel,effort,mode,maxSteps,budget:budget||0})),runs:await Promise.all((await this.records()).map(async r=>{const {summary,verification,...view}=await this.view(r);return view;}))};
   if(a.action==='spawn'){if(!a.why?.trim())throw new Error('Explain briefly why this independent assignment benefits from delegation.');if(!a.prompt?.trim())throw new Error('A concrete task prompt is required.');return this.spawn(a,signal);}
   const r=await this.get(a.id);
   if(a.action==='status')return this.view(r);if(a.action==='await'){await this.wait(a.id,signal);return this.view(await this.get(a.id));}if(a.action==='stop'){await this.app.jobs.stop(r.jobId);return this.status(a.id);}

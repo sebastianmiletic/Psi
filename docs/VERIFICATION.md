@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **144 passing tests**.
+- `npm run verify`: syntax checks and **146 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -173,3 +173,8 @@ Actual API invoices and real competition transactions were not exercised in this
 - Independent reads overlap in one response. Progress receipts avoid repeating plans. Repeated reads return an unchanged reference only if the complete earlier result remains in context; edits and compaction return fresh content. Default job waits await locally without polling inference.
 - Nested worker tests verify one parent chat, preserved results/follow-ups, and exact-once token accounting. Migration tests compare original journal bytes and verify preserved artifacts, legacy path resolution, idempotence and active-lock skips.
 - Delegation guards reject duplicate active task prompts, overlapping reserved execution paths and missing rationale. Real worker subprocesses report requested-but-unexecuted checks as unverified. Completion receipts hash regular evidence files; directory evidence is rejected. No paid/subscription inference was used for this update, and historical benchmark results are unchanged.
+
+## Subagent model selection (0.2.20)
+
+- Settings and subagent presets share the searchable main-composer model picker. Escape preserves an existing override, and Default restores inheritance. Saved settings persist independently of the main model.
+- Captured worker manifests verify the 5.6 Sol default, independent per-preset model overrides and compatibility with older configurations. These tests make no provider requests.

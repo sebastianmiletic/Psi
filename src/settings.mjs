@@ -3,6 +3,7 @@ export const settingItems = [
   {id:'agentMode',label:'Mode',special:'mode'},
   {id:'overkill',label:'OVERKILL',boolean:true},
   {id:'agents',label:'Subagents',special:'agents',description:'Independent jobs, models, thinking and limits'},
+  {id:'subagentModel',label:'Subagent model',special:'subagentModel'},
   {id:'subagentConcurrency',label:'Concurrency',number:[1,16]},
   {id:'checkForUpdates',label:'Update checks',boolean:true},
   {id:'autoUpdate',label:'Auto-update',boolean:true,description:'Managed releases or clean source checkouts; restart to apply'},
@@ -35,6 +36,7 @@ export function validateSettings(patch, registry) {
     if(item?.values&&key!=='accent'&&!item.values.includes(value))throw new Error(`Invalid ${item.label}`);
     if(key==='fallbackModels') {if(!Array.isArray(value)||value.some(x=>typeof x!=='string'))throw new Error('Fallbacks must be provider/model names');for(const m of value)registry?.find(m);}
     if(key==='agentMode'&&!['plan','execute'].includes(value))throw new Error('Choose plan or execute mode.');
+    if(key==='subagentModel'){if(typeof value!=='string'||!value.trim())throw new Error('Choose a subagent model.');registry?.find(value);}
     if(key==='agents'){
       if(!Array.isArray(value)||value.length>32||new Set(value.map(a=>a.id)).size!==value.length)throw new Error('Use up to 32 distinct worker profiles.');
       for(const a of value){if(!a.id||!a.name?.trim()||!a.job?.trim()||!['plan','execute'].includes(a.mode))throw new Error('Every worker needs a name, job and mode.');if(a.model)registry?.find(a.model);if(!Number.isInteger(a.maxSteps)||a.maxSteps<1||a.maxSteps>100000)throw new Error('Worker request limits must be 1–100000.');if(a.budget!==undefined&&(!Number.isFinite(a.budget)||a.budget<0))throw new Error('Worker budgets must be nonnegative.');}

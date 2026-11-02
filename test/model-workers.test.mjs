@@ -8,6 +8,7 @@ import { TerminalUI } from '../src/ui.mjs';
 import { MemoryTerminal } from './terminal.mjs';
 import { modelLabel } from '../src/model-label.mjs';
 import { fixture } from './helpers.mjs';
+import { defaults,loadConfig } from '../src/storage.mjs';
 const frame=ui=>{ui.tui.renderNow();return ui.tui.getScreenLines().map(stripTerminalSequences);};
 async function setup(t,respond=()=>({text:'unused'})){const f=await fixture(t,respond),terminal=new MemoryTerminal(100,32),ui=new TerminalUI(f.app,{terminal});f.app.ui=ui;t.after(()=>ui.stop());ui.start();return{...f,ui,terminal};}
 async function until(check){for(let i=0;i<150&&!await check();i++)await delay(10);assert.ok(await check());}
@@ -28,6 +29,32 @@ test('/model passes only model names to its picker while retaining exact provide
  const f=await fixture(t,()=>({text:'unused'}));let seen;
  f.app.ui={modelMenu:async(items,query)=>{seen={items,query};return null;},stop(){}};
  await f.app.selectModel('5.6 luna');const item=seen.items.find(i=>i.value==='openai-codex/gpt-5.6-luna');assert.ok(item);assert.equal(item.label,'5.6 luna');assert.equal(item.description,undefined);assert.equal(seen.query,'5.6 luna');assert.equal(f.requests.length,0);
+});
+
+test('subagent settings expose searchable models, persist defaults and per-worker overrides, and preserve selection on Escape',async t=>{
+ const f=await fixture(t,()=>({text:'unused'})),sol='openai-codex/gpt-5.6-sol',luna='openai-codex/gpt-5.6-luna';
+ assert.equal(defaults.subagentModel,sol);
+ let actions=['subagentModel',null],picked=sol,menus=[];
+ f.app.ui={stop(){},render(){},event(){},choose:async(title,items)=>{menus.push({title,items});return actions.shift();},modelMenu:async items=>{assert.ok(items.some(i=>i.value===sol&&i.label==='5.6 sol'));assert.ok(items.some(i=>i.value===luna&&i.label==='5.6 luna'));return picked;}};
+ await f.app.settingsMenu();assert.equal(f.app.engine.config.subagentModel,sol);assert.equal((await loadConfig(f.app.home)).subagentModel,sol);assert.equal(f.app.engine.config.model,'fixture/test');
+ actions=['profile:worker-1','model','save',null];picked=luna;await f.app.agentsMenu();assert.equal(f.app.engine.config.agents[0].model,luna);assert.match(menus.find(m=>m.title==='Subagents').items.find(i=>i.value==='profile:worker-1').description,/5.6 sol/);
+ actions=['profile:worker-1','model','save',null];picked=null;await f.app.agentsMenu();assert.equal(f.app.engine.config.agents[0].model,luna);
+ actions=['profile:worker-1','model','save',null];picked='default';await f.app.agentsMenu();assert.equal(f.app.engine.config.agents[0].model,null);
+ actions=['default-model',null];picked=luna;await f.app.agentsMenu();assert.equal((await loadConfig(f.app.home)).subagentModel,luna);assert.equal(f.requests.length,0);
+ await assert.rejects(f.app.update({subagentModel:'missing/model'}),/Model not found/);
+});
+
+test('delegation uses the subagent default independently of the parent and honors per-worker model overrides',async t=>{
+ const f=await fixture(t,()=>({text:'unused'})),sol='openai-codex/gpt-5.6-sol',luna='openai-codex/gpt-5.6-luna';
+ await f.app.update({overkill:true,subagentModel:sol,subagentConcurrency:3,agents:[{id:'override',name:'Custom',job:'Assigned task',model:luna,effort:'medium',mode:'execute',maxSteps:3}]});
+ // Capture real manifests without launching inference or contacting either provider.
+ f.app.jobs.start=async()=>({id:'captured-'+Math.random()});f.app.agents.track=()=>{};
+ const a=await f.app.agents.spawn({name:'Inspect default routing',prompt:'Inspect default routing.'});
+ const b=await f.app.agents.spawn({profile:'override',name:'Inspect override routing',prompt:'Inspect override routing.'});
+ assert.equal(a.model,sol);assert.equal(b.model,luna);assert.equal(f.app.engine.config.model,'fixture/test');
+ for(const r of[a,b]){const spec=JSON.parse(await readFile(join(f.session.dir,'agents',r.sessionId,'worker.json')));assert.equal(spec.config.model,r.model);}
+ f.app.engine.config.subagentModel=undefined;
+ const fallback=await f.app.agents.spawn({name:'Inspect legacy routing',prompt:'Inspect legacy routing.'});assert.equal(fallback.model,sol);assert.equal(f.requests.length,0);
 });
 
 test('OVERKILL is right aligned on the effort line, clickable, and keeps its keyboard toggle',async t=>{
