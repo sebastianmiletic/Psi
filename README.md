@@ -14,7 +14,9 @@
 
 Psi connects models, project files, build tools, browser research and experiments in one local terminal. Set an objective, choose how much reasoning to use, and keep the evidence across sessions.
 
-![Psi running a coding task, with the prompt pinned to the bottom](docs/conversation.png)
+![Psi developing my Cambridge Battlecode bot, with tool calls, progress updates and the prompt pinned to the bottom](docs/psi-battlecode.png)
+
+I built Psi for my own development workflow and used it to develop my Cambridge Battlecode bot. I also use it for coding, debugging, web research and local experiments across other projects. The screenshot above shows a real Battlecode development session.
 
 | | |
 | :--- | :--- |
