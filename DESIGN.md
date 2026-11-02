@@ -10,7 +10,7 @@ Restrained. The default sage accent, `oklch(68% 0.105 162)`, identifies Ψ, acti
 
 ## Typography
 
-Use the terminal's configured monospace font. Bold distinguishes product and picker titles. A compact, shaded Ψ mark (12 columns by 4 rows), rendered from a small extruded mesh, brands the workspace. Keep the nearby Psi wordmark and workspace path compact. Omit startup marketing/help copy.
+Use the terminal's configured monospace font. Bold distinguishes product and picker titles. A compact, shaded Ψ mark (12 columns by 4 rows), rendered from a small extruded mesh, brands the workspace. Show Ψ and the running version beside the mark, with the chat name and workspace path below. A known newer release stays visible in the pinned header until installed; a running old process then shows that a restart is needed. Omit startup marketing/help copy.
 
 ## Layout
 

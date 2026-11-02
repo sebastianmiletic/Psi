@@ -90,9 +90,9 @@ test('a previously executing worker resumes read-only when its parent switches t
  const r=await f.app.agents.spawn({profile:'worker',name:'Inspect project task',prompt:'Inspect the task.'});await f.app.agents.wait(r.id);await f.app.setMode('plan');await f.app.agents.send(r.id,'Inspect again in plan mode.');await f.app.agents.wait(r.id);await assert.rejects(readFile(join(f.root,'forbidden-resume.txt')));assert.equal(f.session.totals.requests,3);
 });
 
-test('source updater refuses local changes before fetching or overwriting the checkout',async t=>{
+test('source updater preserves local changes when no verified release archive is available',async t=>{
  const f=await fixture(t,()=>({text:'unused'}));const {run,updateInstallation}=await import('../src/updates.mjs');const root=join(f.root,'source');await mkdir(root);await run('git',['init'],root);await run('git',['remote','add','origin','https://github.com/sebastianmiletic/Psi.git'],root);await writeFile(join(root,'local.txt'),'preserve this');
- await assert.rejects(updateInstallation(f.session.home,{root,release:{available:true,latest:'9.0.0',assets:[]}}),/Local changes/);assert.equal(await readFile(join(root,'local.txt'),'utf8'),'preserve this');
+ await assert.rejects(updateInstallation(f.session.home,{root,release:{available:true,latest:'9.0.0',assets:[]}}),/verified source archive/);assert.equal(await readFile(join(root,'local.txt'),'utf8'),'preserve this');
 });
 
 test('job completion committed during the exit check is preserved instead of overwritten as interrupted',async t=>{

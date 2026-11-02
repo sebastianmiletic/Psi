@@ -40,7 +40,7 @@ test('reset panel keeps the header, shows both timers, confirms redemption and c
  const f=await setup(t),terminal=new MemoryTerminal(100,32),ui=new TerminalUI(f.app,{terminal});f.app.ui=ui;t.after(()=>ui.stop());ui.start();ui.editor.setText('Draft');
  let uses=0,signal;const data={account,mode:'codex',credits:{availableCount:2,credits:[]},usage:{limits:[{kind:'quota',label:'5h',usedPercent:91,resetAt:Date.now()/1000+3600},{kind:'quota',label:'7d',usedPercent:70,resetAt:Date.now()/1000+86400}]}};
  const menu=ui.resetMenu({account,read:async s=>{signal=s;return data;},use:async()=>{uses++;return {...data,outcome:'reset',credits:{availableCount:1,credits:[]}};}});await until(()=>screen(ui).some(l=>l.includes('Resets 2')));
- assert.match(screen(ui).slice(0,6).join('\n'),/Psi/);assert.match(screen(ui).join('\n'),/5h.*9%/);assert.match(screen(ui).join('\n'),/Week.*30%/);assert.match(screen(ui).join('\n'),/1h 0m/);assert.equal(ui.tui.hasOverlay(),false);
+ assert.match(screen(ui).slice(0,6).join('\n'),/Ψ\s+v\d/);assert.match(screen(ui).join('\n'),/5h.*9%/);assert.match(screen(ui).join('\n'),/Week.*30%/);assert.match(screen(ui).join('\n'),/1h 0m/);assert.equal(ui.tui.hasOverlay(),false);
  terminal.input('\r');assert.equal(uses,0);assert.match(screen(ui).join('\n'),/confirm/);terminal.resize(28,18);assert.match(screen(ui).join('\n'),/confirm/);assert.ok(ui.tui.getScreenLines().every(l=>visibleWidth(l)<=28));terminal.input('\r');await until(()=>uses===1);terminal.input('\x1b');await menu;assert.equal(signal.aborted,true);assert.equal(ui.editor.getText(),'Draft');assert.equal(f.requests.length,0);
 });
 test('Claude reset panel routes to provider Usage, while API accounts show no invented reset allowance',async t=>{

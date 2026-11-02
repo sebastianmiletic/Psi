@@ -43,8 +43,8 @@ test('command output, failures, edits and background identities stay explicit an
 test('stopped tools remain interrupted and subagents always sit below the usage bar through resize and menus',async t=>{
  const {ui,terminal}=await setup(t);const call={id:'interrupted',name:'bash',arguments:{command:'long check'}};ui.event({type:'tool_start',call});ui.event({type:'run_end',status:'stopped'});assert.match(frame(ui).join('\n'),/Ran long check.*stopped/);assert.match(frame(ui).join('\n'),/Interrupted before a result/);assert.equal(ui.openTools.size,0);
  ui.event({type:'agent_status',agent:{id:'worker',name:'Replay audit',model:'openai-codex/gpt-5.6-luna',status:'running',activity:'read'}});
- for(const [columns,rows]of[[100,32],[68,24],[28,18]]){terminal.resize(columns,rows);const lines=frame(ui);assert.ok(lines.findIndex(l=>l.includes('Replay audit'))>lines.findIndex(l=>l.includes('% left')));assert.ok(lines.some(l=>l.includes('Psi')));assert.ok(ui.tui.getScreenLines().every(l=>visibleWidth(l)<=columns));}
- terminal.resize(100,32);const menu=ui.effortMenu({levels:['off','low','medium','high'],effort:'medium',overkill:false});const lines=frame(ui);assert.match(lines.slice(0,6).join('\n'),/Psi/);assert.ok(lines.findIndex(l=>l.includes('Replay audit'))>lines.findIndex(l=>l.includes('% left')));terminal.input('\x1b');await menu;
+ for(const [columns,rows]of[[100,32],[68,24],[28,18]]){terminal.resize(columns,rows);const lines=frame(ui);assert.ok(lines.findIndex(l=>l.includes('Replay audit'))>lines.findIndex(l=>l.includes('% left')));assert.ok(lines.some(l=>l.includes('Ψ  v')));assert.ok(ui.tui.getScreenLines().every(l=>visibleWidth(l)<=columns));}
+ terminal.resize(100,32);const menu=ui.effortMenu({levels:['off','low','medium','high'],effort:'medium',overkill:false});const lines=frame(ui);assert.match(lines.slice(0,6).join('\n'),/Ψ\s+v\d/);assert.ok(lines.findIndex(l=>l.includes('Replay audit'))>lines.findIndex(l=>l.includes('% left')));terminal.input('\x1b');await menu;
 });
 
 test('finished subagents hide immediately while active overflow and saved worker details remain',async t=>{

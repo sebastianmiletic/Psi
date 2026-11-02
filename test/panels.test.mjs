@@ -12,7 +12,7 @@ async function setup(t){const f=await fixture(t,()=>({text:'unused'})),terminal=
 
 test('effort uses a dedicated staged slider and Escape cancels without stopping the active run',async t=>{
  const f=await setup(t),{ui,terminal}=f;let stopped=0;f.app.engine.busy=true;const stop=f.app.engine.stop.bind(f.app.engine);f.app.engine.stop=()=>{stopped++;stop();};
- let menu=ui.effortMenu({levels:['low','medium','high'],effort:'medium',overkill:false});assert.doesNotMatch(frame(ui).join('\n'),/Search:/);assert.match(frame(ui).join('\n'),/OVERKILL/);assert.match(frame(ui).slice(0,6).join('\n'),/Psi|Ψ PSI/);assert.doesNotMatch(frame(ui).join('\n'),/Choose how|Balanced reasoning|Configured workers/);
+ let menu=ui.effortMenu({levels:['low','medium','high'],effort:'medium',overkill:false});assert.doesNotMatch(frame(ui).join('\n'),/Search:/);assert.match(frame(ui).join('\n'),/OVERKILL/);assert.match(frame(ui).slice(0,6).join('\n'),/Ψ\s+v\d/);assert.doesNotMatch(frame(ui).join('\n'),/Choose how|Balanced reasoning|Configured workers/);
  terminal.input('\x1b[C');terminal.input('\t');assert.deepEqual(ui.effortPreview,{effort:'high',overkill:true});assert.equal(f.app.engine.config.overkill,false);terminal.input('\x1b');assert.equal(await menu,null);assert.equal(stopped,0);assert.equal(ui.pending,null);assert.equal(ui.effortPreview,null);assert.ok(!ui.motionTimer);
  menu=ui.effortMenu({levels:['low','medium','high'],effort:'medium',overkill:false});terminal.input('\x1b[C');terminal.input('\t');terminal.input('\r');assert.deepEqual(await menu,{effort:'high',overkill:true});
  terminal.resize(28,18);menu=ui.effortMenu({levels:['off','minimal','low','medium','high','xhigh'],effort:'medium',overkill:false});const small=frame(ui).join('\n');assert.match(small,/medium/);assert.match(small,/↵ · esc/);terminal.input('\x1b');await menu;f.app.engine.busy=false;
@@ -42,7 +42,7 @@ test('footer quota percentages include their own reset countdowns without changi
  assert.equal(app.activeUsage.limits[0].usedPercent,71);
 });
 test('stats opens a tabbed UI, preserves the draft and closes with one Escape without chat output',async t=>{
- const f=await setup(t),{ui,terminal}=f;ui.editor.setText('/model');const count=ui.transcript.children.length,menu=f.app.submit('/stats');let lines=frame(ui);for(let i=0;i<200&&!lines.some(l=>l.includes('Tokens'));i++){await delay(10);lines=frame(ui);}assert.match(lines.join('\n'),/Stats/);assert.match(lines.join('\n'),/Tokens/);assert.match(lines.join('\n'),/Time/);assert.equal(ui.tui.hasOverlay(),false);assert.match(lines.slice(0,6).join('\n'),/Psi|Ψ PSI/);assert.ok(lines.findIndex(l=>l.includes('Stats'))>6);terminal.input('\t');assert.match(frame(ui).join('\n'),/\[Week\]/);
+ const f=await setup(t),{ui,terminal}=f;ui.editor.setText('/model');const count=ui.transcript.children.length,menu=f.app.submit('/stats');let lines=frame(ui);for(let i=0;i<200&&!lines.some(l=>l.includes('Tokens'));i++){await delay(10);lines=frame(ui);}assert.match(lines.join('\n'),/Stats/);assert.match(lines.join('\n'),/Tokens/);assert.match(lines.join('\n'),/Time/);assert.equal(ui.tui.hasOverlay(),false);assert.match(lines.slice(0,6).join('\n'),/Ψ\s+v\d/);assert.ok(lines.findIndex(l=>l.includes('Stats'))>6);terminal.input('\t');assert.match(frame(ui).join('\n'),/\[Week\]/);
  for(const [columns,rows]of[[68,24],[28,18],[100,32]]){terminal.resize(columns,rows);const screen=frame(ui);assert.match(screen.join('\n'),/\[Week\]/);assert.ok(ui.tui.getScreenLines().every(l=>visibleWidth(l)<=columns));}
  terminal.input('\x1b');await menu;assert.equal(ui.pending,null);assert.equal(ui.tui.hasOverlay(),false);assert.equal(ui.editor.getText(),'/model');assert.equal(ui.transcript.children.length,count);assert.equal(f.requests.length,0);
 });
@@ -52,7 +52,7 @@ test('queued mode and effort changes remain out of the conversation',async t=>{
 
 test('tool names stay in a compact paged panel, while removed slash commands are rejected',async t=>{
  const {app,ui,terminal}=await setup(t);const tools=Array.from({length:50},(_,i)=>({name:'tool_'+i,description:'Long description that should stay out of the panel'}));
- const menu=ui.toolsMenu(tools);const screens=[];for(let i=0;i<4;i++){screens.push(frame(ui).join('\n'));terminal.input('\x1b[C');}assert.match(screens.join('\n'),/tool_49/);assert.doesNotMatch(screens.join('\n'),/Long description/);assert.match(screens[0],/Psi/);terminal.input('\x1b');await menu;
+ const menu=ui.toolsMenu(tools);const screens=[];for(let i=0;i<4;i++){screens.push(frame(ui).join('\n'));terminal.input('\x1b[C');}assert.match(screens.join('\n'),/tool_49/);assert.doesNotMatch(screens.join('\n'),/Long description/);assert.match(screens[0],/Ψ\s+v\d/);terminal.input('\x1b');await menu;
  for(const name of ['agents','provider','cd','summary-model','checkpoint'])await assert.rejects(app.submit('/'+name),/removed/);
 });
 

@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { relative,isAbsolute,sep } from 'node:path';
 import { accentColor } from './theme.mjs';
+import {version,newer} from './updates.mjs';
 import { colorToRgb, parseColor, truncateToWidth,visibleWidth } from '@earendil-works/pi-tui';
 
 // A small extruded mesh, shaded on the CPU. No canvas, native binary or animation dependency.
@@ -105,11 +106,13 @@ export class PsiHeader {
   }
   invalidate() {}
   render(width) {
+    const identity='Ψ  v'+version,latest=this.app.updateInfo?.latest;
+    const notices=latest&&newer(latest,version)?[truncateToWidth(' '+this.format(this.app.updateInfo?.installed?'v'+latest+' installed · restart':'v'+latest+' available · psi update'),width)]:[];
     const short=(this.terminal?.rows||32)<18;
     if(short||width<48){
       const path=workspaceLabel(this.app.session.meta.cwd);
       this.bounds={x:1,y:0,width:1,height:1};
-      return [truncateToWidth(' '+this.format('Ψ Psi'),width),truncateToWidth(' '+this.format(this.app.session.meta.title||'New session'),width),truncateToWidth(' '+this.subdued(headerPath(path,Math.max(1,width-1))),width),''];
+      return [truncateToWidth(' '+this.format(identity),width),...notices,truncateToWidth(' '+this.format(this.app.session.meta.title||'New session'),width),truncateToWidth(' '+this.subdued(headerPath(path,Math.max(1,width-1))),width),''];
     }
     const logoWidth = Math.min(short?9:12, Math.max(6,width-4)), logoRows=short?2:4;
     const accent=this.app.engine.config.accent || 'sage';
@@ -118,8 +121,8 @@ export class PsiHeader {
     if (this.cached?.key !== key) this.cached = { key, lines: renderPsi(logoWidth,logoRows,0,false,accent,glow) };
     this.bounds = { x: 1, y: 1, width: logoWidth, height: logoRows };
     const path = workspaceLabel(this.app.session.meta.cwd);
-    const labels = {0:this.format('Ψ  Psi'),[logoRows-2]:this.format(this.app.session.meta.title||'New session'),[logoRows-1]:this.subdued(headerPath(path,Math.max(1,width-logoWidth-3)))};
-    return ['', ...this.cached.lines.map((line, i) => truncateToWidth(' '+line+'  '+(labels[i] || ''), width)), ''];
+    const labels = {0:this.format(identity),[logoRows-2]:this.format(this.app.session.meta.title||'New session'),[logoRows-1]:this.subdued(headerPath(path,Math.max(1,width-logoWidth-3)))};
+    return ['', ...this.cached.lines.map((line, i) => truncateToWidth(' '+line+'  '+(labels[i] || ''), width)), ...notices,''];
   }
   // Bound the click region to the mark, leaving workspace text selectable.
   handleMouse(event) {

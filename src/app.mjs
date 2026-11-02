@@ -78,7 +78,8 @@ export class App {
     await this.refreshAccount();
     const { TerminalUI } = await import('./ui.mjs'); this.ui = new TerminalUI(this); this.ui.start();await this.agents.restore();this.startUsageMonitor();
     if(this.session.state.composerDraft)this.ui.editor.setText(this.session.state.composerDraft);
-    if(this.engine.config.checkForUpdates)void this.checkUpdates();
+    this.updateInfo=await readJSON(join(this.home,'update-check.json'),null).catch(()=>null);this.ui.render();
+    if(this.engine.config.checkForUpdates){void this.checkUpdates();this.updateTimer=setInterval(()=>void this.checkUpdates(),3600000);this.updateTimer.unref();}
     if (this.session.messages.length) {
       this.ui.note(`Resumed ${this.session.meta.id}. ${this.session.messages.length} context messages.`);
       this.showHistory();
@@ -222,7 +223,7 @@ export class App {
     if(command==='stats')return this.ui.statsMenu(()=>this.statistics.read());
     if(command==='subagents')return this.agentsMenu();
     if(command==='directory')return this.directoryCommand(arg);
-    if(command==='update'){if(this.engine.busy)throw new Error('Stop the active run before updating Psi.');this.ui.note('Checking GitHub releases…');this.ui.note((await updateInstallation(this.home)).message);return;}
+    if(command==='update'){if(this.engine.busy)throw new Error('Stop the active run before updating Psi.');this.ui.note('Checking GitHub releases…');const result=await updateInstallation(this.home);this.ui.note(result.message);if(result.updated)this.updateInfo={...this.updateInfo,installed:true};this.ui.render();return;}
 
     if(command==='project'){const p=await this.battlecode.inspect();this.ui.note(JSON.stringify({project:p.project,baseline:p.baseline,version:p.baselineVersion,source:p.baselineHashes.fingerprint,cli:p.cli,controllers:p.scripts,policy:p.policy},null,2));return;}
     if(command==='experiments'){const list=arg?await this.battlecode.reconcile(arg):await this.battlecode.store.list(this.session.meta.cwd);this.ui.note(JSON.stringify(list,null,2));return;}
@@ -324,7 +325,7 @@ export class App {
     while(this.engine.busy)await delay(25);
     await this.session.directory(cwd,roots);await this.changeSession(this.session,{preserveTranscript:true});
   }
-  async checkUpdates(){try{const update=await checkUpdate(this.home);if(!update.available||this.closing)return;if(this.engine.config.autoUpdate&&!this.engine.busy){this.ui.note((await updateInstallation(this.home,{release:update})).message);}else this.ui.note(`Psi ${update.latest} is available. Run /update or psi update, then restart.`);}catch{/* Offline startup remains quiet and fast. */}}
+  async checkUpdates(){try{const update=await checkUpdate(this.home);if(this.closing)return;this.updateInfo=update;this.ui?.render();if(update.available&&this.engine.config.autoUpdate&&!this.engine.busy&&!this.autoUpdatedVersion){const result=await updateInstallation(this.home,{release:update});if(result.updated){this.autoUpdatedVersion=update.latest;this.updateInfo={...update,installed:true};this.ui?.note(result.message);this.ui?.render();}}}catch{/* Retain a known update notice while offline. */}}
   async agentsMenu(){
     while(true){const c={...this.engine.config,...this.engine.pendingSettings},runs=await this.agents.records();
       const action=await this.ui.choose('Subagents',[{value:'enabled',label:`OVERKILL ${c.overkill?'ON':'off'}`},{value:'default-model',label:'Default model',description:modelLabel(c.subagentModel||defaults.subagentModel)},{value:'concurrency',label:'Concurrent workers',description:String(c.subagentConcurrency)},{value:'add',label:'Add subagent'},...c.agents.map(p=>({value:'profile:'+p.id,label:p.name,description:`${p.mode} · ${modelLabel(p.model||c.subagentModel||defaults.subagentModel)}`})),...runs.map(r=>({value:'run:'+r.id,label:'Run · '+r.name,description:modelLabel(r.model)}))]);if(!action)return;
@@ -351,7 +352,7 @@ export class App {
   }
   async close({preserveSession=false}={}) {
     if (this.closing) return; this.closing = true;
-    clearInterval(this.quotaTimer);this.quotaController?.abort();this.authController?.abort();await this.inputChain;this.engine.stop();this.ui?.stop();await this.ui?.modeSwitch;
+    clearInterval(this.updateTimer);clearInterval(this.quotaTimer);this.quotaController?.abort();this.authController?.abort();await this.inputChain;this.engine.stop();this.ui?.stop();await this.ui?.modeSwitch;
     await this.activeRun?.catch(()=>{});for(let i=0;this.engine.busy&&i<250;i++)await delay(20);
     await this.agents.dispose();await this.tools.close();await this.session.flush?.();await this.session.markActive?.();
     if(this.ui?.editor&&this.session.meta.hasMessages)await this.session.event({type:'state',state:{composerDraft:this.ui.editor.getText()}});
