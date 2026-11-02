@@ -22,7 +22,7 @@ test('HTTP streaming model executes write, detached benchmark, fetch and finish;
   assert.ok(f.session.totals.cost > 0);
   const toolResults = f.session.messages.filter(m => m.role === 'toolResult');
   assert.equal(toolResults.length, 4);
-  assert.ok(toolResults.every(m => !m.isError));
+  assert.ok(toolResults.every(m => !m.isError),JSON.stringify(toolResults.filter(m=>m.isError)));
   assert.match(toolResults[1].content[0].text, /benchmark-ok/);
   assert.match(toolResults[2].content[0].text, /18 wins/);
   assert.doesNotMatch(toolResults[2].content[0].text, /untrusted\(\)/);

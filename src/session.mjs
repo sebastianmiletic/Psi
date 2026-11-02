@@ -1,4 +1,4 @@
-import { appendFile, readdir, stat,rm,rmdir } from 'node:fs/promises';
+import { open, readdir, stat,rm,rmdir } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join, resolve } from 'node:path';
@@ -16,6 +16,7 @@ export class Session {
     this.accountTotals = {}; this.meteredCost = 0; this.meteredCostKnown = true;
     this.seenUsage=new Set();
     this.state = {}; this.status = 'idle'; this.journalSize = 0; this.writeChain=Promise.resolve();
+    this.streaming=null;
   }
   static path(home,id,parentSession){
     if(!/^(?!\.{1,2}$)[\w.-]+$/.test(id)||parentSession&&!/^(?!\.{1,2}$)[\w.-]+$/.test(parentSession))throw new Error('Invalid session ID.');
@@ -52,14 +53,17 @@ export class Session {
         }
       }
       if (session.status === 'running') await session.event({ type: 'status', status: 'interrupted' });
+      await session.saveMeta();
       return session;
     }, { timeout: 500 });
   }
   async *events() {
-    if (!await stat(join(this.dir, 'events.jsonl')).then(() => true, e => { if (e.code === 'ENOENT') return false; throw e; })) return;
-    const input = createReadStream(join(this.dir, 'events.jsonl'), { encoding: 'utf8' });
+    const path=join(this.dir,'events.jsonl'),info=await stat(path).catch(e=>{if(e.code==='ENOENT')return null;throw e;});if(!info?.size)return;
+    const handle=await open(path,'r'),last=Buffer.alloc(1);try{await handle.read(last,0,1,info.size-1);}finally{await handle.close();}
+    const input = createReadStream(path, { encoding: 'utf8',end:info.size-1 });
     const lines = createInterface({ input, crlfDelay: Infinity });
-    try { for await (const line of lines) if (line) yield JSON.parse(line); }
+    let pending;
+    try { for await (const line of lines)if(line){if(pending!==undefined)yield JSON.parse(pending);pending=line;}if(pending!==undefined&&last[0]===10)yield JSON.parse(pending); }
     finally { lines.close(); input.destroy(); }
   }
   enqueue(fn) {const next=this.writeChain.then(fn);this.writeChain=next.catch(()=>{});return next;}
@@ -70,10 +74,20 @@ export class Session {
     });
   }
   apply(event) {
+    if(event.type==='stream_start')this.streaming={requestId:event.requestId,text:'',timestamp:Date.parse(event.at)||Date.now(),partial:true};
+    if(event.type==='stream_delta'){
+      if(this.streaming?.requestId!==event.requestId)this.streaming={requestId:event.requestId,text:'',timestamp:Date.parse(event.at)||Date.now(),partial:true};
+      this.streaming.text+=event.text;
+    }
+    if(event.type==='stream_end'&&this.streaming?.requestId===event.requestId){
+      if(['error','aborted'].includes(event.outcome)){if(this.streaming.text)this.rememberVisible({role:'assistant',partial:true,content:[{type:'text',text:this.streaming.text}],timestamp:this.streaming.timestamp});this.streaming=null;}
+    }
     if (event.type === 'message') {
+      if(event.requestId&&this.streaming?.requestId===event.requestId)this.streaming=null;
       this.messages.push(event.message);
       const m=event.message;
       if(meaningful(m))this.meta.hasMessages=true;
+      if(m.role==='user'&&meaningful(m)&&this.meta.title==='New session'&&!this.meta.named&&!this.meta.seedNamed){this.meta.seedNamed=true;this.meta.title=cleanTerminal(typeof m.content==='string'?m.content:m.content.filter(c=>c.type==='text').map(c=>c.text).join(' ')).replace(/\s+/g,' ').trim().slice(0,100)||'Attached content';}
       if(!m.internal&&(m.role==='user'||m.role==='assistant'&&(typeof m.content==='string'?m.content.trim():m.content.some(c=>c.type==='text'&&c.text.trim()))))this.rememberVisible(m);
     }
     if(event.type==='final_response'){
@@ -103,18 +117,27 @@ export class Session {
   async event(event) {
     return this.enqueue(async()=>{
       const line=JSON.stringify({...event,at:new Date().toISOString()})+'\n';
-      await appendFile(join(this.dir,'events.jsonl'),line,{mode:0o600});this.journalSize+=Buffer.byteLength(line);this.apply(event);
+      await this.appendDurable(line);this.apply(event);
     });
   }
+  async appendDurable(line){
+    const handle=await open(join(this.dir,'events.jsonl'),'a',0o600);
+    try{await handle.writeFile(line);await handle.sync();this.journalSize+=Buffer.byteLength(line);}
+    finally{await handle.close();}
+  }
+  async flush(){await this.writeChain;}
+  async markActive(){if(!this.meta.parentSession&&this.meta.hasMessages)await atomicJSON(join(this.home,'last-session.json'),{id:this.meta.id,cwd:this.meta.cwd,at:new Date().toISOString()});}
+  visibleConversation(){return this.streaming?.text?[...this.conversation,{role:'assistant',partial:true,content:[{type:'text',text:this.streaming.text}],timestamp:this.streaming.timestamp}]:this.conversation;}
   rememberVisible(message){this.conversation.push(message);if(this.conversation.length>100)this.conversation.shift();}
   async saveMeta(){this.meta.draft=!(this.meta.hasMessages&&titled(this.meta));await atomicJSON(join(this.dir,'meta.json'),this.meta);}
-  async message(message) {
+  async message(message,{requestId}={}) {
     const hadMessages=this.meta.hasMessages;
-    await this.event({ type: 'message', message });
+    await this.event({ type: 'message', message,...(requestId?{requestId}:{}) });
     if (message.role === 'user'&&!message.internal && this.meta.title === 'New session'&&!this.meta.named&&!this.meta.seedNamed) {
       await this.enqueue(async()=>{if(this.meta.named||this.meta.seedNamed||this.meta.title!=='New session')return;this.meta.seedNamed=true;this.meta.title=cleanTerminal(typeof message.content==='string'?message.content:message.content.filter(c=>c.type==='text').map(c=>c.text).join(' ')).replace(/\s+/g,' ').trim().slice(0,100)||'Attached content';await this.saveMeta();});
     }
     else if(!hadMessages&&this.meta.hasMessages)await this.enqueue(()=>this.saveMeta());
+    if(meaningful(message))await this.markActive();
   }
   async rename(name,{duringRun=false}={}){
     const title=cleanTerminal(name).replace(/\s+/g,' ').trim();if(!title)throw new Error('Enter a session name.');if(Array.from(title).length>120)throw new Error('Session names can be up to 120 characters.');
@@ -127,7 +150,7 @@ export class Session {
     return this.enqueue(async()=>{
       if(this.meta.named||this.meta.autoNamed)return false;
       const event={type:'session_auto_name',name:title,at:new Date().toISOString()},line=JSON.stringify(event)+'\n';
-      await appendFile(join(this.dir,'events.jsonl'),line,{mode:0o600});this.journalSize+=Buffer.byteLength(line);this.apply(event);
+      await this.appendDurable(line);this.apply(event);
       await this.saveMeta();return true;
     });
   }
@@ -149,13 +172,14 @@ export class Session {
   static async list(home = psiHome()) {
     const names = (await readdir(join(home, 'sessions'),{withFileTypes:true}).catch(e => { if (e.code === 'ENOENT') return []; throw e; })).filter(e=>e.isDirectory()).map(e=>e.name);
     const data = await Promise.all(names.map(async n=>{
-      const meta=await readJSON(join(home,'sessions',n,'meta.json'),null);if(!meta||!titled(meta)||meta.parentSession||await stat(join(home,'sessions',n,'worker.json')).catch(()=>null))return null;
-      if(meta.hasMessages)return meta;
+      const meta=await readJSON(join(home,'sessions',n,'meta.json'),null);if(!meta||meta.parentSession||await stat(join(home,'sessions',n,'worker.json')).catch(()=>null))return null;
+      const journal=await stat(join(home,'sessions',n,'events.jsonl')).catch(()=>null),updatedAt=new Date(journal?.mtimeMs||Date.parse(meta.createdAt)||0).toISOString();
+      if(meta.hasMessages&&titled(meta))return{...meta,updatedAt};
       // Read old snapshots or a first message committed just before a crash.
-      for await(const e of new Session(home,meta).events())if(e.type==='message'&&meaningful(e.message)||e.type==='final_response'&&e.text?.trim())return meta;
+      for await(const e of new Session(home,meta).events())if(e.type==='message'&&meaningful(e.message)||e.type==='final_response'&&e.text?.trim()){const title=titled(meta)?meta.title:cleanTerminal(typeof e.message?.content==='string'?e.message.content:e.text||'Recovered session').replace(/\s+/g,' ').trim().slice(0,100);return{...meta,title,hasMessages:true,draft:false,updatedAt};}
       return null;
     }));
-    return data.filter(Boolean).sort((a, b) => b.id.localeCompare(a.id));
+    return data.filter(Boolean).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)||b.id.localeCompare(a.id));
   }
   static async storageEntries(home=psiHome()){
     const entries=[];

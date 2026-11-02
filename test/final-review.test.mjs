@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
 import {writeFile,readFile} from 'node:fs/promises';
@@ -41,7 +42,7 @@ test('a plan progress tool no longer ends the run before the model explains its 
 test('submitting a message returns to the bottom, while ordinary updates do not override manual scrolling',async t=>{
  const f=await fixture(t,()=>({text:'unused'})),terminal=new MemoryTerminal(100,32),ui=new TerminalUI(f.app,{terminal});f.app.ui=ui;ui.start();t.after(()=>ui.stop());
  for(let i=0;i<40;i++)ui.note('Earlier content '+i);frame(ui);ui.scroll.scrollToStart();assert.equal(ui.scroll.isFollowingEnd,false);ui.markdown('Interim update');frame(ui);assert.equal(ui.scroll.isFollowingEnd,false);
- f.app.engine.busy=true;terminal.input('New queued question');terminal.input('\r');const lines=frame(ui);assert.equal(ui.scroll.isFollowingEnd,true);assert.match(lines.join('\n'),/New queued question/);assert.deepEqual(f.app.engine.queue,['New queued question']);f.app.engine.busy=false;
+ f.app.engine.busy=true;terminal.input('New queued question');terminal.input('\r');for(let i=0;i<100&&!ui.scroll.isFollowingEnd;i++)await delay(5);const lines=frame(ui);assert.equal(ui.scroll.isFollowingEnd,true);assert.match(lines.join('\n'),/New queued question/);assert.deepEqual(f.app.engine.queue,['New queued question']);f.app.engine.busy=false;
 });
 
 test('quota checks use short cache intervals, preserve decimals, and never label task estimates as subscription capacity',async t=>{

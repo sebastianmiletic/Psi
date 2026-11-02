@@ -8,6 +8,9 @@ import { stat, access } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { loadConfig, saveConfig, psiHome, cleanTerminal, redact } from '../src/storage.mjs';
+import {startupSession} from '../src/startup.mjs';
+import {spawn} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import { Session } from '../src/session.mjs';
 import { App } from '../src/app.mjs';
 import { migrateWorkers } from '../src/worker-storage.mjs';
@@ -39,6 +42,7 @@ Usage: psi [options] [prompt]
       --overkill            Enable configured subagent workflow
       --resume <id>         Resume a saved session
       --continue           Resume the latest session in this workspace
+      --new                Start an empty session instead of resuming
       --profile <name>      battlecode (default) or general
       --json                Emit JSONL events in print mode
       --no-debug            Disable operational debug logs
@@ -53,7 +57,7 @@ Settings and credentials: PSI_HOME (default ~/.psi)
 try {
   const { values: v, positionals } = parseArgs({ allowPositionals: true, options: {
     help: { type: 'boolean', short: 'h' }, version: { type: 'boolean', short: 'v' }, cwd: { type: 'string', short: 'C' },
-    print: { type: 'string', short: 'p' }, model: { type: 'string', short: 'm' }, effort: { type: 'string' }, budget: { type: 'string' },
+    print: { type: 'string', short: 'p' }, model: { type: 'string', short: 'm' }, effort: { type: 'string' }, budget: { type: 'string' },new:{type:'boolean'},
     'max-steps': { type: 'string' }, tokens: { type: 'string' }, loop: { type: 'string' }, resume: { type: 'string' }, continue: { type: 'boolean' },
     mode:{type:'string'},overkill:{type:'boolean'},check:{type:'boolean'},account:{type:'string',multiple:true},'pi-file':{type:'string'},
     profile: { type: 'string' }, json: { type: 'boolean' }, 'no-debug': { type: 'boolean' },
@@ -88,15 +92,15 @@ try {
   const administrative = ['models', 'providers', 'accounts', 'provider', 'sessions', 'jobs', 'doctor'].includes(command);
   let session;
   if (!administrative) {
-    if (v.resume) session = await Session.load(v.resume, home);
-    else if (v.continue) { const latest = (await Session.list(home)).find(s => s.cwd === cwd); session = latest ? await Session.load(latest.id, home) : await Session.create(cwd, home); }
-    else session = await Session.create(cwd, home);
+    session=await startupSession({home,cwd,resume:v.resume,continueLatest:v.continue,newSession:v.new,interactive:!!process.stdin.isTTY&&v.print===undefined&&!v.json&&!v.loop&&!positionals.length,explicitDirectory:!!v.cwd});
     // Explicit invocation flags override saved session settings.
     if(v.mode)session.state.settings={...session.state.settings,agentMode:v.mode};if(v.overkill)session.state.settings={...session.state.settings,overkill:true};
     for (const [flag, key] of [['model', 'model'], ['effort', 'effort'], ['budget', 'budget'], ['max-steps', 'maxSteps'], ['tokens', 'maxOutputTokens'], ['profile', 'profile']]) if (v[flag] !== undefined) session.state.settings = { ...session.state.settings, [key]: config[key] };
   } else session = { home,dir:join(home,'administration'),meta: { id: 'administration', cwd }, state: {} };
   let outputOpen = false;
-  const app = new App(config, session, { home, onEvent: event => {
+  const app = new App(config, session, { home,onRestart:async({sessionId,cwd})=>{
+    const child=spawn(process.execPath,[fileURLToPath(import.meta.url),'-C',cwd,'--resume',sessionId],{env:process.env,stdio:'inherit'});process.exitCode=await new Promise((res,rej)=>{child.once('error',rej);child.once('exit',code=>res(code??1));});
+  }, onEvent: event => {
     if (v.json) console.log(JSON.stringify(event));
     else if (event.type === 'text_delta' && !event.summary) { process.stdout.write(cleanTerminal(event.delta)); outputOpen = true; }
     else if (event.type === 'final_response') { if (outputOpen) process.stdout.write('\n'); console.log(cleanTerminal(event.text)); outputOpen = false; }
@@ -163,7 +167,7 @@ try {
     // The interactive UI owns stdout while active.
     app.options.onEvent = v.json ? app.options.onEvent : undefined;
     await app.startUI();
-    if (prompt) { app.ui.user(prompt); void app.engine.run(prompt, { loop: !!v.loop }).catch(() => {}); }
+    if (prompt) { if(v.loop){void app.engine.run(prompt,{loop:true}).catch(()=>{});}else void app.submit(prompt).catch(()=>{}); }
   }
 } catch (e) {
   console.error(`Psi: ${redact(e.message)}`); process.exitCode = 1;

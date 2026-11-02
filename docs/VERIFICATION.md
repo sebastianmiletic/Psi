@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-31 (Australia/Sydney), using isolated temporary homes for tests.
 
-- `npm run verify`: syntax checks and **152 passing tests**.
+- `npm run verify`: syntax checks and **160 passing tests**.
 - Real HTTP SSE requests to a local OpenAI-compatible fixture executed file writes, a detached shell job, website extraction and objective completion. No paid inference was used.
 - A new process can reconstruct messages, usage, pending goals and tool outcomes from the session journal.
 - Tested serialized multi-account refresh, private credential file mode, transient retries, authentication failure handling, budget/request limits, compaction, torn-journal recovery, writer contention, stale-session rejection and cancellation.
@@ -188,3 +188,9 @@ Actual API invoices and real competition transactions were not exercised in this
 ## Footer reset countdowns (0.2.22)
 
 - The five-hour meter and weekly account line show their own reset countdown beside percent left, using reported reset timestamps. Tests cover hour/minute and day/hour formatting, elapsed time, missing/invalid resets, unchanged quota values, and narrow terminal widths. The existing usage polling/render loop updates these without model requests.
+
+## Local session durability repair
+
+- Actual process-kill tests verify recovery of flushed live text, and request-payload tests verify that incomplete text stays out of inference history.
+- Tests cover last-activity ordering, default resume and saved directories, committed first-message recovery, torn trailing records, durable queued input, graceful close, complete visible-history restore, role-free reload and source-change restart preserving the draft.
+- This repair is local while the independent efficiency publication gate runs. Existing unsaved text from older builds cannot be reconstructed if it was never written.

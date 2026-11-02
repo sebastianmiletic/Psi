@@ -315,3 +315,11 @@ Delegation requires a concrete task, unique short name and a brief `why`. Option
 Core instructions and sorted tool definitions stay stable across naming/mode changes; changing runtime state is appended only when needed. Final-review calls retain the tool schema and disable invocation on supported adapters. Compaction has a separate, short instruction prefix and cache identity. `request_metrics` events record prefix fingerprints and payload sizes without prompts or credentials; provider usage receipts retain actual cached-token counts. Unchanged file reads reuse an earlier complete result only while it remains in current context; edits and compaction force fresh content. Shell/build tools wait up to five seconds by default before returning a background job; `job wait` without `wait_ms` now awaits completion locally. An explicit `wait_ms` still performs a bounded wait.
 
 Claude subscription connections use the installed Claude Code CLI and its native login; see [Claude Code](CLAUDE_CODE.md). Anthropic API keys use the direct API transport.
+
+### Live session saving
+
+Bare `psi` reopens the last active saved chat in its saved directory. Use `psi --new` or `/new` for an empty chat; `psi -C <path>` selects the latest active chat in that workspace. Sessions sort by journal activity rather than creation date.
+
+Accepted input and queued corrections are flushed to `~/.psi/sessions/<id>/events.jsonl` before being displayed. Visible assistant text is journaled during streaming and flushed before display. Abruptly interrupted text is restored as an interrupted response, with incomplete text kept out of model context. Graceful close drains active writes and preserves the composer draft. The append-only journal is authoritative; missing metadata snapshots and torn trailing records are recovered without deleting earlier messages. No model call is needed to restore history.
+
+`/reload` reloads settings and role-free worker presets. If the application source changed, it saves the session/draft and restarts into that same chat. An already-running older build needs one full close/reopen to gain this restart behaviour.

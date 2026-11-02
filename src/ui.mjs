@@ -60,7 +60,7 @@ export class TerminalUI {
       if(this.composerSearch)return;
       if (!text.trim()) return;
       this.editor.addToHistory(text); this.editor.setText('');
-      void app.submit(text).catch(e => this.note(e.message, true));
+      void app.submit(text).catch(e => {if(!this.editor.getText())this.editor.setText(text);this.note(e.message, true);});
     };
     this.header = new PsiHeader({ app, onActivate: () => this.showLogo(), format: t => bold(safe(t)), subdued: t => dim(safe(t)),terminal,glow:()=>this.isOverkill()?(app.engine.config.animations===false?0:this.now()/360):null });
     this.footer = { invalidate() {}, render: width => {
