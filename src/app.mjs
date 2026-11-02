@@ -22,7 +22,7 @@ import { Session } from './session.mjs';
 import { Jobs } from './jobs.mjs';
 import { Tools } from './tools.mjs';
 import { Engine } from './engine.mjs';
-import { saveConfig,loadConfig, psiHome, cleanTerminal, redact, defaults,withoutWorkerProfiles,withLock } from './storage.mjs';
+import { saveConfig,loadConfig, readJSON, psiHome, cleanTerminal, redact, defaults,withoutWorkerProfiles,withLock } from './storage.mjs';
 
 export class App {
   constructor(config, session, options = {}) {
@@ -78,13 +78,21 @@ export class App {
     await this.engine.recoverReview();
     await this.session.markActive();
     await this.refreshAccount();
-    const { TerminalUI } = await import('./ui.mjs'); this.ui = new TerminalUI(this); this.ui.start();await this.agents.restore();this.startUsageMonitor();
-    if(this.session.state.composerDraft)this.ui.editor.setText(this.session.state.composerDraft);
-    this.updateInfo=await readJSON(join(this.home,'update-check.json'),null).catch(()=>null);this.ui.render();
-    if(this.engine.config.checkForUpdates){void this.checkUpdates({force:true});this.updateTimer=setInterval(()=>void this.checkUpdates(),3600000);this.updateTimer.unref();}
-    if (this.session.messages.length) {
-      this.ui.note(`Resumed ${this.session.meta.id}. ${this.session.messages.length} context messages.`);
-      this.showHistory();
+    this.updateInfo=await readJSON(join(this.home,'update-check.json'),null).catch(()=>null);
+    const { TerminalUI } = await import('./ui.mjs');
+    this.ui = new TerminalUI(this,{terminal:this.options.terminal});
+    try {
+      this.ui.start();await this.agents.restore();this.startUsageMonitor();
+      if(this.session.state.composerDraft)this.ui.editor.setText(this.session.state.composerDraft);
+      this.ui.render();
+      if(this.engine.config.checkForUpdates){void this.checkUpdates({force:true});this.updateTimer=setInterval(()=>void this.checkUpdates(),3600000);this.updateTimer.unref();}
+      if (this.session.messages.length) {
+        this.ui.note(`Resumed ${this.session.meta.id}. ${this.session.messages.length} context messages.`);
+        this.showHistory();
+      }
+    } catch(error) {
+      // Restore the terminal before the CLI reports a startup failure.
+      this.ui.stop();await this.close({preserveSession:true}).catch(()=>{});throw error;
     }
   }
   showHistory(){for(const m of this.session.visibleConversation()){
@@ -327,7 +335,7 @@ export class App {
     while(this.engine.busy)await delay(25);
     await this.session.directory(cwd,roots);await this.changeSession(this.session,{preserveTranscript:true});
   }
-  async checkUpdates({force=false}={}){try{const update=await checkUpdate(this.home,{force});if(this.closing)return;this.updateInfo=update;this.ui?.render();if(update.available&&this.engine.config.autoUpdate&&!this.engine.busy&&!this.autoUpdatedVersion){const result=await updateInstallation(this.home,{release:update});if(result.updated){this.autoUpdatedVersion=update.latest;this.updateInfo={...update,installed:true};this.ui?.note(result.message);this.ui?.render();}}}catch{/* Retain a known update notice while offline. */}}
+  async checkUpdates({force=false}={}){try{const update=await (this.options.checkUpdate||checkUpdate)(this.home,{force});if(this.closing)return;this.updateInfo=update;this.ui?.render();if(update.available&&this.engine.config.autoUpdate&&!this.engine.busy&&!this.autoUpdatedVersion){const result=await updateInstallation(this.home,{release:update});if(result.updated){this.autoUpdatedVersion=update.latest;this.updateInfo={...update,installed:true};this.ui?.note(result.message);this.ui?.render();}}}catch{/* Retain a known update notice while offline. */}}
   async agentsMenu(){
     while(true){
       const c={...this.engine.config,...this.engine.pendingSettings};

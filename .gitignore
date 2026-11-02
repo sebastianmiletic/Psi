@@ -12,3 +12,4 @@ coverage/
 /AGENTS.md
 dist/
 benchmarks/artifacts/
+.worktrees/

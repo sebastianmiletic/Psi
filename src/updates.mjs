@@ -14,7 +14,7 @@ export function run(command,args,cwd){return new Promise((res,rej)=>{
  const p=spawn(command,args,{cwd,stdio:['ignore','pipe','pipe']});let output='';p.stdout.on('data',c=>{output=(output+c).slice(-12000)});p.stderr.on('data',c=>{output=(output+c).slice(-12000)});p.on('error',rej);p.on('close',code=>code===0?res(output.trim()):rej(new Error(`${command} failed (${code}): ${output}`)));
 });}
 export async function checkUpdate(home,{force=false,fetchImpl=fetch}={}){
- const cache=join(home,'update-check.json'),old=await readJSON(cache,null);
+ const cache=join(home,'update-check.json'),old=await readJSON(cache,null).catch(()=>null);
  if(!force&&old&&Date.now()-old.checkedAt<21600000)return{...old,available:newer(old.latest,version)};
  const response=await fetchImpl(`https://api.github.com/repos/${repository}/releases/latest`,{headers:{Accept:'application/vnd.github+json','User-Agent':'Psi-updater'},signal:AbortSignal.timeout(6000)});
  if(response.status===404){const result={checkedAt:Date.now(),latest:version,available:false};await atomicJSON(cache,result);return result;}if(!response.ok)throw new Error(`GitHub update check: HTTP ${response.status}`);

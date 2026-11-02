@@ -203,3 +203,10 @@ Actual API invoices and real competition transactions were not exercised in this
 - All 167 local tests pass. New tests exercise 40 simultaneous durable worker assignments without provider requests, restoration beyond 32 workers, restart/follow-up beyond the old cap, shared task groups, complete overflow counts, narrow layouts and per-worker model routing.
 - Legacy presets and count settings are ignored from both machine configuration and saved session settings. The runtime prompt, tool schema, Settings and Subagents menu no longer offer worker profiles. Duplicate tasks, conflicting file ownership, plan-mode restrictions and exact-once accounting remain covered by the integration suite.
 - Startup performs a fresh read-only release check, while the pinned version/update notice remains covered at narrow widths. The release is prepared in an isolated worktree; publishing does not install it on the development laptop. No end-to-end inference-usage improvement is claimed for this feature release.
+
+
+## Complete interactive startup (0.2.24)
+
+- The regression test first reproduced `ReferenceError: readJSON is not defined` through `App.startUI()`. The missing import is fixed, and cached update state loads before raw mode. Failures after raw mode restore the terminal before the CLI reports an error.
+- Full startup tests cover saved history/draft restoration, the version and update command, a fresh release check, retained notices while offline, cleanup after worker-restore failure, and recovery from damaged update-cache JSON.
+- A real CLI launch in an isolated pseudo-terminal displayed the composer, running version and cached update command with no startup ReferenceError. The installed laptop code/launcher were not changed. Development worktrees were relocated beneath the main project's `.worktrees/` directory using `git worktree move`; historical benchmark paths have a local relocation map.
