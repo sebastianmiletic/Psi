@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { privateDir, atomicJSON,cleanTerminal, readJSON, psiHome, withLock, durableJournalSize } from './storage.mjs';
+import { privateDir, atomicJSON,cleanTerminal, readJSON, psiHome, withLock, durableJournalSize, alive } from './storage.mjs';
 
 const meaningful=m=>!m?.internal&&['user','assistant'].includes(m?.role)&&(typeof m.content==='string'?!!m.content.trim():Array.isArray(m.content)&&m.content.some(c=>c.type==='image'||c.type==='text'&&c.text?.trim()));
 const titled=meta=>typeof meta.title==='string'&&!!meta.title.trim()&&(meta.title!=='New session'||meta.named||meta.autoNamed||meta.seedNamed);
@@ -161,6 +161,7 @@ export class Session {
     await this.writeChain;
     if(!await stat(join(this.dir,'meta.json')).catch(()=>null))return false;
     const removed=await withLock(join(this.dir,'run.lock'),async()=>{
+      const ui=join(this.dir,'ui.lock');if(await stat(ui).catch(()=>null)){const owner=await readJSON(ui,null).catch(()=>null);if(!owner?.pid||alive(owner.pid))return false;}
       const meta=await readJSON(join(this.dir,'meta.json'),null);if(!meta||meta.hasMessages)return false;
       for await(const e of this.events())if(e.type==='message'&&meaningful(e.message)||e.type==='final_response'&&e.text?.trim()||e.type==='usage'||e.type==='state'&&(e.state?.queuedMessages?.length||e.state?.loopGoal||e.state?.agents?.length))return false;
       // Keep our open lock until its handle closes, including on Windows.

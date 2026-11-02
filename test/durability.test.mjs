@@ -20,7 +20,7 @@ test('bare startup resumes the last active conversation and its saved directory;
  const f=await fixture(t,()=>({text:'unused'})),first=f.session;await first.message({role:'user',content:'Older chat',timestamp:Date.now()});await delay(5);
  const second=await Session.create(f.root,f.app.home);await second.message({role:'user',content:'Newer-created chat',timestamp:Date.now()});await delay(5);await first.message({role:'user',content:'Most recent activity',timestamp:Date.now()});
  assert.equal((await Session.list(f.app.home))[0].id,first.meta.id);
- const resumed=await startupSession({home:f.app.home,cwd:'/',interactive:true});assert.equal(resumed.meta.id,first.meta.id);assert.equal(resumed.meta.cwd,f.root);
+ const resumed=await startupSession({home:f.app.home,cwd:'/',interactive:true});assert.equal(resumed.meta.id,first.meta.id);assert.equal(resumed.meta.cwd,f.root);await resumed.uiLease?.release();
  const fresh=await startupSession({home:f.app.home,cwd:f.root,interactive:true,newSession:true});assert.equal(fresh.messages.length,0);assert.notEqual(fresh.meta.id,first.meta.id);await fresh.discardEmpty();
 });
 test('first-message journal commits are discoverable even if their title snapshot never finished',async t=>{

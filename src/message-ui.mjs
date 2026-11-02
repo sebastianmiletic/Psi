@@ -51,13 +51,39 @@ export class Composer extends Editor {
 }
 
 export class UserMessage {
-  constructor(ui,text,{animate=true}={}){this.ui=ui;this.started=ui.now();this.animate=animate;this.body=new Text(safe(text),0,0);}
-  invalidate(){this.body.invalidate();}
+  constructor(ui,text,{animate=true}={}){
+    this.ui=ui;this.started=ui.now();this.animate=animate;this.text=safe(text);this.expanded=false;
+    this.body=new Text(this.text,0,0);this.preview=new Text(this.text.slice(0,1800),0,0);
+  }
+  invalidate(){this.body.invalidate();this.preview.invalidate();}
+  toggle(){if(!this.collapsible)return false;this.ui.scroll.scrollTo(this.ui.scroll.scrollTop,{disableFollow:true});this.expanded=!this.expanded;this.ui.tui.invalidate();this.ui.render();return true;}
+  handleMouse(event){if(event.type==='click'&&event.button==='left'&&event.y===this.toggleRow&&this.toggle())return{handled:true,render:true};}
   render(width){
     const enabled=this.animate&&this.ui.app.engine.config.animations!==false,t=enabled?Math.min(1,Math.max(0,(this.ui.now()-this.started)/240)):1;
-    const marker=pulse('›',this.ui,0.48+0.52*(1-(1-t)**4));
-    return [...this.body.render(Math.max(1,width-2)).map((line,i)=>truncateToWidth((i===0?marker+' ':'  ')+line,width)),''];
+    const marker=pulse('›',this.ui,0.48+0.52*(1-(1-t)**4)),room=Math.max(1,width-2);
+    const preview=this.preview.render(room);this.collapsible=this.text.length>1800||preview.length>6;
+    const all=this.collapsible?(this.expanded?this.body.render(room):preview.slice(0,3)):preview;
+    const lines=all.map((line,i)=>truncateToWidth((i===0?marker+' ':'  ')+line,width));
+    this.toggleRow=null;
+    if(this.collapsible){this.toggleRow=Math.min(3,lines.length);lines.splice(this.toggleRow,0,truncateToWidth('  '+this.ui.paint(this.expanded?'▾ Hide prompt':'▸ Full prompt')+dim(' · ctrl+p'),width));}
+    return [...lines,''];
   }
+}
+export const toolDetails=ui=>ui.expandedTools??(ui.app.engine.config.toolActivity==='full');
+export function importantTool(tool){
+  if(tool.failed||tool.interrupted)return true;
+  const name=tool.call.name,a=tool.call.arguments||{};
+  if(name==='agent')return false;
+  if(name==='bash'){
+    if(tool.duration>=5000||['running','queued','timed_out','failed'].includes(tool.outcome))return true;
+    const command=String(a.command||'');
+    if(/[><`]|\$\(/.test(command))return true;
+    const inspections=command.split(/[\n;&|]+/).map(p=>p.trim()).filter(Boolean);
+    return !inspections.length||!inspections.every(p=>/^(?:pwd|ls|find|rg|grep|sed|head|tail|cat|wc|stat|du|file|git\s+(?:status|diff|log|show|rev-parse))\b/.test(p));
+  }
+  if(name==='job')return a.action==='stop'||['running','queued'].includes(tool.outcome);
+  if(name==='browser')return ['evaluate','screenshot'].includes(a.action);
+  return !['read','search','fetch','search_web','battlecode_inspect','checkpoint','progress','session_title'].includes(name);
 }
 export class AssistantMessage {
   constructor(ui,text='',phase=''){this.ui=ui;this.phase=phase;this.active=!!phase;this.text=text;this.started=ui.now();this.body=new Markdown(safe(text),0,0,ui.markdownTheme);}
@@ -116,26 +142,28 @@ export class ToolMessage {
     return description(this.call);
   }
   outputLines(width,{nested=false}={}){
-    const lines=[],prefix=nested?'    ':'  ',expanded=this.ui.expandedTools;
-    if(this.jobId)lines.push(truncateToWidth(prefix+dim(`└ job ${this.jobId} · ${this.outcome||'unknown'}${this.exitCode!==undefined?' · exit '+this.exitCode:''}`),width));
-    const show=expanded||this.failed||this.interrupted||['bash','job','benchmark'].includes(this.call.name);
+    const lines=[],prefix=nested?'    ':'  ',expanded=toolDetails(this.ui);
+    if(this.jobId&&(expanded||this.failed||this.interrupted||['running','queued'].includes(this.outcome)))lines.push(truncateToWidth(prefix+dim(`└ job ${this.jobId} · ${this.outcome||'unknown'}${this.exitCode!==undefined?' · exit '+this.exitCode:''}`),width));
+    const show=expanded||this.failed||this.interrupted;
     if(show&&this.output){
       const all=this.output.split('\n'),limit=expanded?20:this.failed?5:3;
       const output=all.length>limit?[...all.slice(0,Math.max(1,limit-1)),dim(`… +${all.length-limit+1} lines · ctrl+t`)]:all;
       for(const [i,line]of output.entries())lines.push(truncateToWidth(prefix+dim(i===0&&!this.jobId?'└ ':'  ')+dim(line),width));
-    }else if(!this.active&&!this.failed&&this.call.name==='edit'){
+    }else if(expanded&&!this.active&&!this.failed&&this.call.name==='edit'){
       const a=this.call.arguments||{},removed=String(a.old||'').split('\n'),added=String(a.new||'').split('\n');
       for(const [sign,items]of [['-',removed],['+',added]])for(const line of items.slice(0,2))lines.push(truncateToWidth(prefix+dim('  ')+(sign==='+'?this.ui.paint('+ '+safe(line)):'\x1b[31m- '+safe(line)+'\x1b[39m'),width));
       if(removed.length+added.length>4)lines.push(truncateToWidth(prefix+dim('  … · ctrl+t'),width));
     }
-    if(!lines.length&&!this.active&&!this.failed&&this.call.name==='bash')lines.push(truncateToWidth(prefix+dim('└ (no output)'),width));
+    if(expanded&&!lines.length&&!this.active&&!this.failed&&this.call.name==='bash')lines.push(truncateToWidth(prefix+dim('└ (no output)'),width));
     return lines;
   }
   render(width){
+    if(!toolDetails(this.ui)&&!importantTool(this))return[];
     const [action,detail]=this.action(),suffix=this.failed?' · failed':this.interrupted?' · stopped':this.active?'':Number.isFinite(this.exitCode)&&this.exitCode!==0?' · exit '+this.exitCode:'';
     const prefix=this.marker()+' '+bold(action)+' ',room=Math.max(0,width-visibleWidth(prefix)-visibleWidth(suffix));
-    const command=this.ui.expandedTools&&detail?new Text(safe(String(detail)),0,0).render(Math.max(1,width-4)).slice(0,12).map(line=>truncateToWidth('    '+dim(line),width)):[];
-    return [truncateToWidth(prefix+truncateToWidth(oneLine(detail),room)+dim(suffix),width),...command,...this.outputLines(width),''];
+    const command=toolDetails(this.ui)&&detail?new Text(safe(String(detail)),0,0).render(Math.max(1,width-4)).slice(0,12).map(line=>truncateToWidth('    '+dim(line),width)):[];
+    const compactDetail=!toolDetails(this.ui)&&this.call.name==='bash'&&(String(detail).length>160||String(detail).includes('\n'))?(this.call.arguments?.label||(/\bpython[0-9.]*/.test(detail)?'Python script':'Shell command')):detail;
+    return [truncateToWidth(prefix+truncateToWidth(oneLine(compactDetail),room)+dim(suffix),width),...command,...this.outputLines(width),''];
   }
 }
 export class ExplorationGroup {
@@ -143,10 +171,11 @@ export class ExplorationGroup {
   add(tool){this.tools.push(tool);}
   invalidate(){}
   render(width){
+    if(!toolDetails(this.ui))return this.tools.filter(t=>t.failed||t.interrupted).flatMap(t=>t.render(width));
     const active=this.tools.find(t=>t.active),failed=this.tools.some(t=>t.failed),title=active?'Exploring':'Explored';
     const mark=active?active.marker():failed?'\x1b[31m•\x1b[39m':dim('•');
     const lines=[truncateToWidth(mark+' '+bold(title)+(failed?dim(' · errors'):''),width)];
-    const limit=this.ui.expandedTools?20:5,visible=this.tools.length<=limit?this.tools:this.tools.slice(-limit);
+    const limit=toolDetails(this.ui)?20:5,visible=this.tools.length<=limit?this.tools:this.tools.slice(-limit);
     for(const [i,tool]of visible.entries()){
       const [name,detail]=description(tool.call),prefix=i===0?'  └ ':'    ',status=tool.failed?' · failed':tool.interrupted?' · stopped':'';
       lines.push(truncateToWidth(dim(prefix)+this.ui.paint(name)+' '+oneLine(detail)+dim(status),width));
@@ -154,5 +183,31 @@ export class ExplorationGroup {
     }
     if(this.tools.length>visible.length)lines.push(truncateToWidth(dim(`    … ${this.tools.length-visible.length} earlier calls · ctrl+t`),width));
     return [...lines,''];
+  }
+}
+
+export class FileChanges {
+  constructor(ui,tool){this.ui=ui;this.tools=[tool];}
+  add(tool){this.tools.push(tool);}
+  invalidate(){}
+  render(width){
+    if(toolDetails(this.ui))return this.tools.flatMap(t=>t.render(width));
+    const valid=this.tools.filter(t=>!t.failed&&!t.interrupted),paths=[...new Set(valid.map(t=>oneLine(t.call.arguments?.path||'(unknown file)')))],active=valid.some(t=>t.active);
+    const label=paths.length===1?paths[0]:`${paths.length} files`;
+    const lines=paths.length?[truncateToWidth(this.ui.paint('•')+' '+bold(active?'Updating':'Updated')+' '+label,width)]:[];
+    if(paths.length>1)lines.push(truncateToWidth(dim('  '+paths.slice(0,3).join(' · ')+(paths.length>3?` · +${paths.length-3}`:'')),width));
+    return[...lines,...this.tools.filter(t=>t.failed||t.interrupted).flatMap(t=>t.render(width)),...(lines.length?['']:[])];
+  }
+}
+export class SubagentNotice {
+  constructor(ui,event){this.ui=ui;this.event=event;}
+  invalidate(){}
+  render(width){
+    const a=this.event.agent,launched=this.event.type==='agent_started',failed=!launched&&!['completed','idle'].includes(a.status);
+    const title=launched?'Launched subagent':failed?'Subagent '+(a.status||'stopped'):'Subagent report';
+    const head=truncateToWidth(this.ui.paint('•')+' '+bold(title)+' '+oneLine(a.name)+(launched&&a.group?dim(' · '+oneLine(a.group)):''),width);
+    const summary=!launched&&(a.result?.summary||a.result?.error);
+    const body=summary?new Text(safe(summary),0,0).render(Math.max(1,width-2)).slice(0,3).map(l=>'  '+l):[];
+    return[head,...body,''];
   }
 }

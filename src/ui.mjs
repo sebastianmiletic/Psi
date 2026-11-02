@@ -9,7 +9,7 @@ import { accentText,accentBadge } from './theme.mjs';
 import { usageLabel,applicableQuota,quotaFreshness,remainingPercent,resetCountdown } from './usage.mjs';
 import { EffortPanel,StatsPanel,ToolsPanel,ResetPanel } from './panels.mjs';
 import { PsiHeader, PsiAnimation } from './logo.mjs';
-import { Composer,flowAccent,UserMessage,AssistantMessage,ToolMessage,ExplorationGroup,exploration } from './message-ui.mjs';
+import { Composer,flowAccent,UserMessage,AssistantMessage,ToolMessage,ExplorationGroup,exploration,FileChanges,SubagentNotice,toolDetails,importantTool } from './message-ui.mjs';
 import { cleanTerminal, redact } from './storage.mjs';
 
 const rgb = colorToRgb(parseColor('oklch(68% 0.105 162)'));
@@ -32,7 +32,7 @@ export const commands = [
 ].map(([name,description])=>({name,description}));
 
 class Transcript extends Container {
-  addChild(child) { super.addChild(child); if (this.children.length > 100) this.children.splice(0, this.children.length - 100); }
+  addChild(child) { super.addChild(child); if (this.children.length > 100) {const quiet=this.children.findIndex(c=>c instanceof ExplorationGroup&&!c.tools.some(t=>t.active||t.failed||t.interrupted)||c instanceof ToolMessage&&!c.active&&!importantTool(c)||c instanceof AssistantMessage&&!c.active&&!c.text);this.children.splice(quiet>=0?quiet:0,1);} }
 }
 class SecretInput {
   value = ''; focused = true;
@@ -49,7 +49,7 @@ class SecretInput {
 }
 export class TerminalUI {
   constructor(app, { terminal = new ProcessTerminal(), now=()=>performance.now() } = {}) {
-    this.app = app; this.terminal = terminal; this.tui = new TuiAltScreen(terminal);
+    this.app = app; this.toolActivity=app.engine.config.toolActivity; this.terminal = terminal; this.tui = new TuiAltScreen(terminal);
     this.now=now;this.openTools=new Map();this.workerRows=new Map();
     this.paint=t=>accentText(t,app.engine.config);
     this.selectionTheme={...selectionTheme,selectedPrefix:this.paint,selectedText:t=>this.paint(bold(t))};
@@ -118,7 +118,8 @@ export class TerminalUI {
         else void app.close();
         return { consume: true };
       }
-      if(matchesKey(data,'ctrl+t')&&!this.pending){this.expandedTools=!this.expandedTools;this.tui.invalidate();this.render();return{consume:true};}
+      if(matchesKey(data,'ctrl+t')&&!this.pending){this.expandedTools=!toolDetails(this);this.tui.invalidate();this.render();return{consume:true};}
+      if(matchesKey(data,'ctrl+p')&&!this.pending){this.lastUser?.toggle();return{consume:true};}
       if(matchesKey(data,'shift+tab')&&!this.pending){this.toggleMode();return{consume:true};}
       if(matchesKey(data,'escape')&&!this.pending&&app.engine.busy){const now=Date.now();if(now-(this.lastEscape||0)<600){this.lastEscape=0;app.engine.stop();}else this.lastEscape=now;return{consume:true};}
       if (matchesKey(data, 'ctrl+d') && !this.pending && !this.editor.getText()) { void app.close(); return { consume: true }; }
@@ -170,6 +171,7 @@ export class TerminalUI {
   }
   addTool(tool){
     const last=this.transcript.children.at(-1);
+    if(['write','edit'].includes(tool.call.name)){if(last instanceof FileChanges&&last.tools.length<100)last.add(tool);else this.transcript.addChild(new FileChanges(this,tool));return;}
     if(exploration(tool.call)&&last instanceof ExplorationGroup&&last.tools.length<20)last.add(tool);
     else this.transcript.addChild(exploration(tool.call)?new ExplorationGroup(this,tool):tool);
   }
@@ -181,7 +183,7 @@ export class TerminalUI {
     if(this.closed)return;
     if(event.type==='settings_queued'&&!Object.keys(event.patch||event.settings||{}).every(k=>['agentMode','effort','overkill'].includes(k)))this.note('Settings saved for the next model/tool boundary.');
     if(event.type==='settings_queued')this.syncMotion();
-    if(event.type==='settings'){this.syncMotion();this.tui.invalidate();this.tui.requestRender(true);}
+    if(event.type==='settings'){if(event.settings?.toolActivity!==undefined&&event.settings.toolActivity!==this.toolActivity){this.toolActivity=event.settings.toolActivity;this.expandedTools=undefined;}this.syncMotion();this.tui.invalidate();this.tui.requestRender(true);}
     if(event.type==='waiting'){this.finishResponse('partial response');this.note(event.reason+' · Escape twice to stop; /settings or /accounts can resolve the wait.');}
     if(event.type==='account_switched')this.note(`Switched account: ${event.previous} → ${event.account.name}`);
     if(event.type==='model_fallback')this.note(`Using configured fallback: ${modelLabel(event.model)}`);
@@ -212,6 +214,7 @@ export class TerminalUI {
     if (event.type === 'queued') this.note('Message queued for the next tool boundary.');
     if (event.type === 'stopped') this.note('Stopped. Queued messages and unfinished goals are saved.');
     if(event.type==='progress'){this.note(event.update);if(this.app.engine.config.agentMode==='plan')this.markdown(event.steps.map((s,i)=>`${i+1}. ${s.title}`).join('\n'),false);}
+    if(['agent_started','agent_finished'].includes(event.type))this.transcript.addChild(new SubagentNotice(this,event));
     if(['agent_started','agent_finished','agent_status'].includes(event.type)){const worker={...this.workerRows.get(event.agent.id),...event.agent,status:event.agent.status||(event.type==='agent_started'?'running':'completed')};if(activeWorker(worker))this.workerRows.set(worker.id,worker);else this.workerRows.delete(worker.id);}
     if (event.type === 'error') this.note(event.error, true);
     if(event.type==='final_response'){this.finishResponse();this.markdown(event.text);}

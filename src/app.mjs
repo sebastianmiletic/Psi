@@ -19,6 +19,7 @@ import { accents } from './theme.mjs';
 import { AccountUsage, usageLabel,accountResetLabel } from './usage.mjs';
 import { Registry } from './providers.mjs';
 import { Session } from './session.mjs';
+import {claimSessionUI,sessionBusyMessage,sessionInUse} from './session-lease.mjs';
 import { Jobs } from './jobs.mjs';
 import { Tools } from './tools.mjs';
 import { Engine } from './engine.mjs';
@@ -26,7 +27,7 @@ import { saveConfig,loadConfig, readJSON, psiHome, cleanTerminal, redact, defaul
 
 export class App {
   constructor(config, session, options = {}) {
-    this.config = config; this.session = session; this.options = options;
+    this.config = config; this.session = session; this.options = options;this.uiLease=session.uiLease;delete session.uiLease;
     this.home = options.home || psiHome(); this.registry = new Registry(config, this.home); this.accountUsage = new AccountUsage(this.home); this.activeAccount = null; this.activeUsage = null;
     this.statistics=new Statistics(this.home);this.bind();
   }
@@ -75,24 +76,21 @@ export class App {
     this.activeAccount=configured?account:null;this.activeUsage=usage;this.ui?.render();return{account:this.activeAccount,usage};
   }
   async startUI() {
-    await this.engine.recoverReview();
-    await this.session.markActive();
-    await this.refreshAccount();
-    this.updateInfo=await readJSON(join(this.home,'update-check.json'),null).catch(()=>null);
-    const { TerminalUI } = await import('./ui.mjs');
-    this.ui = new TerminalUI(this,{terminal:this.options.terminal});
+    try{
+      this.uiLease ||= await claimSessionUI(this.session);
+    }catch(error){if(/Another Psi process holds/.test(error.message))throw new Error(sessionBusyMessage);throw error;}
     try {
+      await this.engine.recoverReview();await this.session.markActive();await this.refreshAccount();
+      this.updateInfo=await readJSON(join(this.home,'update-check.json'),null).catch(()=>null);
+      const { TerminalUI } = await import('./ui.mjs');
+      this.ui = new TerminalUI(this,{terminal:this.options.terminal});
       this.ui.start();await this.agents.restore();this.startUsageMonitor();
       if(this.session.state.composerDraft)this.ui.editor.setText(this.session.state.composerDraft);
       this.ui.render();
       if(this.engine.config.checkForUpdates){void this.checkUpdates({force:true});this.updateTimer=setInterval(()=>void this.checkUpdates(),3600000);this.updateTimer.unref();}
-      if (this.session.messages.length) {
-        this.ui.note(`Resumed ${this.session.meta.id}. ${this.session.messages.length} context messages.`);
-        this.showHistory();
-      }
+      if (this.session.messages.length) {this.ui.note(`Resumed ${this.session.meta.id}. ${this.session.messages.length} context messages.`);this.showHistory();}
     } catch(error) {
-      // Restore the terminal before the CLI reports a startup failure.
-      this.ui.stop();await this.close({preserveSession:true}).catch(()=>{});throw error;
+      this.ui?.stop();await this.close({preserveSession:true}).catch(()=>{});throw error;
     }
   }
   showHistory(){for(const m of this.session.visibleConversation()){
@@ -129,7 +127,14 @@ export class App {
   }
   async changeSession(session,{preserveTranscript=false}={}) {
     if (this.engine.busy) throw new Error('Stop the current run first.');
-    await this.agents.dispose();if(session.meta.id===this.session.meta.id){await session.assertLatest().catch(async()=>{session=await Session.load(session.meta.id,this.home);});}await this.tools.close();if(session.meta.id!==this.session.meta.id&&!((await this.jobs.list()).some(j=>j.sessionId===this.session.meta.id&&['running','queued'].includes(j.status))))await this.session.discardEmpty();this.session = session; this.bind();
+    const previous=this.session,previousLease=this.uiLease,different=session.meta.id!==previous.meta.id;let committed=false;
+    let nextLease;
+    if(this.ui&&different)try{nextLease=await claimSessionUI(session);}catch(error){if(/Another Psi process holds/.test(error.message))throw new Error(sessionBusyMessage);throw error;}
+    try{
+      await this.agents.dispose();if(!different)await session.assertLatest().catch(async()=>{session=await Session.load(session.meta.id,this.home);});await this.tools.close();
+      this.session=session;this.bind();committed=true;
+      if(different){this.uiLease=nextLease;await previousLease?.release();if(!((await this.jobs.list()).some(j=>j.sessionId===previous.meta.id&&['running','queued'].includes(j.status))))await previous.discardEmpty();}
+    }catch(error){if(!committed){await nextLease?.release();this.session=previous;this.uiLease=previousLease;this.bind();if(this.ui)await this.agents.restore();}throw error;}
     if (this.ui) { const { CombinedAutocompleteProvider } = await import('@earendil-works/pi-tui'); const { commands } = await import('./ui.mjs'); this.ui.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, session.meta.cwd)); }
     await this.engine.recoverReview();await this.refreshAccount();
     if(this.ui)this.startUsageMonitor();
@@ -265,7 +270,7 @@ export class App {
     if (command === 'resume') {
       const sessions = await Session.list(this.home);
       const id = arg || await this.ui.choose('Resume session', sessions.map(s => ({ value: s.id, label: s.title, description: `${s.createdAt.slice(0, 16)} · ${s.cwd}` })));
-      if (id) await this.changeSession(await Session.load(id, this.home)); return;
+      if (id) {if(id!==this.session.meta.id&&await sessionInUse(id,this.home))throw new Error(sessionBusyMessage);await this.changeSession(await Session.load(id, this.home));} return;
     }
     if (command === 'reload' || command === 'refresh') return this.reload();
     if (command === 'export') { const path = resolve(this.session.meta.cwd, arg || `psi-${this.session.meta.id}.md`); await writeFile(path, await this.exportMarkdown(), { mode: 0o600 }); this.ui.note(`Exported: ${path}`); return; }
@@ -378,8 +383,10 @@ export class App {
     if (this.closing) return; this.closing = true;
     clearInterval(this.updateTimer);clearInterval(this.quotaTimer);this.quotaController?.abort();this.authController?.abort();await this.inputChain;this.engine.stop();this.ui?.stop();await this.ui?.modeSwitch;
     await this.activeRun?.catch(()=>{});for(let i=0;this.engine.busy&&i<250;i++)await delay(20);
-    await this.agents.dispose();await this.tools.close();await this.session.flush?.();await this.session.markActive?.();
-    if(this.ui?.editor&&this.session.meta.hasMessages)await this.session.event({type:'state',state:{composerDraft:this.ui.editor.getText()}});
+    try{
+      await this.agents.dispose();await this.tools.close();await this.session.flush?.();await this.session.markActive?.();
+      if(this.ui?.editor&&this.session.meta.hasMessages)await this.session.event({type:'state',state:{composerDraft:this.ui.editor.getText()}});
+    }finally{await this.uiLease?.release();this.uiLease=undefined;}
     if(!preserveSession&&!this.engine.busy&&typeof this.session.discardEmpty==='function'&&!((await this.jobs.list()).some(j=>j.sessionId===this.session.meta.id&&['running','queued'].includes(j.status))))await this.session.discardEmpty();this.options.onClose?.();
   }
 }

@@ -325,3 +325,12 @@ Accepted input and queued corrections are flushed to `~/.psi/sessions/<id>/event
 `/reload` reloads settings. If the application source changed, it saves the session/draft and restarts into that same chat. An already-running older build needs one full close/reopen to gain this restart behaviour.
 
 The pinned header shows `Ψ v<running version>` and retains a known newer version with `psi update`. After installing, a still-running old process displays a restart reminder. `psi update` prepares a checksum-verified release before activation. An edited source checkout is preserved and its own launcher can switch to a separate managed release.
+
+
+## Compact conversation and parallel terminals (0.2.25)
+
+Long prompts show three preview rows with a clickable Full prompt disclosure. Click it again or use Ctrl+P for the latest prompt. Expansion does not send a message or change the composer draft. The complete original prompt remains in the journal and model input; this is a visual fold, not lossy context compaction.
+
+The default compact activity view hides successful reads, searches, simple shell inspections and housekeeping. It keeps failures, interrupted operations, builds/tests, durable background jobs, grouped file changes, subagent launches/reports and the final review visible. Ctrl+T reveals retained tool details without inference; Settings > Tool activity selects compact or full. Full durable tool records remain in session journals/artifacts. Hiding rows does not itself reduce provider token usage.
+
+Bare `psi` still resumes the saved chat when available. If that chat is open in another terminal or holds a live inference lock, a second implicit launch starts a new chat in its own working directory. `psi --new` always requests a separate chat. Explicit `--resume` or `--continue` refuses a busy chat with an actionable message, preserving single-writer guarantees. Interactive ownership is held for the lifetime of the UI, including idle periods, released on close/chat switch and recovered after an owner process dies.

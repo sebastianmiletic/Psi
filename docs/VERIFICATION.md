@@ -210,3 +210,11 @@ Actual API invoices and real competition transactions were not exercised in this
 - The regression test first reproduced `ReferenceError: readJSON is not defined` through `App.startUI()`. The missing import is fixed, and cached update state loads before raw mode. Failures after raw mode restore the terminal before the CLI reports an error.
 - Full startup tests cover saved history/draft restoration, the version and update command, a fresh release check, retained notices while offline, cleanup after worker-restore failure, and recovery from damaged update-cache JSON.
 - A real CLI launch in an isolated pseudo-terminal displayed the composer, running version and cached update command with no startup ReferenceError. The installed laptop code/launcher were not changed. Development worktrees were relocated beneath the main project's `.worktrees/` directory using `git worktree move`; historical benchmark paths have a local relocation map.
+
+
+## Compact conversation and terminal ownership (0.2.25)
+
+- Prompt disclosure is tested through actual mouse/keyboard routing, narrow/Unicode layouts, draft preservation, exact model input and journal resume. Activity tests cover hidden routine successes, visible failures and important actions, file grouping, worker reports, full-detail settings, and retention of visible prompts during long routine-tool sequences. No paid inference is used for these checks.
+- Concurrency tests cover live inference locks, two separate interactive apps making simultaneous fixture requests, atomic startup reservation, real owner-process termination, session switching/reload, empty active-chat protection and cleanup. UI ownership is independent of the existing run lock; that lock is retained.
+- All 182 local tests pass. A real two-terminal pseudo-TTY check opened separate chats in the same workspace, expanded the prompt with Ctrl+P, and quit both processes cleanly without a lock collision or paid model request.
+- These changes make no claim of reduced total inference usage. Disclosure and filtering are local rendering operations and preserve task evidence.

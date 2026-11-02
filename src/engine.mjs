@@ -83,7 +83,7 @@ export class Engine {
     }
     if (patch.summaryModel) this.registry.find(patch.summaryModel);
     if (patch.effort && !getSupportedThinkingLevels(patch.model ? this.registry.find(patch.model) : this.model).includes(patch.effort)) throw new Error(`Supported efforts: ${getSupportedThinkingLevels(this.model).join(', ')}`);
-    const visual=Object.keys(patch).every(k=>['accent','showLogo','animations','showUsage','debug','checkForUpdates','autoUpdate'].includes(k));
+    const visual=Object.keys(patch).every(k=>['accent','showLogo','animations','showUsage','toolActivity','debug','checkForUpdates','autoUpdate'].includes(k));
     if(this.busy&&!this.waiting&&!immediate&&!visual){
       Object.assign(this.pendingSettings,patch);await this.session.event({type:'state',state:{pendingSettings:this.pendingSettings}});
       this.onEvent({type:'settings_queued',settings:this.pendingSettings,patch:{...patch}});return;

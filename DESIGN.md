@@ -23,3 +23,10 @@ Shift+Tab toggles PLAN/EXECUTE. /model and account pickers keep focus in the rea
 ## Assets
 
 `assets/psi.svg` is the repository identity: a bevel-tipped Ψ with a restrained extrusion. `assets/psi-wordmark.svg` adds custom geometric PSI lettering. `assets/hero.svg` and its PNG render are the GitHub banner. The terminal preserves its original small shaded mesh and wordmark. `npm run preview:brand` regenerates the vector/PNG assets using an installed browser.
+
+
+## Compact conversation
+
+Long user prompts fold to three preview rows and a small accent disclosure: Full prompt / Hide prompt, with Ctrl+P as the keyboard equivalent. The control stays immediately after the preview when expanded; it preserves the composer draft and scroll anchor. Short prompts remain unchanged. Full prompt text stays in durable history and inference input.
+
+Compact is the default tool-activity presentation. Successful routine exploration and housekeeping consume no chat rows. Errors, interrupted operations, builds/tests, background jobs, deduplicated file-change groups, subagent launches/reports and the final review remain visible. Ctrl+T reveals tool detail and Settings offers Full activity. Settled hidden activity and empty response placeholders are evicted before visible messages in the bounded transcript. No extra model request is made to generate UI summaries or disclose content.

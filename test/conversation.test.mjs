@@ -22,9 +22,9 @@ test('responses use an inline bullet, retain Markdown and streaming content, and
 test('consecutive read and search calls group in place; Ctrl+T reveals results without another model request',async t=>{
  const {ui,terminal,requests}=await setup(t);
  for(const [i,name,args]of[[1,'read',{path:'src/main.cpp'}],[2,'search',{pattern:'budget',path:'src'}],[3,'read',{path:'README.md'}]]){
-  const call={id:String(i),name,arguments:args};ui.event({type:'tool_start',call});assert.match(frame(ui).join('\n'),/Exploring/);ui.event({type:'tool_end',call,duration:100,result:result('private routine file content '+i)});
+  const call={id:String(i),name,arguments:args};ui.event({type:'tool_start',call});assert.doesNotMatch(frame(ui).join('\n'),/Exploring/);ui.event({type:'tool_end',call,duration:100,result:result('private routine file content '+i)});
  }
- assert.equal(ui.transcript.children.length,1);assert.ok(ui.transcript.children[0] instanceof ExplorationGroup);const compact=frame(ui).join('\n');assert.match(compact,/Explored/);assert.match(compact,/Read src\/main.cpp/);assert.match(compact,/Search budget in src/);assert.doesNotMatch(compact,/private routine/);
+ assert.equal(ui.transcript.children.length,1);assert.ok(ui.transcript.children[0] instanceof ExplorationGroup);const compact=frame(ui).join('\n');assert.doesNotMatch(compact,/Explored|Read src\/main.cpp|Search budget in src/);assert.doesNotMatch(compact,/private routine/);
  terminal.input('\x14');assert.match(frame(ui).join('\n'),/private routine file content 1/);terminal.input('\x14');assert.doesNotMatch(frame(ui).join('\n'),/private routine/);assert.equal(requests.length,0);
  ui.markdown('The baseline is unchanged.');const call={id:'4',name:'read',arguments:{path:'next.cpp'}};ui.event({type:'tool_start',call});assert.equal(ui.transcript.children.length,3);ui.event({type:'tool_end',call,result:result('next')});
 });
@@ -35,7 +35,7 @@ test('command output, failures, edits and background identities stay explicit an
  ui.event({type:'tool_end',call:command,duration:1234,result:result(JSON.stringify({id:'job-1',status:'failed',exitCode:1,output:Array.from({length:12},(_,i)=>'test line '+i).join('\n')}),true)});
  const compact=frame(ui).join('\n');assert.match(compact,/Ran npm test.*failed/);assert.match(compact,/job job-1.*failed.*exit 1/);assert.match(compact,/ctrl\+t/);assert.doesNotMatch(compact,/test line 11/);
  terminal.input('\x14');assert.match(frame(ui).join('\n'),/test line 11/);terminal.input('\x14');
- const edit={id:'edit',name:'edit',arguments:{path:'src/bot.cpp',old:'return 0;',new:'return 1;'}};ui.event({type:'tool_start',call:edit});ui.event({type:'tool_end',call:edit,result:result('Updated 1 match(es)')});assert.match(frame(ui).join('\n'),/Edited src\/bot.cpp/);assert.match(frame(ui).join('\n'),/- return 0;/);assert.match(frame(ui).join('\n'),/\+ return 1;/);
+ const edit={id:'edit',name:'edit',arguments:{path:'src/bot.cpp',old:'return 0;',new:'return 1;'}};ui.event({type:'tool_start',call:edit});ui.event({type:'tool_end',call:edit,result:result('Updated 1 match(es)')});assert.match(frame(ui).join('\n'),/Updated src\/bot.cpp/);assert.doesNotMatch(frame(ui).join('\n'),/- return 0;/);terminal.input('\x14');assert.match(frame(ui).join('\n'),/Edited src\/bot.cpp/);terminal.input('\x14');
  const background={id:'bg',name:'bash',arguments:{command:'run sweep'}};ui.event({type:'tool_start',call:background});ui.event({type:'tool_end',call:background,result:result(JSON.stringify({id:'sweep-1',status:'running',output:'Started'}))});assert.match(frame(ui).join('\n'),/job sweep-1.*running/);
  for(const columns of[28,68,100]){terminal.resize(columns,32);frame(ui);assert.ok(ui.tui.getScreenLines().every(l=>visibleWidth(l)<=columns));}
 });
@@ -52,9 +52,9 @@ test('finished subagents hide immediately while active overflow and saved worker
  for(let i=0;i<4;i++)ui.event({type:'agent_status',agent:{id:'worker-'+i,name:'Audit '+i,model:'fixture/test',status:'running'}});
  assert.match(frame(ui).join('\n'),/Other tasks.*4 active.*\+3/);
  ui.event({type:'agent_finished',agent:{id:'worker-0',name:'Audit 0',model:'fixture/test',status:'completed'}});
- let screen=frame(ui).join('\n');assert.doesNotMatch(screen,/Audit 0/);assert.match(screen,/Audit 3/);assert.equal(ui.workerRows.has('worker-0'),false);
+ let screen=frame(ui).join('\n');assert.doesNotMatch(ui.subagentBar.render(100).map(stripTerminalSequences).join('\n'),/Audit 0/);assert.match(screen,/Subagent report Audit 0/);assert.match(screen,/Audit 3/);assert.equal(ui.workerRows.has('worker-0'),false);
  for(const [i,status]of[[1,'failed'],[2,'cancelled'],[3,'completed']])ui.event({type:'agent_finished',agent:{id:'worker-'+i,name:'Audit '+i,model:'fixture/test',status}});
- assert.equal(ui.subagentBar.render(100).length,0);assert.doesNotMatch(frame(ui).join('\n'),/Audit [0-3]/);assert.equal(ui.workerRows.size,0);
+ assert.equal(ui.subagentBar.render(100).length,0);assert.doesNotMatch(ui.subagentBar.render(100).join('\n'),/Audit [0-3]/);assert.equal(ui.workerRows.size,0);
  ui.event({type:'agent_started',agent:{id:'worker-0',name:'Follow-up audit',model:'fixture/test',status:'running'}});assert.match(frame(ui).join('\n'),/Follow-up audit/);
 });
 

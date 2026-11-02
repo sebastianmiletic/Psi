@@ -53,7 +53,7 @@ export async function withLock(path, fn, { signal, timeout = 60_000 } = {}) {
 export const defaults = {
   model: 'openai-codex/gpt-5.6-sol', subagentModel: 'openai-codex/gpt-5.6-sol', effort: 'medium', profile: 'battlecode',
   maxSteps: 0, budget: 0, maxOutputTokens: 8192, contextFraction: 0.72,
-  toolOutputChars: 16000, concurrency: 4, retries: 4, cacheRetention: 'long',
+  toolOutputChars: 16000, toolActivity:'compact', concurrency: 4, retries: 4, cacheRetention: 'long',
   debug: true, customProviders: [], accent: 'sage', showLogo: true, animations: true,
   autoSwitchAccounts: false, accountSwitchThreshold: 100, quotaRefreshSeconds: 15,
   fallbackModels: [], loopRetrySeconds: 30, showUsage: true, customPrices: {},

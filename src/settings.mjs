@@ -16,6 +16,7 @@ export const settingItems = [
   {id:'model',label:'Model',special:'model'},{id:'effort',label:'Effort',special:'effort'},
   {id:'summaryModel',label:'Compaction model',description:'Provider/model, or same'},
   {id:'maxOutputTokens',label:'Output tokens',number:[256,128000]},
+  {id:'toolActivity',label:'Tool activity',values:['compact','full']},
   {id:'toolOutputChars',label:'Tool preview',number:[1000,100000]},
   {id:'concurrency',label:'Parallel read tools',number:[1,32]},
   {id:'cacheRetention',label:'Prompt cache',values:['short','long','none']},

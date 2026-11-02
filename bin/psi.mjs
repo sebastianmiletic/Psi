@@ -50,7 +50,8 @@ Usage: psi [options] [prompt]
   -v, --version             Show version
 
 Interactive: /model /effort /accounts /directory /settings /subagents /loop /name /help
-Shift+Tab: plan/execute. Escape twice: stop. Enter while busy: queue.
+Shift+Tab: plan/execute. Ctrl+P: expand prompt. Ctrl+T: tool details.
+Escape twice: stop. Enter while busy: queue. psi --new: separate chat.
 Tools stay within approved directories, without approval prompts.
 Settings and credentials: PSI_HOME (default ~/.psi)
 `;
