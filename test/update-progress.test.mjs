@@ -32,7 +32,7 @@ test('unknown download lengths stay unknown and failed or oversized downloads le
 
 test('update bar uses saved accent and OVERKILL flow while remaining readable at narrow widths',()=>{
  let now=0;const output=stream(),config={accent:'violet',overkill:true},progress=new UpdateProgress(config,{stream:output,env:{},now:()=>now});
- progress.event({phase:'downloading',version:'9.0.0',received:640000,total:1000000});const a=progress.lines(76).join('\n');assert.match(stripTerminalSequences(a),/OVERKILL/);assert.match(stripTerminalSequences(a),/64%/);assert.match(stripTerminalSequences(a),/640 KB \/ 1.0 MB/);assert.match(stripTerminalSequences(a),/█/);
+ progress.event({phase:'downloading',version:'9.0.0',received:640000,total:1000000});const a=progress.lines(76).join('\n');assert.doesNotMatch(stripTerminalSequences(a),/OVERKILL|Preview/);assert.match(stripTerminalSequences(a),/64%/);assert.match(stripTerminalSequences(a),/640 KB \/ 1.0 MB/);assert.match(stripTerminalSequences(a),/█/);
  const color=accentColor(config);assert.ok(a.includes(`38;2;${color.r};${color.g};${color.b}`));now=700;assert.notEqual(progress.lines(76).join('\n'),a);
  for(const width of[12,20,40,76])assert.ok(progress.lines(width).every(line=>visibleWidth(line)<width));
  progress.event({phase:'installing',received:0,total:null});assert.doesNotMatch(stripTerminalSequences(progress.lines(76).join('\n')),/\d+%/);progress.stop();
@@ -72,11 +72,22 @@ test('success leaves the completed bar in terminal scrollback and current checks
 
 test('explicit preview displays the saved theme and stages without contacting or installing a release',async t=>{
  const home=await dir(t),display=stream(),out=stream(false);await atomicJSON(join(home,'installation.json'),{version:'0.0.1'});const before=await readFile(join(home,'installation.json'),'utf8');let waits=0;
- const result=await previewUpdate(home,{accent:'rose',overkill:true},{stream:display,output:out,env:{},pause:async()=>{waits++;}});assert.equal(result.preview,true);assert.equal(result.updated,false);assert.ok(waits>0);assert.match(stripTerminalSequences(display.text),/Preview/);assert.match(stripTerminalSequences(display.text),/Downloading/);assert.match(stripTerminalSequences(display.text),/100%/);assert.match(out.text,/No update was installed/);assert.equal(await readFile(join(home,'installation.json'),'utf8'),before);assert.equal(await stat(join(home,'update.lock')).catch(()=>null),null);
+ const result=await previewUpdate(home,{accent:'rose',overkill:true},{stream:display,output:out,env:{},pause:async()=>{waits++;}});assert.equal(result.preview,true);assert.equal(result.updated,false);assert.ok(waits>0);assert.doesNotMatch(stripTerminalSequences(display.text),/Preview|OVERKILL/);assert.match(stripTerminalSequences(display.text),/Downloading/);assert.match(stripTerminalSequences(display.text),/100%/);assert.equal(out.text,'');assert.equal(await readFile(join(home,'installation.json'),'utf8'),before);assert.equal(await stat(join(home,'update.lock')).catch(()=>null),null);
 });
 
 test('the actual CLI preview is repeatable and preserves installed state without release lookup',async t=>{
  const home=await dir(t),state={root:join(home,'app'),version:'0.0.1'};await atomicJSON(join(home,'installation.json'),state);
  const cli=fileURLToPath(new URL('../bin/psi.mjs',import.meta.url));let out='',error='';const child=spawn(process.execPath,[cli,'update','--preview','--json'],{env:{...process.env,PSI_HOME:home},stdio:['ignore','pipe','pipe']});child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>error+=b);
  const code=await new Promise((accept,reject)=>{child.once('exit',accept);child.once('error',reject);});assert.equal(code,0,error);assert.equal(JSON.parse(out).preview,true);assert.equal(error,'');assert.deepEqual(await readJSON(join(home,'installation.json')),state);assert.equal(await stat(join(home,'update-check.json')).catch(()=>null),null);assert.equal(await stat(join(home,'update.lock')).catch(()=>null),null);
+});
+
+test('download fill and meter width stay stable across percentages and subsequent installation stages',()=>{
+ const display=stream(),p=new UpdateProgress({accent:'cyan',overkill:true},{stream:display,env:{},now:()=>0});
+ const meter=width=>stripTerminalSequences(p.lines(width)[2]).match(/[█░─]+/)[0];
+ for(const width of[24,36,76]){
+  let size;
+  for(const received of[0,9,10,50,99,100]){p.event({phase:'downloading',received,total:100});const bar=meter(width);size??=bar.length;assert.equal(bar.length,size);assert.equal([...bar].filter(c=>c==='█').length,Math.floor(size*received/100));}
+  for(const phase of['verifying','extracting','installing','activating']){p.event({phase});assert.equal(meter(width),'█'.repeat(size));assert.doesNotMatch(stripTerminalSequences(p.lines(width).join('\n')),/\d+%/);}
+ }
+ p.stop();
 });

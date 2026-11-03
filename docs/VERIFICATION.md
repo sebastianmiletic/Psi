@@ -252,3 +252,9 @@ Actual API invoices and real competition transactions were not exercised in this
 - Read-only diagnostics in the user's Termatica shell confirmed both output streams are TTYs and TERM=xterm-256color. Saved cyan, OVERKILL and animation settings were enabled. The laptop had just installed 0.2.29 using the preceding updater version.
 - The new preview was run inside a separate Termatica window using the user's saved theme. Native screenshots verified the moving download display and the retained cyan 100% completion bar. No release lookup, installation or provider request occurred. The temporary diagnostic window was closed; the original terminal/shell processes remained running.
 - Actual updates still add no animation delay. `psi update --preview` is an explicitly labelled local simulation for checking the visual effect immediately.
+
+## 0.2.31 — stable minimal update meter
+
+- All 215 local tests passed. A new regression checks that meter width is unchanged at 0, 9, 10, 50, 99 and 100 percent across narrow/wide terminals, and completed download fill survives verification, unpacking, installation and activation.
+- The meter reserves a fixed percentage field and no longer replaces completed downloads with a moving block during later stages. The chosen accent and optional flow remain; the Preview/OVERKILL labels and preview completion sentence are removed from the human display. JSON retains explicit preview metadata.
+- The revised display was checked in native Termatica with saved cyan/OVERKILL settings. The final screen showed only Ψ/version, Ready and the full meter, without the removed labels or extra sentence. The preview still performs no release lookup, installation or provider request.
