@@ -26,7 +26,7 @@ Usage: psi [options] [prompt]
        psi sessions
        psi jobs [id] | psi jobs stop <id>
        psi bench <manifest.json>
-       psi update [--check]
+       psi update [--check | --preview]
        psi storage compact|export <session-id>
        psi accounts import-pi --account <name> [--account <name>]
        psi doctor
@@ -61,7 +61,7 @@ try {
     help: { type: 'boolean', short: 'h' }, version: { type: 'boolean', short: 'v' }, cwd: { type: 'string', short: 'C' },
     print: { type: 'string', short: 'p' }, model: { type: 'string', short: 'm' }, effort: { type: 'string' }, budget: { type: 'string' },new:{type:'boolean'},
     'max-steps': { type: 'string' }, tokens: { type: 'string' }, loop: { type: 'string' }, resume: { type: 'string' }, continue: { type: 'boolean' },
-    mode:{type:'string'},overkill:{type:'boolean'},check:{type:'boolean'},account:{type:'string',multiple:true},'pi-file':{type:'string'},
+    mode:{type:'string'},overkill:{type:'boolean'},check:{type:'boolean'},preview:{type:'boolean'},account:{type:'string',multiple:true},'pi-file':{type:'string'},
     profile: { type: 'string' }, json: { type: 'boolean' }, 'no-debug': { type: 'boolean' },
     provider: { type: 'string' }, name: { type: 'string' }, 'key-env': { type: 'string' }, id: { type: 'string' }, url: { type: 'string' }, api: { type: 'string' }, keyless: { type: 'boolean' },
   } });
@@ -79,8 +79,9 @@ try {
     process.exit(0);
   }
   if(positionals[0]==='update'){
+    if(v.check&&v.preview)throw new Error('Use --check or --preview.');
     if(v.check)console.log(JSON.stringify(await checkUpdate(home,{force:true}),null,2));
-    else{const {updateWithProgress}=await import('../src/update-progress.mjs');await updateWithProgress(home,{...config,...(v.overkill?{overkill:true}:{})},{json:!!v.json});}
+    else{const {updateWithProgress,previewUpdate}=await import('../src/update-progress.mjs');await (v.preview?previewUpdate:updateWithProgress)(home,{...config,...(v.overkill?{overkill:true}:{})},{json:!!v.json});}
     process.exit(0);
   }
   if(v.mode){if(!['plan','execute'].includes(v.mode))throw new Error('Use --mode plan or --mode execute.');config.agentMode=v.mode;}if(v.overkill)config.overkill=true;

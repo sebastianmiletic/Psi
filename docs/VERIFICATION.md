@@ -245,3 +245,10 @@ Actual API invoices and real competition transactions were not exercised in this
 - The updater reuses the composer's accent-wave implementation, caps animation at 12.5 fps, and adds no artificial waiting period. Known download lengths produce actual percentages; installation and unknown-length work remain indeterminate.
 - A real pseudo-terminal smoke test streamed a 1,049,955-byte archive into a private fixture installation, ran native tar and npm ci, and activated fixture version 9.0.0. The capture confirmed animated OVERKILL output, download/installation stages, completion and successful exit. No user installation or paid model request was involved.
 - Real renderer frames were inspected in sage, cyan OVERKILL and narrow rose layouts. The old caller continues using its existing display while installing this release; subsequent `psi update` runs use the new screen.
+
+## 0.2.30 — visible updater completion and local preview
+
+- All 214 local tests passed. Regressions cover retaining a completed/failed terminal panel, showing an honest up-to-date status without a download percentage, a local visual preview that preserves installed state, actual CLI preview parsing, and clean JSON output with a TTY.
+- Read-only diagnostics in the user's Termatica shell confirmed both output streams are TTYs and TERM=xterm-256color. Saved cyan, OVERKILL and animation settings were enabled. The laptop had just installed 0.2.29 using the preceding updater version.
+- The new preview was run inside a separate Termatica window using the user's saved theme. Native screenshots verified the moving download display and the retained cyan 100% completion bar. No release lookup, installation or provider request occurred. The temporary diagnostic window was closed; the original terminal/shell processes remained running.
+- Actual updates still add no animation delay. `psi update --preview` is an explicitly labelled local simulation for checking the visual effect immediately.

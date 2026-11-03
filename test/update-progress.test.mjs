@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile,stat,writeFile,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {spawn} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {stripTerminalSequences,visibleWidth} from '@earendil-works/pi-tui';
 import {download,updateInstallation,version} from '../src/updates.mjs';
-import {UpdateProgress,updateWithProgress} from '../src/update-progress.mjs';
+import {UpdateProgress,updateWithProgress,previewUpdate} from '../src/update-progress.mjs';
 import {accentColor} from '../src/theme.mjs';
 import {atomicJSON,readJSON} from '../src/storage.mjs';
 const url='https://github.com/sebastianmiletic/Psi/releases/download/v9.0.0/psi-v9.0.0.tar.gz';
@@ -44,13 +46,13 @@ test('reduced motion is static, starts no timer, and cleans up its owned termina
 test('animation is bounded, never adds waiting time and stops on failure',async()=>{
  const output=stream();let tick,cleared=0,interval;
  const progress=new UpdateProgress({overkill:true},{stream:output,env:{},setIntervalImpl:(fn,ms)=>{tick=fn;interval=ms;return{unref(){}};},clearIntervalImpl:()=>cleared++});progress.start();assert.equal(interval,80);tick();progress.stop();assert.equal(cleared,1);
- const errorStream=stream();await assert.rejects(updateWithProgress('/unused',{accent:'cyan'},{stream:errorStream,env:{},output:stream(false),update:async(_,options)=>{options.onProgress({phase:'installing'});throw Error('Install failed');}}),/Install failed/);assert.match(errorStream.text,/Installing/);assert.ok(errorStream.text.endsWith('\x1b[2A\r'));
+ const errorStream=stream();await assert.rejects(updateWithProgress('/unused',{accent:'cyan'},{stream:errorStream,env:{},output:stream(false),update:async(_,options)=>{options.onProgress({phase:'installing'});throw Error('Install failed');}}),/Install failed/);assert.match(errorStream.text,/Installing/);assert.match(errorStream.text,/Update failed/);assert.ok(errorStream.text.endsWith('\n'));
 });
 
 test('redirected output has concise plain stages, JSON stays machine readable, and NO_COLOR removes colour',async()=>{
  const output=stream(false),messages=stream(false);const update=async(_,options)=>{for(const phase of['checking','downloading','downloading','installing','done'])options.onProgress({phase,received:50,total:100});return{updated:true,message:'Updated to 9.0.0. Restart Psi.'};};
  await updateWithProgress('/unused',{overkill:true},{stream:output,output:messages,env:{},update});assert.doesNotMatch(output.text,/\x1b/);assert.equal(output.text.split('Downloading').length-1,1);assert.match(messages.text,/Updated to 9.0.0/);
- const jsonOut=stream(false),jsonStatus=stream();await updateWithProgress('/unused',{}, {stream:jsonStatus,output:jsonOut,json:true,update});assert.equal(jsonStatus.text,'');assert.equal(JSON.parse(jsonOut.text).updated,true);
+ const jsonOut=stream(false),jsonStatus=stream();await updateWithProgress('/unused',{}, {stream:jsonStatus,output:jsonOut,json:true,env:{},update});assert.equal(jsonStatus.text,'');assert.equal(JSON.parse(jsonOut.text).updated,true);
  const plain=new UpdateProgress({accent:'rose',overkill:true},{stream:stream(),env:{NO_COLOR:'1'}});assert.doesNotMatch(plain.lines().join('\n'),/\x1b/);
  const dumb=new UpdateProgress({}, {stream:stream(),env:{TERM:'dumb'}});dumb.start();dumb.event({phase:'checking'});dumb.stop();assert.doesNotMatch(dumb.stream.text,/\x1b/);
 });
@@ -60,4 +62,21 @@ test('complete staged updates emit phases in order, preserve rollback, and progr
  const runImpl=async(command,args)=>{if(command==='git')throw Error('Not a checkout');if(command==='tar'){const target=args[args.indexOf('-C')+1];await mkdir(join(target,'bin'));await atomicJSON(join(target,'package.json'),{version:'9.0.0'});await writeFile(join(target,'bin','psi.mjs'),'// fixture');}return'';};
  const result=await updateInstallation(home,{root,release,runImpl,downloadImpl:async(_,path,options)=>{assert.equal(options.expectedBytes,100);options.onProgress({received:50,total:100});return hash;},onProgress:e=>{events.push(e);if(e.phase==='verifying')throw Error('Renderer failed');}});assert.equal(result.updated,true);assert.equal((await readJSON(join(home,'installation.json'))).version,'9.0.0');
  const phases=events.map(e=>e.phase);for(const phase of['checking','downloading','verifying','extracting','installing','activating','done'])assert.ok(phases.includes(phase));assert.ok(phases.indexOf('verifying')<phases.indexOf('activating'));assert.equal(events.find(e=>e.phase==='downloading'&&e.received===50).total,100);
+});
+
+test('success leaves the completed bar in terminal scrollback and current checks do not invent a download',async()=>{
+ const display=stream(),out=stream(false);await updateWithProgress('/unused',{accent:'cyan',overkill:true},{stream:display,output:out,env:{},update:async(_,options)=>{options.onProgress({phase:'installing'});return{updated:true,message:'Updated to 9.0.0.'};}});
+ assert.match(display.text,/100%/);assert.ok(display.text.endsWith('\n'));assert.match(stripTerminalSequences(display.text),/Ready/);assert.doesNotMatch(display.text.slice(display.text.lastIndexOf('Ready')),/\x1b\[2A\r$/);
+ const current=stream();await updateWithProgress('/unused',{}, {stream:current,output:stream(false),env:{},update:async()=>({updated:false,message:'Already current.'})});assert.match(stripTerminalSequences(current.text),/Up to date/);assert.doesNotMatch(stripTerminalSequences(current.text),/100%/);
+});
+
+test('explicit preview displays the saved theme and stages without contacting or installing a release',async t=>{
+ const home=await dir(t),display=stream(),out=stream(false);await atomicJSON(join(home,'installation.json'),{version:'0.0.1'});const before=await readFile(join(home,'installation.json'),'utf8');let waits=0;
+ const result=await previewUpdate(home,{accent:'rose',overkill:true},{stream:display,output:out,env:{},pause:async()=>{waits++;}});assert.equal(result.preview,true);assert.equal(result.updated,false);assert.ok(waits>0);assert.match(stripTerminalSequences(display.text),/Preview/);assert.match(stripTerminalSequences(display.text),/Downloading/);assert.match(stripTerminalSequences(display.text),/100%/);assert.match(out.text,/No update was installed/);assert.equal(await readFile(join(home,'installation.json'),'utf8'),before);assert.equal(await stat(join(home,'update.lock')).catch(()=>null),null);
+});
+
+test('the actual CLI preview is repeatable and preserves installed state without release lookup',async t=>{
+ const home=await dir(t),state={root:join(home,'app'),version:'0.0.1'};await atomicJSON(join(home,'installation.json'),state);
+ const cli=fileURLToPath(new URL('../bin/psi.mjs',import.meta.url));let out='',error='';const child=spawn(process.execPath,[cli,'update','--preview','--json'],{env:{...process.env,PSI_HOME:home},stdio:['ignore','pipe','pipe']});child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>error+=b);
+ const code=await new Promise((accept,reject)=>{child.once('exit',accept);child.once('error',reject);});assert.equal(code,0,error);assert.equal(JSON.parse(out).preview,true);assert.equal(error,'');assert.deepEqual(await readJSON(join(home,'installation.json')),state);assert.equal(await stat(join(home,'update-check.json')).catch(()=>null),null);assert.equal(await stat(join(home,'update.lock')).catch(()=>null),null);
 });
