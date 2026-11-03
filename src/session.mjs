@@ -3,6 +3,7 @@ import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import {TranscriptHistory} from './transcript-history.mjs';
 import { privateDir, atomicJSON,cleanTerminal, readJSON, psiHome, withLock, durableJournalSize, alive } from './storage.mjs';
 
 const meaningful=m=>!m?.internal&&['user','assistant'].includes(m?.role)&&(typeof m.content==='string'?!!m.content.trim():Array.isArray(m.content)&&m.content.some(c=>c.type==='image'||c.type==='text'&&c.text?.trim()));
@@ -16,7 +17,7 @@ export class Session {
     this.accountTotals = {}; this.meteredCost = 0; this.meteredCostKnown = true;
     this.seenUsage=new Set();
     this.state = {}; this.status = 'idle'; this.journalSize = 0; this.writeChain=Promise.resolve();
-    this.streaming=null;
+    this.streaming=null;this.transcript=new TranscriptHistory();
   }
   static path(home,id,parentSession){
     if(!/^(?!\.{1,2}$)[\w.-]+$/.test(id)||parentSession&&!/^(?!\.{1,2}$)[\w.-]+$/.test(parentSession))throw new Error('Invalid session ID.');
@@ -113,6 +114,7 @@ export class Session {
     if (event.type === 'state') Object.assign(this.state, event.state);
     if(event.type==='request_metrics')this.state.requestPrefixes={...this.state.requestPrefixes,[event.route+':'+event.purpose]:event.prefixHash};
     if (event.type === 'status') this.status = event.status;
+    this.transcript.observe(event,this.state);
   }
   async event(event) {
     return this.enqueue(async()=>{
@@ -128,7 +130,8 @@ export class Session {
   async flush(){await this.writeChain;}
   async markActive(){if(!this.meta.parentSession&&this.meta.hasMessages)await atomicJSON(join(this.home,'last-session.json'),{id:this.meta.id,cwd:this.meta.cwd,at:new Date().toISOString()});}
   visibleConversation(){return this.streaming?.text?[...this.conversation,{role:'assistant',partial:true,content:[{type:'text',text:this.streaming.text}],timestamp:this.streaming.timestamp}]:this.conversation;}
-  rememberVisible(message){this.conversation.push(message);if(this.conversation.length>100)this.conversation.shift();}
+  transcriptView(){return this.transcript.view(this.streaming);}
+  rememberVisible(message){this.transcript.message(message);this.conversation.push(message);if(this.conversation.length>100)this.conversation.shift();}
   async saveMeta(){this.meta.draft=!(this.meta.hasMessages&&titled(this.meta));await atomicJSON(join(this.dir,'meta.json'),this.meta);}
   async message(message,{requestId}={}) {
     const hadMessages=this.meta.hasMessages;

@@ -164,6 +164,8 @@ export class TerminalUI {
   }
   note(text,isError=false){const body=new Text(safe(text),0,0);this.transcript.addChild({invalidate(){body.invalidate();},render:width=>[...body.render(Math.max(1,width-2)).map((line,i)=>truncateToWidth((i===0?(isError?error('• '):dim('• ')):'  ')+(isError?error(line):dim(line)),width)),'']});this.render();}
   activityLines(width){
+    const state=this.app.session.state;
+    if(!this.pending&&state.loopStatus==='waiting'&&state.waitingFor){const label=this.app.engine.waiting?'Waiting':'Paused';return[truncateToWidth(dim('• '+label+' · '+safe(state.waitingFor)+' · /accounts'),width)];}
     if(this.pending||this.response?.text||!this.response?.active&&!this.openTools.size&&!this.app.engine.busy)return[];
     const phase=this.response?.phase==='compacting context'?'Compacting context':this.openTools.size?'Working':'Thinking';
     const mark=this.app.engine.config.animations===false?'•':['·','•','●','•'][Math.floor(this.now()/240)%4];
@@ -174,6 +176,23 @@ export class TerminalUI {
     if(['write','edit'].includes(tool.call.name)){if(last instanceof FileChanges&&last.tools.length<100)last.add(tool);else this.transcript.addChild(new FileChanges(this,tool));return;}
     if(exploration(tool.call)&&last instanceof ExplorationGroup&&last.tools.length<20)last.add(tool);
     else this.transcript.addChild(exploration(tool.call)?new ExplorationGroup(this,tool):tool);
+  }
+  restoreHistory(entries){
+    for(const entry of entries){
+      if(entry.kind==='message'){
+        const m=entry.message;
+        if(m.role==='user')this.user(m.content,{animate:false});
+        else this.markdown(m.content+(m.partial?'\n\n_Interrupted response · saved text recovered._':''));
+      }
+      if(entry.kind==='tool'){
+        const tool=new ToolMessage(this,{call:entry.call});tool.historical=true;
+        if(entry.result)tool.finish({result:entry.result});else tool.interrupt();
+        this.addTool(tool);
+      }
+      if(entry.kind==='worker')this.transcript.addChild(new SubagentNotice(this,entry.event));
+      if(entry.kind==='progress'){this.note(entry.update);if(entry.mode==='plan'&&entry.steps.length)this.markdown(entry.steps.map((s,i)=>`${i+1}. ${s.title}`).join('\n'),false);}
+    }
+    this.scroll.scrollToEnd();this.render();
   }
   user(text,options) { this.lastUser=new UserMessage(this,text,options);this.transcript.addChild(this.lastUser);if(options?.animate!==false){this.scroll.scrollToEnd();this.syncMotion();}this.render(); }
   markdown(text, label = true) {

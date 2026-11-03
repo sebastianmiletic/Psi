@@ -334,3 +334,10 @@ Long prompts show three preview rows with a clickable Full prompt disclosure. Cl
 The default compact activity view hides successful reads, searches, simple shell inspections and housekeeping. It keeps failures, interrupted operations, builds/tests, durable background jobs, grouped file changes, subagent launches/reports and the final review visible. Ctrl+T reveals retained tool details without inference; Settings > Tool activity selects compact or full. Full durable tool records remain in session journals/artifacts. Hiding rows does not itself reduce provider token usage.
 
 Bare `psi` still resumes the saved chat when available. If that chat is open in another terminal or holds a live inference lock, a second implicit launch starts a new chat in its own working directory. `psi --new` always requests a separate chat. Explicit `--resume` or `--continue` refuses a busy chat with an actionable message, preserving single-writer guarantees. Interactive ownership is held for the lifetime of the UI, including idle periods, released on close/chat switch and recovered after an owner process dies.
+
+
+## Restoring recent activity (0.2.26)
+
+Reopening rebuilds recent user/assistant text, important tools and file changes, progress and delivered subagent reports from the existing durable journal. The visible transcript is independent of the compacted model context, so model compaction cannot hide the saved chat on startup. Historical tools are rendered as receipts and never re-executed. Recorded running job states are labelled "at save" rather than asserted to be current. The full source journal remains intact; the in-memory activity view is bounded and preferentially evicts routine successful tools.
+
+A saved task waiting for an account or quota reset reopens with its latest input and a Paused row showing the saved reason. Reopening does not automatically spend inference or manufacture a new reply. Use `/accounts` to inspect accounts, then send an instruction when ready to resume.

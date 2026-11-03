@@ -88,15 +88,19 @@ export class App {
       if(this.session.state.composerDraft)this.ui.editor.setText(this.session.state.composerDraft);
       this.ui.render();
       if(this.engine.config.checkForUpdates){void this.checkUpdates({force:true});this.updateTimer=setInterval(()=>void this.checkUpdates(),3600000);this.updateTimer.unref();}
-      if (this.session.messages.length) {this.ui.note(`Resumed ${this.session.meta.id}. ${this.session.messages.length} context messages.`);this.showHistory();}
+      if (this.session.meta.hasMessages||this.session.visibleConversation().length) this.showHistory();
     } catch(error) {
       this.ui?.stop();await this.close({preserveSession:true}).catch(()=>{});throw error;
     }
   }
-  showHistory(){for(const m of this.session.visibleConversation()){
-    if(m.role==='user')this.ui.user(typeof m.content==='string'?m.content:'[Attached content]',{animate:false});
-    if(m.role==='assistant'){const text=typeof m.content==='string'?m.content:m.content.filter(c=>c.type==='text').map(c=>c.text).join('\n');if(text)this.ui.markdown(text+(m.partial?'\n\n_Interrupted response · saved text recovered._':''));}
-  }for(const text of this.session.state.queuedMessages||[])this.ui.user(text,{animate:false});this.ui?.scroll?.scrollToEnd();}
+  showHistory(){
+    if(this.ui.restoreHistory&&this.session.transcriptView)this.ui.restoreHistory(this.session.transcriptView());
+    else for(const m of this.session.visibleConversation()){
+      if(m.role==='user')this.ui.user(typeof m.content==='string'?m.content:'[Attached content]',{animate:false});
+      if(m.role==='assistant'){const text=typeof m.content==='string'?m.content:m.content.filter(c=>c.type==='text').map(c=>c.text).join('\n');if(text)this.ui.markdown(text+(m.partial?'\n\n_Interrupted response · saved text recovered._':''));}
+    }
+    for(const text of this.session.state.queuedMessages||[])this.ui.user(text,{animate:false});this.ui?.scroll?.scrollToEnd();
+  }
   startUsageMonitor() {
     clearInterval(this.quotaTimer);this.quotaController?.abort();if(this.closing)return;this.quotaController=new AbortController();
     if(this.activeAccount?.type!=='oauth')return;

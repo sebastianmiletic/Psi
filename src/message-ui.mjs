@@ -1,3 +1,5 @@
+import { importantTool } from './activity-kind.mjs';
+export { importantTool } from './activity-kind.mjs';
 import { Editor, Markdown, Text, truncateToWidth, visibleWidth, sliceByColumn, stripTerminalSequences } from '@earendil-works/pi-tui';
 import { accentColor } from './theme.mjs';
 import { cleanTerminal, redact } from './storage.mjs';
@@ -70,21 +72,6 @@ export class UserMessage {
   }
 }
 export const toolDetails=ui=>ui.expandedTools??(ui.app.engine.config.toolActivity==='full');
-export function importantTool(tool){
-  if(tool.failed||tool.interrupted)return true;
-  const name=tool.call.name,a=tool.call.arguments||{};
-  if(name==='agent')return false;
-  if(name==='bash'){
-    if(tool.duration>=5000||['running','queued','timed_out','failed'].includes(tool.outcome))return true;
-    const command=String(a.command||'');
-    if(/[><`]|\$\(/.test(command))return true;
-    const inspections=command.split(/[\n;&|]+/).map(p=>p.trim()).filter(Boolean);
-    return !inspections.length||!inspections.every(p=>/^(?:pwd|ls|find|rg|grep|sed|head|tail|cat|wc|stat|du|file|git\s+(?:status|diff|log|show|rev-parse))\b/.test(p));
-  }
-  if(name==='job')return a.action==='stop'||['running','queued'].includes(tool.outcome);
-  if(name==='browser')return ['evaluate','screenshot'].includes(a.action);
-  return !['read','search','fetch','search_web','battlecode_inspect','checkpoint','progress','session_title'].includes(name);
-}
 export class AssistantMessage {
   constructor(ui,text='',phase=''){this.ui=ui;this.phase=phase;this.active=!!phase;this.text=text;this.started=ui.now();this.body=new Markdown(safe(text),0,0,ui.markdownTheme);}
   setText(text){this.text=text;this.body.setText(safe(text));}
@@ -143,7 +130,7 @@ export class ToolMessage {
   }
   outputLines(width,{nested=false}={}){
     const lines=[],prefix=nested?'    ':'  ',expanded=toolDetails(this.ui);
-    if(this.jobId&&(expanded||this.failed||this.interrupted||['running','queued'].includes(this.outcome)))lines.push(truncateToWidth(prefix+dim(`└ job ${this.jobId} · ${this.outcome||'unknown'}${this.exitCode!==undefined?' · exit '+this.exitCode:''}`),width));
+    if(this.jobId&&(expanded||this.failed||this.interrupted||['running','queued'].includes(this.outcome)))lines.push(truncateToWidth(prefix+dim(`└ job ${this.jobId} · ${this.outcome||'unknown'}${this.historical&&['running','queued'].includes(this.outcome)?' at save':''}${this.exitCode!==undefined?' · exit '+this.exitCode:''}`),width));
     const show=expanded||this.failed||this.interrupted;
     if(show&&this.output){
       const all=this.output.split('\n'),limit=expanded?20:this.failed?5:3;

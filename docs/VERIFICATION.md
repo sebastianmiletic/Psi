@@ -218,3 +218,10 @@ Actual API invoices and real competition transactions were not exercised in this
 - Concurrency tests cover live inference locks, two separate interactive apps making simultaneous fixture requests, atomic startup reservation, real owner-process termination, session switching/reload, empty active-chat protection and cleanup. UI ownership is independent of the existing run lock; that lock is retained.
 - All 182 local tests pass. A real two-terminal pseudo-TTY check opened separate chats in the same workspace, expanded the prompt with Ctrl+P, and quit both processes cleanly without a lock collision or paid model request.
 - These changes make no claim of reduced total inference usage. Disclosure and filtering are local rendering operations and preserve task evidence.
+
+
+## Saved conversation reconstruction (0.2.26)
+
+- Cold-reopen tests cover important file changes, progress, delivered worker reports, the latest input, and saved quota-waiting state. They trap tool execution during restore and assert unchanged inference messages and zero provider requests.
+- A chat with an empty compacted inference context still restores its saved visible messages. Bounded history retains visible evidence ahead of routine tools and excludes model thinking/image payloads from the display index.
+- A private copy of the existing Battlecode journal was replayed successfully: recent activity, latest input and paused status appeared together. The original journal was backed up and left unchanged. UI history is a projection of existing durable records; no tool or provider action is replayed.
