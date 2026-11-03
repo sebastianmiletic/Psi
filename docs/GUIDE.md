@@ -51,6 +51,8 @@ Requirements: Node.js 22.19 or newer, `rg` for file search, and your normal buil
 
 Interactive startup checks the latest stable GitHub release in the background, at most once every six hours. An available update appears with `/update` and `psi update` commands. Offline checks stay quiet. `/settings` can disable checks or enable automatic installation; restart Psi after an update.
 
+`psi update` shows a compact animated Ψ header, download bar with actual bytes/percentage, and checking, verification and installation stages. It uses the saved accent and OVERKILL flow, respects animations-off and `NO_COLOR`, and adds no artificial delays. Unknown download sizes and installation work use an activity indicator rather than an invented percentage. Redirected output stays plain; `psi update --json` emits the result as JSON.
+
 `psi update --check` shows the release metadata without installing. Managed installs download and verify the versioned archive, install dependencies in a new release directory, then atomically switch the launcher. Source checkouts verify the origin, refuse local changes, and fast-forward only to the release tag. Accounts, sessions and user settings stay under `~/.psi`.
 
 ## Directories, planning and OVERKILL

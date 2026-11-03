@@ -238,3 +238,10 @@ Actual API invoices and real competition transactions were not exercised in this
 - Normal CLI sessions schedule short-lived background maintenance at startup and periodically; closing or switching a chat schedules a targeted pass after its UI lease is released. Subagent processes do not start their own schedulers. Existing per-session live saving and compression remain unchanged.
 - Maintenance locks identify themselves so reopening waits briefly rather than showing another terminal's busy-chat error or selecting a fresh conversation. Active model/tool jobs are still protected by their normal locks.
 - Windows worker-startup test waiting now uses an eight-second deadline rather than a fixed 150 short timer iterations. The previous release exposed variability in OS child-process startup; all original cancellation and footer assertions remain intact.
+
+## 0.2.29 — themed update progress
+
+- All 211 local tests passed. New coverage checks streaming download hashes/byte counts, missing lengths, incomplete/oversized transfer cleanup, accent colours, OVERKILL flow, narrow terminals, reduced motion, bounded timers, error cleanup, plain output, JSON output and staging/activation progress.
+- The updater reuses the composer's accent-wave implementation, caps animation at 12.5 fps, and adds no artificial waiting period. Known download lengths produce actual percentages; installation and unknown-length work remain indeterminate.
+- A real pseudo-terminal smoke test streamed a 1,049,955-byte archive into a private fixture installation, ran native tar and npm ci, and activated fixture version 9.0.0. The capture confirmed animated OVERKILL output, download/installation stages, completion and successful exit. No user installation or paid model request was involved.
+- Real renderer frames were inspected in sage, cyan OVERKILL and narrow rose layouts. The old caller continues using its existing display while installing this release; subsequent `psi update` runs use the new screen.

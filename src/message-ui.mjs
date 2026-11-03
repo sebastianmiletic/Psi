@@ -1,7 +1,7 @@
 import { importantTool } from './activity-kind.mjs';
 export { importantTool } from './activity-kind.mjs';
 import { Editor, Markdown, Text, truncateToWidth, visibleWidth, sliceByColumn, stripTerminalSequences } from '@earendil-works/pi-tui';
-import { accentColor } from './theme.mjs';
+import { accentColor,accentFlow } from './theme.mjs';
 import { cleanTerminal, redact } from './storage.mjs';
 
 const dim = s => `\x1b[2m${s}\x1b[22m`;
@@ -20,13 +20,7 @@ export function flowAccent(text,ui,offset=0){
   if(ui.app.engine.config.animations===false)return ui.paint(text);
   const config=ui.app.engine.config,key=config.accent||'sage';
   if(!colors.has(key)){if(colors.size>=16)colors.clear();colors.set(key,accentColor(config));}
-  const {r,g,b}=colors.get(key);let output='',last=-1;
-  for(const [i,c]of Array.from(text).entries()){
-    const bucket=Math.round((0.5+0.5*Math.sin((i+offset)/11-ui.now()/850))*15);
-    if(bucket!==last){const strength=0.75+Math.pow(bucket/15,2)*0.45;output+=`\x1b[38;2;${[r,g,b].map(n=>Math.min(255,Math.round(n*strength))).join(';')}m`;last=bucket;}
-    output+=c;
-  }
-  return output+'\x1b[39m';
+  return accentFlow(text,config,{time:ui.now(),offset,color:colors.get(key)});
 }
 export class Composer extends Editor {
   constructor(ui,theme){super(ui.tui,theme,{paddingX:1,autocompleteMaxVisible:7});this.ui=ui;}

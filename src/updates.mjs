@@ -1,4 +1,4 @@
-import { readFile, mkdir, rm, mkdtemp, writeFile,rename,realpath,lstat,access } from 'node:fs/promises';
+import { readFile, mkdir, rm, mkdtemp, writeFile,rename,realpath,lstat,access,open } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir, homedir } from 'node:os';
@@ -20,12 +20,21 @@ export async function checkUpdate(home,{force=false,fetchImpl=fetch}={}){
  if(response.status===404){const result={checkedAt:Date.now(),latest:version,available:false};await atomicJSON(cache,result);return result;}if(!response.ok)throw new Error(`GitHub update check: HTTP ${response.status}`);
  const release=await response.json(),latest=release.tag_name?.replace(/^v/,'');
  if(!/^\d+\.\d+\.\d+$/.test(latest))throw new Error('Invalid release version');
- const result={checkedAt:Date.now(),latest,available:newer(latest,version),url:release.html_url,assets:release.assets.map(a=>({name:a.name,url:a.browser_download_url,digest:a.digest}))};await atomicJSON(cache,result);return result;
+ const result={checkedAt:Date.now(),latest,available:newer(latest,version),url:release.html_url,assets:release.assets.map(a=>({name:a.name,url:a.browser_download_url,digest:a.digest,size:a.size}))};await atomicJSON(cache,result);return result;
 }
-export async function download(url,path,{maxBytes=50000000}={}){
+export async function download(url,path,{maxBytes=50000000,onProgress=()=>{},expectedBytes,fetchImpl=fetch}={}){
  if(!/^https:\/\/(?:github\.com|release-assets\.githubusercontent\.com)\//.test(url))throw new Error('Untrusted release URL');
- const r=await fetch(url,{signal:AbortSignal.timeout(120000)});if(!r.ok)throw new Error(`Download failed: HTTP ${r.status}`);
- const chunks=[];let size=0;for await(const c of r.body){size+=c.length;if(size>maxBytes)throw new Error('Release archive too large');chunks.push(c);}const bytes=Buffer.concat(chunks);await writeFile(path,bytes,{mode:0o600});return createHash('sha256').update(bytes).digest('hex');
+ const response=await fetchImpl(url,{signal:AbortSignal.timeout(120000)});if(!response.ok)throw new Error(`Download failed: HTTP ${response.status}`);
+ const length=Number(response.headers.get('content-length')),total=Number.isSafeInteger(expectedBytes)&&expectedBytes>0?expectedBytes:!response.headers.get('content-encoding')&&Number.isSafeInteger(length)&&length>0?length:null;
+ if(total>maxBytes){await response.body?.cancel();throw new Error('Release archive too large');}
+ if(!response.body)throw new Error('Release download has no body.');
+ const notify=data=>{try{onProgress(data);}catch{}};let received=0,complete=false,handle;
+ try{
+  handle=await open(path,'wx',0o600);const hash=createHash('sha256');notify({received,total});
+  for await(const chunk of response.body){received+=chunk.length;if(received>maxBytes)throw new Error('Release archive too large');await handle.writeFile(chunk);hash.update(chunk);notify({received,total});}
+  if(total!==null&&received!==total)throw new Error('Incomplete release download');
+  await handle.sync();complete=true;return hash.digest('hex');
+ }finally{await handle?.close();if(!complete){await response.body.cancel().catch(()=>{});if(handle)await rm(path,{force:true});}}
 }
 export async function activateManaged(home,installed,{root,launcherTarget=process.platform==='win32'?join(home,'bin','psi.cmd'):join(homedir(),'.local','bin','psi')}={}){
  const current=await lstat(launcherTarget).catch(e=>{if(e.code==='ENOENT')return null;throw e;});
@@ -45,16 +54,19 @@ export async function activateManaged(home,installed,{root,launcherTarget=proces
  catch(e){if(previous)await atomicJSON(statePath,previous);else await rm(statePath,{force:true});throw e;}
  finally{await rm(staged,{force:true});}
 }
-export async function updateInstallation(home,{release,root=packageRoot,runImpl=run,downloadImpl=download,launcherTarget}={}){
+export async function updateInstallation(home,{release,root=packageRoot,runImpl=run,downloadImpl=download,launcherTarget,onProgress=()=>{}}={}){
+ const progress=event=>{try{onProgress(event);}catch{}};progress({phase:'checking',current:version});
  return withLock(join(home,'update.lock'),async()=>{
-  const next=release||await checkUpdate(home,{force:true});if(!next.available)return{updated:false,message:`Psi ${version} is current.`};
+  progress({phase:'checking',current:version});
+  const next=release||await checkUpdate(home,{force:true});if(!next.available){progress({phase:'current',version});return{updated:false,message:`Psi ${version} is current.`};}
+  progress({phase:'preparing',version:next.latest});
   // Source checkouts retain their branch and refuse to overwrite local changes.
   const origin=await runImpl('git',['remote','get-url','origin'],root).catch(()=>null);
   if(origin){if(!/github\.com[/:]sebastianmiletic\/Psi(?:\.git)?$/.test(origin))throw new Error('Update refused: checkout origin is not the Psi repository.');
    if(!await runImpl('git',['status','--porcelain'],root)){
-    await runImpl('git',['fetch','origin','tag','v'+next.latest],root);await runImpl('git',['merge','--ff-only','v'+next.latest],root);await runImpl('npm',['ci','--omit=dev','--ignore-scripts'],root);
+    progress({phase:'fetching',version:next.latest});await runImpl('git',['fetch','origin','tag','v'+next.latest],root);progress({phase:'extracting'});await runImpl('git',['merge','--ff-only','v'+next.latest],root);progress({phase:'installing'});await runImpl('npm',['ci','--omit=dev','--ignore-scripts'],root);
     const pkg=await readJSON(join(root,'package.json'),null);if(pkg?.version!==next.latest)throw new Error('Updated checkout version does not match the release.');
-    return{updated:true,message:'Updated to '+next.latest+'. Restart Psi.'};
+    progress({phase:'done',version:next.latest});return{updated:true,message:'Updated to '+next.latest+'. Restart Psi.'};
    }
   }
   const statePath=join(home,'installation.json'),previous=await readJSON(statePath,null),installed=previous||{root:join(home,'app')};if(!previous&&!origin)throw new Error('This copy is not a managed installation. Use the GitHub installer or update your source checkout.');
@@ -62,14 +74,14 @@ export async function updateInstallation(home,{release,root=packageRoot,runImpl=
   const temp=await mkdtemp(join(tmpdir(),'psi-update-')),destination=join(installed.root,'releases',next.latest);
   await mkdir(join(installed.root,'releases'),{recursive:true});const staging=await mkdtemp(join(installed.root,'releases','.staging-'));
   let published=false;
-  try{const archive=join(temp,'psi.tar.gz'),hash=await downloadImpl(asset.url,archive);if('sha256:'+hash!==asset.digest)throw new Error('Release checksum mismatch');
-   await runImpl('tar',['-xzf',archive,'-C',staging],temp);const pkg=await readJSON(join(staging,'package.json'),null);if(pkg?.version!==next.latest)throw new Error('Archive version does not match the requested release.');
-   await access(join(staging,'bin','psi.mjs'));await runImpl('npm',['ci','--omit=dev','--ignore-scripts'],staging);
+  try{progress({phase:'downloading',received:0,total:asset.size||null});const archive=join(temp,'psi.tar.gz'),hash=await downloadImpl(asset.url,archive,{expectedBytes:asset.size,onProgress:data=>progress({phase:'downloading',...data})});progress({phase:'verifying'});if('sha256:'+hash!==asset.digest)throw new Error('Release checksum mismatch');
+   progress({phase:'extracting'});await runImpl('tar',['-xzf',archive,'-C',staging],temp);const pkg=await readJSON(join(staging,'package.json'),null);if(pkg?.version!==next.latest)throw new Error('Archive version does not match the requested release.');
+   await access(join(staging,'bin','psi.mjs'));progress({phase:'installing'});await runImpl('npm',['ci','--omit=dev','--ignore-scripts'],staging);
    if(await lstat(destination).catch(()=>null))throw new Error('Release destination already exists; active installation was preserved.');
    await rename(staging,destination);published=true;
-   const nextState={...installed,current:destination,version:next.latest};
+   progress({phase:'activating'});const nextState={...installed,current:destination,version:next.latest};
    if(!previous)await activateManaged(home,nextState,{root,launcherTarget});else await atomicJSON(statePath,nextState);
-   return{updated:true,message:'Updated to '+next.latest+'. Restart Psi.'+(origin?' Local source changes were preserved in '+root+'.':'')};
+   progress({phase:'done',version:next.latest});return{updated:true,message:'Updated to '+next.latest+'. Restart Psi.'+(origin?' Local source changes were preserved in '+root+'.':'')};
   }catch(e){if(published&&(await readJSON(statePath,null))?.current!==destination)await rm(destination,{recursive:true,force:true});throw e;}
   finally{await rm(temp,{recursive:true,force:true});await rm(staging,{recursive:true,force:true});}
  });

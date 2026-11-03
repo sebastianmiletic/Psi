@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { version,updateInstallation,checkUpdate } from '../src/updates.mjs';
+import { version,checkUpdate } from '../src/updates.mjs';
 import { importPi } from '../src/pi-import.mjs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -78,7 +78,11 @@ try {
     }else throw new Error('Usage: psi storage compact | psi storage export <session-id>');
     process.exit(0);
   }
-  if(positionals[0]==='update'){console.log(v.check?JSON.stringify(await checkUpdate(home,{force:true}),null,2):(await updateInstallation(home)).message);process.exit(0);}
+  if(positionals[0]==='update'){
+    if(v.check)console.log(JSON.stringify(await checkUpdate(home,{force:true}),null,2));
+    else{const {updateWithProgress}=await import('../src/update-progress.mjs');await updateWithProgress(home,{...config,...(v.overkill?{overkill:true}:{})},{json:!!v.json});}
+    process.exit(0);
+  }
   if(v.mode){if(!['plan','execute'].includes(v.mode))throw new Error('Use --mode plan or --mode execute.');config.agentMode=v.mode;}if(v.overkill)config.overkill=true;
   await migrateWorkers(home);
   for (const [flag, setting] of [['budget', 'budget'], ['max-steps', 'maxSteps'], ['tokens', 'maxOutputTokens']]) {
