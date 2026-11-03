@@ -29,24 +29,26 @@ export function alive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
 }
-export async function withLock(path, fn, { signal, timeout = 60_000 } = {}) {
+export async function withLock(path, fn, { signal, timeout = 60_000, kind, waitForMaintenance = true } = {}) {
   await privateDir(dirname(path));
   const start = Date.now();
   let handle;
   while (!handle) {
+    let maintenanceOwner=false;
     signal?.throwIfAborted();
-    try { handle = await open(path, 'wx', 0o600); await handle.writeFile(JSON.stringify({ pid: process.pid })); }
+    try { handle = await open(path, 'wx', 0o600); await handle.writeFile(JSON.stringify({ pid: process.pid,...(kind?{kind}:{}) })); }
     catch (e) {
       if (e.code !== 'EEXIST') throw e;
       try {
         const owner = await readJSON(path, null);
+        maintenanceOwner=owner?.kind==='storage-maintenance';
         if (owner?.pid && !alive(owner.pid)) { await unlink(path); continue; }
       } catch (e) {
         // An owner may still be writing its freshly created lock.
         const info = await stat(path).catch(() => null);
         if (info && Date.now() - info.mtimeMs > 30_000) await unlink(path).catch(() => {});
       }
-      if (Date.now() - start >= timeout) throw new Error(`Another Psi process holds ${path}`);
+      if (Date.now() - start >= Math.max(timeout,maintenanceOwner&&waitForMaintenance?10000:0)) throw new Error(`Another Psi process holds ${path}`);
       await delay(50, undefined, { signal });
     }
   }

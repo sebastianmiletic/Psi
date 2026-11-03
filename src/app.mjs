@@ -1,3 +1,4 @@
+import {AutomaticStorage} from './automatic-storage.mjs';
 import {pruneWebCache} from './packed-json.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { existsSync } from 'node:fs';
@@ -31,6 +32,7 @@ export class App {
     this.config = config; this.session = session; this.options = options;this.uiLease=session.uiLease;delete session.uiLease;
     this.home = options.home || psiHome(); this.registry = new Registry(config, this.home); this.accountUsage = new AccountUsage(this.home); this.activeAccount = null; this.activeUsage = null;
     this.statistics=new Statistics(this.home);this.bind();
+    if(options.automaticStorage&&!session.meta.parentSession&&!this.engine.config.subagentDepth)this.storageMaintenance=new AutomaticStorage(this.home,{sessionId:()=>this.session.meta.id,launch:options.launchStorageMaintenance});
   }
   bind() {
     this.config=withoutWorkerProfiles(this.config);
@@ -76,6 +78,7 @@ export class App {
     const current=await this.registry.accounts.selected(engine.model.provider);if(current.id!==account.id)return{account:this.activeAccount,usage:this.activeUsage};
     this.activeAccount=configured?account:null;this.activeUsage=usage;this.ui?.render();return{account:this.activeAccount,usage};
   }
+  startStorageMaintenance(){this.storageMaintenance?.start();}
   async startUI() {
     try{
       this.uiLease ||= await claimSessionUI(this.session);
@@ -91,6 +94,7 @@ export class App {
       this.ui.render();
       if(this.engine.config.checkForUpdates){void this.checkUpdates({force:true});this.updateTimer=setInterval(()=>void this.checkUpdates(),3600000);this.updateTimer.unref();}
       if (this.session.meta.hasMessages||this.session.visibleConversation().length) this.showHistory();
+      this.startStorageMaintenance();
     } catch(error) {
       this.ui?.stop();await this.close({preserveSession:true}).catch(()=>{});throw error;
     }
@@ -140,7 +144,7 @@ export class App {
       await this.agents.dispose();if(!different)await session.assertLatest().catch(async()=>{session=await Session.load(session.meta.id,this.home);});await this.tools.close();
       await previous.compactStorage?.();
       this.session=session;this.bind();committed=true;
-      if(different){this.uiLease=nextLease;await previousLease?.release();if(!((await this.jobs.list()).some(j=>j.sessionId===previous.meta.id&&['running','queued'].includes(j.status))))await previous.discardEmpty();}
+      if(different){this.uiLease=nextLease;await previousLease?.release();void this.storageMaintenance?.kick('closed',previous.meta.id);if(!((await this.jobs.list()).some(j=>j.sessionId===previous.meta.id&&['running','queued'].includes(j.status))))await previous.discardEmpty();}
     }catch(error){if(!committed){await nextLease?.release();this.session=previous;this.uiLease=previousLease;this.bind();if(this.ui)await this.agents.restore();}throw error;}
     if (this.ui) { const { CombinedAutocompleteProvider } = await import('@earendil-works/pi-tui'); const { commands } = await import('./ui.mjs'); this.ui.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, session.meta.cwd)); }
     await this.engine.recoverReview();await this.refreshAccount();
@@ -395,6 +399,6 @@ export class App {
       if(this.ui?.editor&&this.session.meta.hasMessages)await this.session.event({type:'state',state:{composerDraft:this.ui.editor.getText()}});
       if(!this.engine.busy)await this.session.compactStorage?.();
     }finally{await this.uiLease?.release();this.uiLease=undefined;}
-    if(!preserveSession&&!this.engine.busy&&typeof this.session.discardEmpty==='function'&&!((await this.jobs.list()).some(j=>j.sessionId===this.session.meta.id&&['running','queued'].includes(j.status))))await this.session.discardEmpty();this.options.onClose?.();
+    if(!preserveSession&&!this.engine.busy&&typeof this.session.discardEmpty==='function'&&!((await this.jobs.list()).some(j=>j.sessionId===this.session.meta.id&&['running','queued'].includes(j.status))))await this.session.discardEmpty();await this.storageMaintenance?.close();this.options.onClose?.();
   }
 }

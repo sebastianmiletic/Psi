@@ -11,7 +11,8 @@ import { fixture } from './helpers.mjs';
 import { defaults,loadConfig } from '../src/storage.mjs';
 const frame=ui=>{ui.tui.renderNow();return ui.tui.getScreenLines().map(stripTerminalSequences);};
 async function setup(t,respond=()=>({text:'unused'})){const f=await fixture(t,respond),terminal=new MemoryTerminal(100,32),ui=new TerminalUI(f.app,{terminal});f.app.ui=ui;t.after(()=>ui.stop());ui.start();return{...f,ui,terminal};}
-async function until(check){for(let i=0;i<150&&!await check();i++)await delay(10);assert.ok(await check());}
+// Worker startup is not a 1.5-second performance contract on shared Windows CI.
+async function until(check){const deadline=Date.now()+8000;while(!await check()&&Date.now()<deadline)await delay(10);assert.ok(await check());}
 
 test('model labels omit provider routes and model search uses the actual composer with draft restoration',async t=>{
  const f=await setup(t),{ui,terminal}=f;

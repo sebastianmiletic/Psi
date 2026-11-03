@@ -110,7 +110,7 @@ try {
     for (const [flag, key] of [['model', 'model'], ['effort', 'effort'], ['budget', 'budget'], ['max-steps', 'maxSteps'], ['tokens', 'maxOutputTokens'], ['profile', 'profile']]) if (v[flag] !== undefined) session.state.settings = { ...session.state.settings, [key]: config[key] };
   } else session = { home,dir:join(home,'administration'),meta: { id: 'administration', cwd }, state: {} };
   let outputOpen = false;
-  const app = new App(config, session, { home,onRestart:async({sessionId,cwd})=>{
+  const app = new App(config, session, { home,automaticStorage:true,onRestart:async({sessionId,cwd})=>{
     const child=spawn(process.execPath,[fileURLToPath(import.meta.url),'-C',cwd,'--resume',sessionId],{env:process.env,stdio:'inherit'});process.exitCode=await new Promise((res,rej)=>{child.once('error',rej);child.once('exit',code=>res(code??1));});
   }, onEvent: event => {
     if (v.json) console.log(JSON.stringify(event));
@@ -171,6 +171,7 @@ try {
   process.on('SIGTERM', () => { interrupted = true; app.engine.stop(); void app.close(); });
   if (v.print !== undefined || v.json || (!process.stdin.isTTY && prompt)) {
     if (!prompt && !v.resume && !v.continue) throw new Error('A prompt is required in print mode.');
+    app.startStorageMaintenance();
     try { await app.engine.run(prompt || 'Continue the pending task.', { loop: !!v.loop }); }
     finally { if (outputOpen) process.stdout.write('\n'); await app.close(); }
     if (interrupted) process.exitCode = 130;

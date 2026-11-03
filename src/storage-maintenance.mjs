@@ -38,11 +38,12 @@ export async function consolidateToolCache(home, dir) {
     await rmdir(local); await symlink(root,local,process.platform==='win32'?'junction':'dir');
   }
 }
-export async function compactStorage(home) {
+export async function compactStorage(home,{only=null,exclude=[]}={}) {
   const report = {sessions:0,skipped:[],beforeBytes:0,afterBytes:0};
   const jobs=await new Jobs(home).list(),active=new Set(jobs.filter(j=>['running','queued'].includes(j.status)).map(j=>j.sessionId));
   for (const {id,dir,meta} of await Session.storageEntries(home)) {
-    if(active.has(id)||active.has(meta.parentSession)){report.skipped.push(id);continue;}
+    if(only&&!only.includes(id)&&!only.includes(meta.parentSession))continue;
+    if(exclude.includes(id)||exclude.includes(meta.parentSession)||active.has(id)||active.has(meta.parentSession)){report.skipped.push(id);continue;}
     try {
       await withLock(join(dir,'ui.lock'),()=>withLock(join(dir,'run.lock'),async()=>{
         report.beforeBytes+=await storageBytes(dir);
@@ -51,11 +52,11 @@ export async function compactStorage(home) {
         if(await stat(join(dir,'debug.jsonl')).catch(()=>null))await compressFile(join(dir,'debug.jsonl'));
         await withLock(join(home,'tool-cache.lock'),()=>consolidateToolCache(home,dir));
         report.afterBytes+=await storageBytes(dir);report.sessions++;
-      },{timeout:0}),{timeout:0});
+      },{timeout:0,kind:'storage-maintenance',waitForMaintenance:false}),{timeout:0,kind:'storage-maintenance',waitForMaintenance:false});
     } catch(e) {if(/Another Psi process holds/.test(e.message))report.skipped.push(id);else throw e;}
   }
   await withLock(join(home,'stats.lock'),async()=>{
-    const path=join(home,'stats-cache.json'),cache=await readPackedJSON(path,null);if(cache)await writePackedJSON(path,cache);
+    const path=join(home,'stats-cache.json');if(await stat(path).catch(()=>null)){const cache=await readPackedJSON(path,null);if(cache)await writePackedJSON(path,cache);}
   });
   // The cache is disposable; preserve every saved artifact and historical response.
   const cacheDir=join(home,'web-cache');

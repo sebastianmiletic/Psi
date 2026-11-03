@@ -8,7 +8,7 @@ export async function sessionInUse(id,home){
  for(const name of ['ui.lock','run.lock']){
   const path=join(dir,name);if(!await stat(path).catch(()=>null))continue;
   const owner=await readJSON(path,null).catch(()=>null);
-  if(!owner?.pid||alive(owner.pid))return true;
+  if(!owner?.pid||alive(owner.pid)&&owner.kind!=='storage-maintenance')return true;
  }
  return false;
 }
