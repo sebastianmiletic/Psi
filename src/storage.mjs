@@ -10,16 +10,18 @@ export async function readJSON(path, fallback) {
   try { return JSON.parse(await readFile(path, 'utf8')); }
   catch (e) { if (e.code === 'ENOENT') return fallback; throw new Error(`Cannot read ${path}: ${e.message}`); }
 }
-export async function atomicJSON(path, value, {renameImpl=rename,retrySharingViolations=process.platform==='win32'}={}) {
+export async function replaceFile(source,target,{renameImpl=rename,retrySharingViolations=process.platform==='win32'}={}) {
+  for(let attempt=0;;attempt++)try{await renameImpl(source,target);return;}catch(e){
+    if(!retrySharingViolations||!['EPERM','EACCES','EBUSY'].includes(e.code)||attempt>=20)throw e;
+    await delay(Math.min(250,10*2**attempt));
+  }
+}
+export async function atomicJSON(path, value, options={}) {
   await privateDir(dirname(path));
   const tmp = `${path}.${process.pid}.${randomUUID()}.tmp`;
   try {
     await writeFile(tmp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
-    for(let attempt=0;;attempt++)try{await renameImpl(tmp,path);break;}catch(e){
-      if(!retrySharingViolations||!['EPERM','EACCES','EBUSY'].includes(e.code)||attempt>=20)throw e;
-      // Windows readers and antivirus can briefly deny replacement. Keep the old snapshot intact.
-      await delay(Math.min(250,10*2**attempt));
-    }
+    await replaceFile(tmp,path,options);
   }
   finally { await unlink(tmp).catch(() => {}); }
 }

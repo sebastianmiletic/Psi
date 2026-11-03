@@ -212,7 +212,7 @@ export class Engine {
     const summary = await this.request(transcript, { maxTokens: 3500, tools: false, summary: true });
     const text = summary.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
     if (!text.trim()) throw new Error('Compaction returned no summary; context preserved.');
-    const messages = [{ role: 'user', content: `Continuation summary from earlier work (full transcript remains in ${this.session.dir}/events.jsonl):\n${text}`, timestamp: Date.now() }, ...recent];
+    const messages = [{ role: 'user', content: `Continuation summary from earlier work (full transcript is available through the read tool at ${this.session.dir}/events.jsonl):\n${text}`, timestamp: Date.now() }, ...recent];
     await this.session.event({ type: 'compact', messages });
     await this.session.event({type:'state',state:{runtimeContext:null}});
     this.onEvent({ type: 'compacted', before: size, after: estimateTokens(messages) }); return true;

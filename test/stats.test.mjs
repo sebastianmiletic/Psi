@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir,writeFile,appendFile,readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import {readPackedJSON} from '../src/packed-json.mjs';
 import { Statistics,periodStart } from '../src/stats.mjs';
 import { fixture } from './helpers.mjs';
 const at=(month,day,hour=12,minute=0)=>+new Date(2026,month-1,day,hour,minute);
@@ -19,7 +20,7 @@ test('calendar periods, token categories and parallel work time avoid duplicate 
  await journal(home,'child',[event('status',start+5*60000,{status:'running'}),usage('child',at(10,31),400),event('status',start+45*60000,{status:'idle'})],{worker:true});
  const stats=new Statistics(home),[week,month,all]=await stats.read({now});assert.equal(week.tokens,700);assert.equal(month.tokens,900);assert.equal(all.tokens,1000);assert.equal(all.requests,4);assert.equal(all.cacheRead,250);assert.equal(all.tools,1);assert.equal(week.activeMs,60*60000);assert.equal(week.agentMs,90*60000);assert.equal(week.workers,1);assert.equal(week.sessions,1);
  assert.equal(new Date(periodStart('week',now)).getDay(),1);assert.equal(new Date(periodStart('month',now)).getDate(),1);
- const again=await stats.read({now});assert.deepEqual(again,[week,month,all]);assert.doesNotMatch(await readFile(join(home,'stats-cache.json'),'utf8'),/TOP-SECRET-PROMPT/);
+ const again=await stats.read({now});assert.deepEqual(again,[week,month,all]);assert.doesNotMatch(JSON.stringify(await readPackedJSON(join(home,'stats-cache.json'),null)),/TOP-SECRET-PROMPT/);
 });
 test('incremental stats leave partial appends untouched and process completed receipts once',async t=>{
  const f=await fixture(t,()=>({text:'unused'})),home=f.session.home,now=at(10,31,15),path=await journal(home,'incremental',[usage('one',at(10,31),100)]),stats=new Statistics(home);

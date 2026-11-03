@@ -28,7 +28,7 @@ export async function migrateWorkers(home){
      if(await stat(destination).catch(()=>null)){skipped.push(id);return;}
      const stage=destination+'.migrating-'+randomUUID();await mkdir(join(Session.path(home,parent),'agents'),{recursive:true,mode:0o700});
      try{
-      await cp(source,stage,{recursive:true,filter:path=>path!==join(source,'run.lock')});
+      await cp(source,stage,{recursive:true,filter:path=>!['run.lock','ui.lock','storage.lock'].some(name=>path===join(source,name))});
       const meta=await readJSON(join(stage,'meta.json'),null);if(!meta)throw new Error('Missing worker metadata');
       await atomicJSON(join(stage,'meta.json'),{...meta,parentSession:parent,migratedFrom:source});
       await atomicJSON(join(stage,'worker.json'),{...spec,parentSession:parent});

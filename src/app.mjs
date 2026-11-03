@@ -1,3 +1,4 @@
+import {pruneWebCache} from './packed-json.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { existsSync } from 'node:fs';
 import { canonical } from './directories.mjs';
@@ -9,7 +10,7 @@ import { Resets } from './resets.mjs';
 import { Statistics } from './stats.mjs';
 import { registerProgress } from './progress.mjs';
 import { checkUpdate,updateInstallation } from './updates.mjs';
-import { readFile, writeFile, stat, appendFile } from 'node:fs/promises';
+import { readFile, writeFile, stat } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
@@ -61,7 +62,7 @@ export class App {
     if (this.engine?.config.debug && !['text_delta', 'thinking_delta'].includes(event.type)) {
       // Verbose operational logging deliberately excludes prompts, credentials, tool arguments and provider payloads.
       const data = { at: new Date().toISOString(), type: event.type, model: event.model, attempt: event.attempt, duration: event.duration, tool: event.call?.name, error: !!event.error, status: event.status };
-      void appendFile(join(this.session.dir, 'debug.jsonl'), JSON.stringify(data) + '\n', { mode: 0o600 }).catch(() => {});
+      void this.session.debug?.(data).catch(() => {});
     }
     this.ui?.event(event); this.options.onEvent?.(event);
     if(this.ui&&['request_end','run_end','account_switched'].includes(event.type)&&this.activeAccount?.type==='oauth')void this.refreshAccount({live:true,force:true}).catch(()=>{});
@@ -78,6 +79,7 @@ export class App {
   async startUI() {
     try{
       this.uiLease ||= await claimSessionUI(this.session);
+      void pruneWebCache(this.home).catch(()=>{});
     }catch(error){if(/Another Psi process holds/.test(error.message))throw new Error(sessionBusyMessage);throw error;}
     try {
       await this.engine.recoverReview();await this.session.markActive();await this.refreshAccount();
@@ -136,6 +138,7 @@ export class App {
     if(this.ui&&different)try{nextLease=await claimSessionUI(session);}catch(error){if(/Another Psi process holds/.test(error.message))throw new Error(sessionBusyMessage);throw error;}
     try{
       await this.agents.dispose();if(!different)await session.assertLatest().catch(async()=>{session=await Session.load(session.meta.id,this.home);});await this.tools.close();
+      await previous.compactStorage?.();
       this.session=session;this.bind();committed=true;
       if(different){this.uiLease=nextLease;await previousLease?.release();if(!((await this.jobs.list()).some(j=>j.sessionId===previous.meta.id&&['running','queued'].includes(j.status))))await previous.discardEmpty();}
     }catch(error){if(!committed){await nextLease?.release();this.session=previous;this.uiLease=previousLease;this.bind();if(this.ui)await this.agents.restore();}throw error;}
@@ -390,6 +393,7 @@ export class App {
     try{
       await this.agents.dispose();await this.tools.close();await this.session.flush?.();await this.session.markActive?.();
       if(this.ui?.editor&&this.session.meta.hasMessages)await this.session.event({type:'state',state:{composerDraft:this.ui.editor.getText()}});
+      if(!this.engine.busy)await this.session.compactStorage?.();
     }finally{await this.uiLease?.release();this.uiLease=undefined;}
     if(!preserveSession&&!this.engine.busy&&typeof this.session.discardEmpty==='function'&&!((await this.jobs.list()).some(j=>j.sessionId===this.session.meta.id&&['running','queued'].includes(j.status))))await this.session.discardEmpty();this.options.onClose?.();
   }

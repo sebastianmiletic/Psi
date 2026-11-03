@@ -225,3 +225,9 @@ Actual API invoices and real competition transactions were not exercised in this
 - Cold-reopen tests cover important file changes, progress, delivered worker reports, the latest input, and saved quota-waiting state. They trap tool execution during restore and assert unchanged inference messages and zero provider requests.
 - A chat with an empty compacted inference context still restores its saved visible messages. Bounded history retains visible evidence ahead of routine tools and excludes model thinking/image payloads from the display index.
 - A private copy of the existing Battlecode journal was replayed successfully: recent activity, latest input and paused status appeared together. The original journal was backed up and left unchanged. UI history is a projection of existing durable records; no tool or provider action is replayed.
+
+## 0.2.27 — compact lossless storage
+
+- All 197 local tests passed. New regression coverage checks legacy migration and torn-tail repair, cold reopening of compressed messages/state, exact statistics across rotation, read/export of archived history, recovery with both raw and compressed segments, checksum failures, concurrent readers/appends, shared tool downloads, idle-only maintenance, bounded disposable caches and verbose compressed diagnostics.
+- A private isolated copy of the real Battlecode journal (29,707,639 bytes, 11,821 events) compressed to 7,210,275 bytes including its header: 75.73% smaller. Complete reconstructed bytes matched SHA-256; inference messages, visible history, state, totals and calendar statistics were identical. The user's active files and installed application were not converted or upgraded by this verification.
+- Compression uses only built-in Node APIs. Native Windows, Linux and macOS CI exercise the same storage tests; no provider requests are required by these regressions.

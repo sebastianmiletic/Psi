@@ -1,10 +1,9 @@
-import { open, readdir, stat,rm,rmdir } from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
-import { createInterface } from 'node:readline';
+import { open, readdir, stat,rm,rmdir,appendFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import {compactJournal,journalInfo,journalLines,SEGMENT_BYTES,compressFile,syncDirectory} from './journal.mjs';
 import {TranscriptHistory} from './transcript-history.mjs';
-import { privateDir, atomicJSON,cleanTerminal, readJSON, psiHome, withLock, durableJournalSize, alive } from './storage.mjs';
+import { privateDir, atomicJSON,cleanTerminal, readJSON, psiHome, withLock, alive } from './storage.mjs';
 
 const meaningful=m=>!m?.internal&&['user','assistant'].includes(m?.role)&&(typeof m.content==='string'?!!m.content.trim():Array.isArray(m.content)&&m.content.some(c=>c.type==='image'||c.type==='text'&&c.text?.trim()));
 const titled=meta=>typeof meta.title==='string'&&!!meta.title.trim()&&(meta.title!=='New session'||meta.named||meta.autoNamed||meta.seedNamed);
@@ -17,7 +16,7 @@ export class Session {
     this.accountTotals = {}; this.meteredCost = 0; this.meteredCostKnown = true;
     this.seenUsage=new Set();
     this.state = {}; this.status = 'idle'; this.journalSize = 0; this.writeChain=Promise.resolve();
-    this.streaming=null;this.transcript=new TranscriptHistory();
+    this.debugChain=Promise.resolve();this.streaming=null;this.transcript=new TranscriptHistory();
   }
   static path(home,id,parentSession){
     if(!/^(?!\.{1,2}$)[\w.-]+$/.test(id)||parentSession&&!/^(?!\.{1,2}$)[\w.-]+$/.test(parentSession))throw new Error('Invalid session ID.');
@@ -37,7 +36,7 @@ export class Session {
       if (!meta) throw new Error(`Session not found: ${id}`);
       const session = new Session(home, meta);
       session.dir=dir;
-      session.journalSize = await durableJournalSize(join(session.dir, 'events.jsonl'));
+      session.journalSize = (await compactJournal(session.dir,{repair:true})).size;
       let lineNumber = 0;
       for await (const line of session.events()) {
         lineNumber++;
@@ -58,19 +57,27 @@ export class Session {
       return session;
     }, { timeout: 500 });
   }
-  async *events() {
-    const path=join(this.dir,'events.jsonl'),info=await stat(path).catch(e=>{if(e.code==='ENOENT')return null;throw e;});if(!info?.size)return;
-    const handle=await open(path,'r'),last=Buffer.alloc(1);try{await handle.read(last,0,1,info.size-1);}finally{await handle.close();}
-    const input = createReadStream(path, { encoding: 'utf8',end:info.size-1 });
-    const lines = createInterface({ input, crlfDelay: Infinity });
-    let pending;
-    try { for await (const line of lines)if(line){if(pending!==undefined)yield JSON.parse(pending);pending=line;}if(pending!==undefined&&last[0]===10)yield JSON.parse(pending); }
-    finally { lines.close(); input.destroy(); }
+  async *events() { for await(const {line} of journalLines(this.dir))if(line)yield JSON.parse(line); }
+  async debug(data){
+    const next=this.debugChain.then(async()=>{
+      const dir=join(this.dir,'diagnostics');await privateDir(dir);
+      const path=join(dir,'events.jsonl');await appendFile(path,JSON.stringify(data)+'\n',{mode:0o600});
+      if((await stat(path)).size>=SEGMENT_BYTES)await compactJournal(dir);
+    });this.debugChain=next.catch(()=>{});return next;
+  }
+  async compactStorage(){
+    await this.debugChain;
+    return this.enqueue(()=>withLock(join(this.dir,'run.lock'),async()=>{
+      const info=await compactJournal(this.dir,{force:true});
+      if(await stat(join(this.dir,'diagnostics')).catch(()=>null))await compactJournal(join(this.dir,'diagnostics'),{force:true});
+      if(await stat(join(this.dir,'debug.jsonl')).catch(()=>null))await compressFile(join(this.dir,'debug.jsonl'));
+      return info;
+    },{timeout:0}).catch(error=>{if(/Another Psi process holds/.test(error.message))return{skipped:true};throw error;}));
   }
   enqueue(fn) {const next=this.writeChain.then(fn);this.writeChain=next.catch(()=>{});return next;}
   async assertLatest() {
     return this.enqueue(async()=>{
-      const size=await stat(join(this.dir,'events.jsonl')).then(s=>s.size).catch(e=>{if(e.code==='ENOENT')return 0;throw e;});
+      const {size}=await journalInfo(this.dir);
       if(size!==this.journalSize)throw new Error('This session changed in another Psi process. Resume it again before continuing.');
     });
   }
@@ -124,8 +131,11 @@ export class Session {
   }
   async appendDurable(line){
     const handle=await open(join(this.dir,'events.jsonl'),'a',0o600);
-    try{await handle.writeFile(line);await handle.sync();this.journalSize+=Buffer.byteLength(line);}
+    let size;
+    try{await handle.writeFile(line);await handle.sync();this.journalSize+=Buffer.byteLength(line);size=(await handle.stat()).size;}
     finally{await handle.close();}
+    if(size===Buffer.byteLength(line))await syncDirectory(this.dir);
+    if(size>=SEGMENT_BYTES)await compactJournal(this.dir).catch(error=>{this.storageError=error;});
   }
   async flush(){await this.writeChain;}
   async markActive(){if(!this.meta.parentSession&&this.meta.hasMessages)await atomicJSON(join(this.home,'last-session.json'),{id:this.meta.id,cwd:this.meta.cwd,at:new Date().toISOString()});}
@@ -177,7 +187,7 @@ export class Session {
     const names = (await readdir(join(home, 'sessions'),{withFileTypes:true}).catch(e => { if (e.code === 'ENOENT') return []; throw e; })).filter(e=>e.isDirectory()).map(e=>e.name);
     const data = await Promise.all(names.map(async n=>{
       const meta=await readJSON(join(home,'sessions',n,'meta.json'),null);if(!meta||meta.parentSession||await stat(join(home,'sessions',n,'worker.json')).catch(()=>null))return null;
-      const journal=await stat(join(home,'sessions',n,'events.jsonl')).catch(()=>null),updatedAt=new Date(journal?.mtimeMs||Date.parse(meta.createdAt)||0).toISOString();
+      const journal=await journalInfo(join(home,'sessions',n)),updatedAt=new Date(journal.mtimeMs||Date.parse(meta.createdAt)||0).toISOString();
       if(meta.hasMessages&&titled(meta))return{...meta,updatedAt};
       // Read old snapshots or a first message committed just before a crash.
       for await(const e of new Session(home,meta).events())if(e.type==='message'&&meaningful(e.message)||e.type==='final_response'&&e.text?.trim()){const title=titled(meta)?meta.title:cleanTerminal(typeof e.message?.content==='string'?e.message.content:e.text||'Recovered session').replace(/\s+/g,' ').trim().slice(0,100);return{...meta,title,hasMessages:true,draft:false,updatedAt};}

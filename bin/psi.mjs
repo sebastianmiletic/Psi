@@ -27,6 +27,7 @@ Usage: psi [options] [prompt]
        psi jobs [id] | psi jobs stop <id>
        psi bench <manifest.json>
        psi update [--check]
+       psi storage compact|export <session-id>
        psi accounts import-pi --account <name> [--account <name>]
        psi doctor
 
@@ -67,6 +68,16 @@ try {
   if (v.help) { console.log(help); process.exit(0); }
   if (v.version) { console.log('Ψ Psi '+version); process.exit(0); }
   const home = psiHome(); const config = await loadConfig(home);
+  if(positionals[0]==='storage'){
+    if(positionals[1]==='compact'){
+      const {compactStorage}=await import('../src/storage-maintenance.mjs');console.log(JSON.stringify(await compactStorage(home),null,2));
+    }else if(positionals[1]==='export'&&positionals[2]){
+      const {journalLines}=await import('../src/journal.mjs'),{once}=await import('node:events');
+      const dir=Session.path(home,positionals[2]);if(!await stat(join(dir,'meta.json')).catch(()=>null))throw new Error('Session not found.');
+      for await(const {line} of journalLines(dir))if(!process.stdout.write(line+'\n'))await once(process.stdout,'drain');
+    }else throw new Error('Usage: psi storage compact | psi storage export <session-id>');
+    process.exit(0);
+  }
   if(positionals[0]==='update'){console.log(v.check?JSON.stringify(await checkUpdate(home,{force:true}),null,2):(await updateInstallation(home)).message);process.exit(0);}
   if(v.mode){if(!['plan','execute'].includes(v.mode))throw new Error('Use --mode plan or --mode execute.');config.agentMode=v.mode;}if(v.overkill)config.overkill=true;
   await migrateWorkers(home);

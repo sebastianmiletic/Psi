@@ -1,7 +1,8 @@
-import { readdir, stat } from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { atomicJSON,readJSON,withLock,alive } from './storage.mjs';
+import { readJSON,withLock,alive } from './storage.mjs';
+import {journalInfo,journalLines} from './journal.mjs';
+import {readPackedJSON,writePackedJSON} from './packed-json.mjs';
 import { Session } from './session.mjs';
 
 const count=n=>Number.isFinite(n)&&n>=0?n:0;
@@ -30,35 +31,30 @@ function consume(row,e){
  }
  row.lastAt=Math.max(row.lastAt,t);
 }
-async function appendEvents(path,row,size){
- if(size<=row.offset)return;
- const input=createReadStream(path,{start:row.offset,end:size-1,encoding:'utf8'});let pending='';
- for await(const chunk of input){pending+=chunk;let at;
-  while((at=pending.indexOf('\n'))>=0){const line=pending.slice(0,at);pending=pending.slice(at+1);row.offset+=Buffer.byteLength(line+'\n');
-   if(!line.trim())continue;try{consume(row,JSON.parse(line));}catch{row.malformed=(row.malformed||0)+1;}
-  }
+async function appendEvents(dir,row){
+ for await(const {line,offset} of journalLines(dir,{offset:row.offset})){
+  row.offset=offset;if(!line.trim())continue;
+  try{consume(row,JSON.parse(line));}catch{row.malformed=(row.malformed||0)+1;}
  }
- // An unfinished final append is deliberately left for the next read, without repairing the journal.
 }
 export class Statistics {
  constructor(home){this.home=home;this.path=join(home,'stats-cache.json');}
  async read({now=Date.now()}={}){
   return withLock(join(this.home,'stats.lock'),async()=>{
-   const old=await readJSON(this.path,null),cache=old?.schema===1?old:{schema:1,sessions:{}};
+   const old=await readPackedJSON(this.path,null),cache=old?.schema===1?old:{schema:1,sessions:{}};
    const entries=await Session.storageEntries(this.home),present=new Set(entries.map(e=>e.id));let changed=false;
    for(const id of Object.keys(cache.sessions))if(!present.has(id)){delete cache.sessions[id];changed=true;}
    const live={};
    for(const {id,dir,meta} of entries){
-    const path=join(dir,'events.jsonl');
-    const info=await stat(path).catch(()=>null);if(!info)continue;
+    const info=await journalInfo(dir);if(!info.size)continue;
     let row=cache.sessions[id];
     if(!row||row.ino!==info.ino||info.size<row.size||(info.size===row.size&&info.mtimeMs!==row.mtime)){
      row=entry(meta,!!meta.parentSession||!!await stat(join(dir,'worker.json')).catch(()=>null),info);cache.sessions[id]=row;changed=true;
     }
-    if(info.size>row.offset){await appendEvents(path,row,info.size);row.size=info.size;row.mtime=info.mtimeMs;changed=true;}
+    if(info.size>row.offset){await appendEvents(dir,row);row.size=info.size;row.mtime=info.mtimeMs;changed=true;}
     if(row.activeStart!==null){const lock=await readJSON(join(dir,'run.lock'),null).catch(()=>null);live[id]=!!lock?.pid&&alive(lock.pid);}
    }
-   if(changed)await atomicJSON(this.path,cache);
+   if(changed)await writePackedJSON(this.path,cache);
    return ['week','month','all'].map(period=>summarize(cache.sessions,live,period,now));
   });
  }

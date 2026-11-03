@@ -20,6 +20,7 @@ I built Psi for my own development workflow and used it to develop my Cambridge 
 
 | | |
 | :--- | :--- |
+| **Compact histories** | Lossless `.psi` archives, live saving, compressed caches and shared tool downloads. |
 | **Persistent goals** | Recover through provider failures and quota waits. Resume the journal after an interruption. |
 | **Accounts that travel with the task** | Multiple providers and multiple accounts per provider, reported quotas and optional failover. |
 | **Subagents on demand** | The AI delegates concrete tasks with OVERKILL. Distinct task names, models and effort. |
