@@ -53,6 +53,8 @@ Interactive startup checks the latest stable GitHub release in the background, a
 
 `psi update` shows a compact animated Ψ header, download bar with actual bytes/percentage, and checking, verification and installation stages. It uses the saved accent and OVERKILL flow, respects animations-off and `NO_COLOR`, and adds no artificial delays. Unknown download sizes and installation work use an activity indicator rather than an invented percentage. The meter keeps a fixed width and preserves completed download fill during installation. Completed or failed bars remain visible in terminal scrollback. `psi update --preview` shows the same minimal display without checking or installing a release; it adds no Preview/OVERKILL labels or completion message. Redirected output stays plain; `psi update --json` emits the result as JSON.
 
+Settings → **Open after update** is **off by default**. Enable it to open the newly installed Psi in the same terminal after a successful interactive `psi update`. It follows normal session/directory restoration. A successful manual `/update` reopens the current chat after saving its draft and releasing its UI lease. Checks, previews, JSON/piped commands and failed or already-current updates do not launch Psi. Background auto-update keeps the existing UI open.
+
 `psi update --check` shows the release metadata without installing. Managed installs download and verify the versioned archive, install dependencies in a new release directory, then atomically switch the launcher. Source checkouts verify the origin, refuse local changes, and fast-forward only to the release tag. Accounts, sessions and user settings stay under `~/.psi`.
 
 ## Directories, planning and OVERKILL

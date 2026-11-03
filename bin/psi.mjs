@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {maybeOpenAfterUpdate,runUpdatedPsi} from '../src/post-update.mjs';
 import { version,checkUpdate } from '../src/updates.mjs';
 import { importPi } from '../src/pi-import.mjs';
 import { join } from 'node:path';
@@ -9,7 +10,6 @@ import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { loadConfig, saveConfig, psiHome, cleanTerminal, redact } from '../src/storage.mjs';
 import {startupSession} from '../src/startup.mjs';
-import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import { Session } from '../src/session.mjs';
 import { App } from '../src/app.mjs';
@@ -81,7 +81,8 @@ try {
   if(positionals[0]==='update'){
     if(v.check&&v.preview)throw new Error('Use --check or --preview.');
     if(v.check)console.log(JSON.stringify(await checkUpdate(home,{force:true}),null,2));
-    else{const {updateWithProgress,previewUpdate}=await import('../src/update-progress.mjs');await (v.preview?previewUpdate:updateWithProgress)(home,{...config,...(v.overkill?{overkill:true}:{})},{json:!!v.json});}
+    else{const {updateWithProgress,previewUpdate}=await import('../src/update-progress.mjs');const result=await (v.preview?previewUpdate:updateWithProgress)(home,{...config,...(v.overkill?{overkill:true}:{})},{json:!!v.json});
+      const opened=await maybeOpenAfterUpdate(result,config,{json:!!v.json});if(opened.opened)process.exit(opened.exitCode);}
     process.exit(0);
   }
   if(v.mode){if(!['plan','execute'].includes(v.mode))throw new Error('Use --mode plan or --mode execute.');config.agentMode=v.mode;}if(v.overkill)config.overkill=true;
@@ -115,8 +116,8 @@ try {
     for (const [flag, key] of [['model', 'model'], ['effort', 'effort'], ['budget', 'budget'], ['max-steps', 'maxSteps'], ['tokens', 'maxOutputTokens'], ['profile', 'profile']]) if (v[flag] !== undefined) session.state.settings = { ...session.state.settings, [key]: config[key] };
   } else session = { home,dir:join(home,'administration'),meta: { id: 'administration', cwd }, state: {} };
   let outputOpen = false;
-  const app = new App(config, session, { home,automaticStorage:true,onRestart:async({sessionId,cwd})=>{
-    const child=spawn(process.execPath,[fileURLToPath(import.meta.url),'-C',cwd,'--resume',sessionId],{env:process.env,stdio:'inherit'});process.exitCode=await new Promise((res,rej)=>{child.once('error',rej);child.once('exit',code=>res(code??1));});
+  const app = new App(config, session, { home,automaticStorage:true,onRestart:async({sessionId,cwd,entrypoint=fileURLToPath(import.meta.url)})=>{
+    process.exitCode=await runUpdatedPsi({entrypoint,args:['-C',cwd,'--resume',sessionId],cwd});
   }, onEvent: event => {
     if (v.json) console.log(JSON.stringify(event));
     else if (event.type === 'text_delta' && !event.summary) { process.stdout.write(cleanTerminal(event.delta)); outputOpen = true; }

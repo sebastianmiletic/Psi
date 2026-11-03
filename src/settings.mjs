@@ -6,6 +6,7 @@ export const settingItems = [
   {id:'subagentModel',label:'Subagent model',special:'subagentModel'},
   {id:'checkForUpdates',label:'Update checks',boolean:true},
   {id:'autoUpdate',label:'Auto-update',boolean:true,description:'Managed releases or clean source checkouts; restart to apply'},
+  {id:'openAfterUpdate',label:'Open after update',boolean:true,description:'Open Psi after a successful manual update'},
   {id:'accent',label:'Accent colour',values:[...Object.keys(accents),'custom'],description:'Selection, links and the 3D Psi mark'},
   {id:'showLogo',label:'Show logo',boolean:true},{id:'animations',label:'Motion',boolean:true,description:'Send feedback, response activity and the 3D logo'},{id:'showUsage',label:'Show account usage',boolean:true},
   {id:'autoSwitchAccounts',label:'Account switching',boolean:true,description:'Try another saved account when quota is exhausted'},

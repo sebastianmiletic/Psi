@@ -258,3 +258,10 @@ Actual API invoices and real competition transactions were not exercised in this
 - All 215 local tests passed. A new regression checks that meter width is unchanged at 0, 9, 10, 50, 99 and 100 percent across narrow/wide terminals, and completed download fill survives verification, unpacking, installation and activation.
 - The meter reserves a fixed percentage field and no longer replaces completed downloads with a moving block during later stages. The chosen accent and optional flow remain; the Preview/OVERKILL labels and preview completion sentence are removed from the human display. JSON retains explicit preview metadata.
 - The revised display was checked in native Termatica with saved cyan/OVERKILL settings. The final screen showed only Ψ/version, Ready and the full meter, without the removed labels or extra sentence. The preview still performs no release lookup, installation or provider request.
+
+## 0.2.32 — optional open after update
+
+- All 222 local tests passed. The new Open after update setting defaults off, validates boolean values, and persists through the normal Settings UI.
+- Successful interactive command-line updates may launch the exact installed entrypoint in the same terminal. Source updates return their own entrypoint even if another managed installation exists. Default-off, current, preview, JSON and noninteractive paths do not launch.
+- A real child-process fixture verified directory/home inheritance, saved-chat arguments and exit-code propagation. Signal tests verify the waiting parent does not exit before the child on terminal SIGINT and removes handlers afterward.
+- Manual `/update` tests verify opt-in reopening saves the same conversation and unsent draft and releases the UI lease before handing off. Current, failed and active-run update cases never reopen. No real user installation or setting was changed by these tests.

@@ -249,7 +249,9 @@ export class App {
     if(command==='stats')return this.ui.statsMenu(()=>this.statistics.read());
     if(command==='subagents')return this.agentsMenu();
     if(command==='directory')return this.directoryCommand(arg);
-    if(command==='update'){if(this.engine.busy)throw new Error('Stop the active run before updating Psi.');this.ui.note('Checking GitHub releases…');const result=await updateInstallation(this.home);this.ui.note(result.message);if(result.updated)this.updateInfo={...this.updateInfo,installed:true};this.ui.render();return;}
+    if(command==='update'){if(this.engine.busy)throw new Error('Stop the active run before updating Psi.');this.ui.note('Checking GitHub releases…');const result=await (this.options.updateInstallation||updateInstallation)(this.home);this.ui.note(result.message);if(result.updated)this.updateInfo={...this.updateInfo,installed:true};this.ui.render();
+      if(result.updated&&this.engine.config.openAfterUpdate&&this.options.onRestart){const sessionId=this.session.meta.id,cwd=this.session.meta.cwd;await this.close({preserveSession:true});await this.options.onRestart({sessionId,cwd,entrypoint:result.entrypoint});}
+      return;}
 
     if(command==='project'){const p=await this.battlecode.inspect();this.ui.note(JSON.stringify({project:p.project,baseline:p.baseline,version:p.baselineVersion,source:p.baselineHashes.fingerprint,cli:p.cli,controllers:p.scripts,policy:p.policy},null,2));return;}
     if(command==='experiments'){const list=arg?await this.battlecode.reconcile(arg):await this.battlecode.store.list(this.session.meta.cwd);this.ui.note(JSON.stringify(list,null,2));return;}

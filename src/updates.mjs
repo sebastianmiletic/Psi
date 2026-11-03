@@ -66,7 +66,7 @@ export async function updateInstallation(home,{release,root=packageRoot,runImpl=
    if(!await runImpl('git',['status','--porcelain'],root)){
     progress({phase:'fetching',version:next.latest});await runImpl('git',['fetch','origin','tag','v'+next.latest],root);progress({phase:'extracting'});await runImpl('git',['merge','--ff-only','v'+next.latest],root);progress({phase:'installing'});await runImpl('npm',['ci','--omit=dev','--ignore-scripts'],root);
     const pkg=await readJSON(join(root,'package.json'),null);if(pkg?.version!==next.latest)throw new Error('Updated checkout version does not match the release.');
-    progress({phase:'done',version:next.latest});return{updated:true,message:'Updated to '+next.latest+'. Restart Psi.'};
+    progress({phase:'done',version:next.latest});return{updated:true,entrypoint:join(root,'bin','psi.mjs'),message:'Updated to '+next.latest+'. Restart Psi.'};
    }
   }
   const statePath=join(home,'installation.json'),previous=await readJSON(statePath,null),installed=previous||{root:join(home,'app')};if(!previous&&!origin)throw new Error('This copy is not a managed installation. Use the GitHub installer or update your source checkout.');
@@ -81,7 +81,7 @@ export async function updateInstallation(home,{release,root=packageRoot,runImpl=
    await rename(staging,destination);published=true;
    progress({phase:'activating'});const nextState={...installed,current:destination,version:next.latest};
    if(!previous)await activateManaged(home,nextState,{root,launcherTarget});else await atomicJSON(statePath,nextState);
-   progress({phase:'done',version:next.latest});return{updated:true,message:'Updated to '+next.latest+'. Restart Psi.'+(origin?' Local source changes were preserved in '+root+'.':'')};
+   progress({phase:'done',version:next.latest});return{updated:true,entrypoint:join(destination,'bin','psi.mjs'),message:'Updated to '+next.latest+'. Restart Psi.'+(origin?' Local source changes were preserved in '+root+'.':'')};
   }catch(e){if(published&&(await readJSON(statePath,null))?.current!==destination)await rm(destination,{recursive:true,force:true});throw e;}
   finally{await rm(temp,{recursive:true,force:true});await rm(staging,{recursive:true,force:true});}
  });

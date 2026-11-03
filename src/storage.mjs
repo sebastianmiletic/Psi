@@ -61,7 +61,7 @@ export const defaults = {
   debug: true, customProviders: [], accent: 'sage', showLogo: true, animations: true,
   autoSwitchAccounts: false, accountSwitchThreshold: 100, quotaRefreshSeconds: 15,
   fallbackModels: [], loopRetrySeconds: 30, showUsage: true, customPrices: {},
-  agentMode:'execute', overkill:false, subagentDepth:0, checkForUpdates:true, autoUpdate:false,
+  agentMode:'execute', overkill:false, subagentDepth:0, checkForUpdates:true, autoUpdate:false, openAfterUpdate:false,
   claudeCli:'claude',
 };
 // Retired presets and worker-count settings must not restrict resumed chats.
