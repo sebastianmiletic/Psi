@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,writeFile,appendFile} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
-import {join} from 'node:path';
+import {join,resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {fixture} from './helpers.mjs';
 import {Session} from '../src/session.mjs';
@@ -21,7 +21,7 @@ test('bare startup is always fresh; explicit resume restores the saved chat and 
  const second=await Session.create(f.root,f.app.home);await second.message({role:'user',content:'Newer-created chat',timestamp:Date.now()});await delay(5);await first.message({role:'user',content:'Most recent activity',timestamp:Date.now()});
  assert.equal((await Session.list(f.app.home))[0].id,first.meta.id);
  const resumed=await startupSession({home:f.app.home,cwd:'/',resume:first.meta.id,interactive:true});assert.equal(resumed.meta.id,first.meta.id);assert.equal(resumed.meta.cwd,f.root);await resumed.uiLease?.release();
- const fresh=await startupSession({home:f.app.home,cwd:'/',interactive:true});assert.equal(fresh.meta.cwd,'/');assert.equal(fresh.messages.length,0);assert.notEqual(fresh.meta.id,first.meta.id);await fresh.discardEmpty();
+ const fresh=await startupSession({home:f.app.home,cwd:'/',interactive:true});assert.equal(fresh.meta.cwd,resolve('/'));assert.equal(fresh.messages.length,0);assert.notEqual(fresh.meta.id,first.meta.id);await fresh.discardEmpty();
 });
 test('continue is explicit, workspace-scoped and supports named empty chats; new overrides continue',async t=>{
  const f=await fixture(t,()=>({text:'unused'}));await f.session.rename('Saved empty workspace');

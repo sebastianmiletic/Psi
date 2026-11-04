@@ -267,8 +267,9 @@ Actual API invoices and real competition transactions were not exercised in this
 - Manual `/update` tests verify opt-in reopening saves the same conversation and unsent draft and releases the UI lease before handing off. Current, failed and active-run update cases never reopen. No real user installation or setting was changed by these tests.
 
 
-## Fresh startup and named sessions (0.2.33)
+## Fresh startup and named sessions (0.2.34)
 
+- The 0.2.33 release was withheld when Windows caught a POSIX-only expected path in the new startup fixture. The assertion now uses the platform’s resolved root.
 - Default interactive and noninteractive startups create a fresh chat without consulting the last-chat pointer. Explicit resume restores saved history and its directory; continue remains scoped to the current workspace. Multiple simultaneous launches leave existing saved journals untouched.
 - Naming a chat or sending a message makes it discoverable immediately and keeps it after close. Durable name events survive a missing snapshot and protect against stale-writer cleanup. Untouched, settings-only and unsent-only drafts remain hidden and are removed on normal close/switch. Existing active-work and writer-lock safeguards remain in place.
 - Four real PTY CLI launches verify fresh defaults, empty cleanup, named-empty persistence and explicit resume. The corruption fixture accepts Node’s alternate Brotli “Decompression failed” error while still requiring corrupted data to fail and restored data to decode. Tests use temporary homes and local fixtures; no paid inference or real user-session changes.
