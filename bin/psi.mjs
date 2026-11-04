@@ -43,7 +43,7 @@ Usage: psi [options] [prompt]
       --overkill            Enable configured subagent workflow
       --resume <id>         Resume a saved session
       --continue           Resume the latest session in this workspace
-      --new                Start an empty session instead of resuming
+      --new                Start an empty session (the default)
       --profile <name>      battlecode (default) or general
       --json                Emit JSONL events in print mode
       --no-debug            Disable operational debug logs
@@ -110,7 +110,7 @@ try {
   const administrative = ['models', 'providers', 'accounts', 'provider', 'sessions', 'jobs', 'doctor'].includes(command);
   let session;
   if (!administrative) {
-    session=await startupSession({home,cwd,resume:v.resume,continueLatest:v.continue,newSession:v.new,interactive:!!process.stdin.isTTY&&v.print===undefined&&!v.json&&!v.loop&&!positionals.length,explicitDirectory:!!v.cwd});
+    session=await startupSession({home,cwd,resume:v.resume,continueLatest:v.continue,newSession:v.new,interactive:!!process.stdin.isTTY&&v.print===undefined&&!v.json&&!v.loop&&!positionals.length});
     // Explicit invocation flags override saved session settings.
     if(v.mode)session.state.settings={...session.state.settings,agentMode:v.mode};if(v.overkill)session.state.settings={...session.state.settings,overkill:true};
     for (const [flag, key] of [['model', 'model'], ['effort', 'effort'], ['budget', 'budget'], ['max-steps', 'maxSteps'], ['tokens', 'maxOutputTokens'], ['profile', 'profile']]) if (v[flag] !== undefined) session.state.settings = { ...session.state.settings, [key]: config[key] };

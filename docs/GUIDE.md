@@ -310,7 +310,7 @@ Completed substantive tasks automatically finish with a Markdown review: outcome
 
 Subscription usage refreshes every 15 seconds by default (5–30 seconds in Settings), and after responses or account changes. Provider-reported decimals are preserved to one decimal place. Cached or stale readings are labeled; absent subscription quotas show Usage unavailable rather than estimated goal progress. Retry-After/backoff is respected. Provider latency and rounded source values still limit how immediate the display can be. Polling consumes no model tokens.
 
-New chats are temporary drafts until they contain a real message and a title. Their first message creates a title automatically. Empty drafts do not appear in `/resume`, `psi sessions` or continue selection, even after changing settings or naming them. Closing Psi or switching chats removes an empty draft. Existing conversations and locked/in-use sessions are preserved.
+New chats stay temporary until you name them or send a message. Either action saves the chat immediately; the first message also creates a title automatically. Untouched chats, settings-only chats and unsent drafts stay out of `/resume`, `psi sessions` and continue selection, and are removed on close or chat switching. Named empty chats, existing conversations and locked/in-use sessions are preserved.
 
 Subagent conversations now live under `sessions/<parent>/agents/<worker>`, alongside the parent chat. `/resume`, `psi sessions` and continue selection show only parent conversations. Existing idle worker sessions migrate on startup without changing journal content or usage identities. Active/locked workers wait until a later idle startup; they stay hidden from chat history. `/subagents` retains status, reports and follow-up actions.
 
@@ -322,7 +322,7 @@ Claude subscription connections use the installed Claude Code CLI and its native
 
 ### Live session saving
 
-Bare `psi` reopens the last active saved chat in its saved directory. Use `psi --new` or `/new` for an empty chat; `psi -C <path>` selects the latest active chat in that workspace. Sessions sort by journal activity rather than creation date.
+Bare `psi` always starts a new chat in the current directory; `psi -C <path>` starts a new chat in that directory. Use `/resume`, `psi --resume <id>` or `psi --continue` to reopen saved work. Explicit resume retains the chat’s saved directory; continue selects the latest saved chat in the current workspace. `--new` remains an alias for the default fresh start. Sessions sort by journal activity rather than creation date.
 
 Accepted input and queued corrections are flushed to `~/.psi/sessions/<id>/events.jsonl` before being displayed. Visible assistant text is journaled during streaming and flushed before display. Abruptly interrupted text is restored as an interrupted response, with incomplete text kept out of model context. Graceful close drains active writes and preserves the composer draft. The append-only journal is authoritative; missing metadata snapshots and torn trailing records are recovered without deleting earlier messages. No model call is needed to restore history.
 
@@ -337,7 +337,7 @@ Long prompts show three preview rows with a clickable Full prompt disclosure. Cl
 
 The default compact activity view hides successful reads, searches, simple shell inspections and housekeeping. It keeps failures, interrupted operations, builds/tests, durable background jobs, grouped file changes, subagent launches/reports and the final review visible. Ctrl+T reveals retained tool details without inference; Settings > Tool activity selects compact or full. Full durable tool records remain in session journals/artifacts. Hiding rows does not itself reduce provider token usage.
 
-Bare `psi` still resumes the saved chat when available. If that chat is open in another terminal or holds a live inference lock, a second implicit launch starts a new chat in its own working directory. `psi --new` always requests a separate chat. Explicit `--resume` or `--continue` refuses a busy chat with an actionable message, preserving single-writer guarantees. Interactive ownership is held for the lifetime of the UI, including idle periods, released on close/chat switch and recovered after an owner process dies.
+Every bare `psi` launch starts an independent new chat in its own working directory, including simultaneous launches in different terminals. Explicit `--resume` or `--continue` refuses a busy chat with an actionable message, preserving single-writer guarantees. Interactive ownership is held for the lifetime of the UI, including idle periods, released on close/chat switch and recovered after an owner process dies.
 
 
 ## Restoring recent activity (0.2.26)

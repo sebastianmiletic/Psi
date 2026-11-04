@@ -398,7 +398,7 @@ export class App {
     await this.activeRun?.catch(()=>{});for(let i=0;this.engine.busy&&i<250;i++)await delay(20);
     try{
       await this.agents.dispose();await this.tools.close();await this.session.flush?.();await this.session.markActive?.();
-      if(this.ui?.editor&&this.session.meta.hasMessages)await this.session.event({type:'state',state:{composerDraft:this.ui.editor.getText()}});
+      if(this.ui?.editor&&!this.session.meta.draft)await this.session.event({type:'state',state:{composerDraft:this.ui.editor.getText()}});
       if(!this.engine.busy)await this.session.compactStorage?.();
     }finally{await this.uiLease?.release();this.uiLease=undefined;}
     if(!preserveSession&&!this.engine.busy&&typeof this.session.discardEmpty==='function'&&!((await this.jobs.list()).some(j=>j.sessionId===this.session.meta.id&&['running','queued'].includes(j.status))))await this.session.discardEmpty();await this.storageMaintenance?.close();this.options.onClose?.();

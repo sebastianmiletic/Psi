@@ -9,9 +9,29 @@ import {fixture} from './helpers.mjs';
 
 async function home(t){const dir=await mkdtemp(join(tmpdir(),'psi-drafts-'));t.after(()=>rm(dir,{recursive:true,force:true}));return dir;}
 
-test('empty sessions stay out of history even after settings or an explicit name; close removes them',async t=>{
- const f=await fixture(t,()=>({text:'unused'}));assert.deepEqual(await Session.list(f.app.home),[]);await f.app.update({accent:'cyan'});await f.session.rename('Named but empty');assert.deepEqual(await Session.list(f.app.home),[]);
+test('untouched and settings-only sessions stay out of history and are removed on close',async t=>{
+ const f=await fixture(t,()=>({text:'unused'}));assert.deepEqual(await Session.list(f.app.home),[]);await f.app.update({accent:'cyan'});assert.deepEqual(await Session.list(f.app.home),[]);
  await f.app.close();assert.equal(await stat(f.session.dir).catch(()=>null),null);
+});
+
+test('naming an empty session persists it immediately and closing preserves the name',async t=>{
+ const f=await fixture(t,()=>({text:'unused'}));f.app.ui={note(){},stop(){}};await f.app.submit('/name Named but empty');
+ const rows=await Session.list(f.app.home);assert.equal(rows.length,1);assert.equal(rows[0].title,'Named but empty');assert.equal(rows[0].draft,false);assert.equal(rows[0].hasMessages,false);f.app.ui.editor={getText:()=> 'Saved unsent draft in a named chat'};
+ await f.app.close();const saved=await Session.load(f.session.meta.id,f.app.home);assert.equal(saved.meta.title,'Named but empty');assert.equal(saved.meta.named,true);assert.equal(saved.meta.draft,false);assert.deepEqual(saved.messages,[]);assert.equal(saved.state.composerDraft,'Saved unsent draft in a named chat');assert.equal(f.requests.length,0);
+});
+
+test('a durable name survives a missing snapshot and stale-writer empty cleanup',async t=>{
+ const dir=await home(t),session=await Session.create(dir,dir),stale=await Session.load(session.meta.id,dir);
+ await session.event({type:'session_name',name:'Recovered named chat'});
+ const rows=await Session.list(dir);assert.equal(rows.length,1);assert.equal(rows[0].title,'Recovered named chat');assert.equal(rows[0].draft,false);
+ assert.equal(await stale.discardEmpty(),false);const restored=await Session.load(session.meta.id,dir);assert.equal(restored.meta.named,true);assert.equal(restored.meta.draft,false);
+});
+
+test('a message without a title is saved, while unsent drafts remain temporary',async t=>{
+ const dir=await home(t),session=await Session.create(dir,dir),draft=await Session.create(dir,dir);
+ await session.message({role:'assistant',content:[{type:'text',text:'Saved message'}],timestamp:Date.now()});
+ await draft.event({type:'state',state:{composerDraft:'Not sent'}});
+ assert.equal(session.meta.title,'New session');assert.equal(session.meta.draft,false);assert.deepEqual((await Session.list(dir)).map(s=>s.id),[session.meta.id]);assert.equal(await session.discardEmpty(),false);assert.equal(await draft.discardEmpty(),true);
 });
 
 test('the first message saves an automatically titled session; closing preserves its conversation',async t=>{

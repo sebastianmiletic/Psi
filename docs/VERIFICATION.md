@@ -164,8 +164,8 @@ Actual API invoices and real competition transactions were not exercised in this
 
 ## Unsaved session drafts (0.2.18)
 
-- Session history requires a real message and a title. The first message persists its generated title; settings-only and named-but-empty sessions remain drafts. Empty sessions are removed on close and session switching after checking the durable journal, lock and active jobs.
-- Tests cover empty/named drafts, first-message saving, `/new`, preserving a message committed by another writer, active locks, and legacy snapshots. No inference was used.
+- Session history saves chats with a name or a real message. The first message persists its generated title; settings-only and untouched sessions remain drafts. Named empty chats are retained. Empty sessions are removed on close and session switching after checking the durable journal, lock and active jobs.
+- Tests cover empty drafts, named empty chats, first-message saving, `/new`, preserving a message committed by another writer, active locks, and legacy snapshots. No inference was used.
 
 ## Caching, bounded delegation and nested workers (0.2.19)
 
@@ -265,3 +265,10 @@ Actual API invoices and real competition transactions were not exercised in this
 - Successful interactive command-line updates may launch the exact installed entrypoint in the same terminal. Source updates return their own entrypoint even if another managed installation exists. Default-off, current, preview, JSON and noninteractive paths do not launch.
 - A real child-process fixture verified directory/home inheritance, saved-chat arguments and exit-code propagation. Signal tests verify the waiting parent does not exit before the child on terminal SIGINT and removes handlers afterward.
 - Manual `/update` tests verify opt-in reopening saves the same conversation and unsent draft and releases the UI lease before handing off. Current, failed and active-run update cases never reopen. No real user installation or setting was changed by these tests.
+
+
+## Fresh startup and named sessions (0.2.33)
+
+- Default interactive and noninteractive startups create a fresh chat without consulting the last-chat pointer. Explicit resume restores saved history and its directory; continue remains scoped to the current workspace. Multiple simultaneous launches leave existing saved journals untouched.
+- Naming a chat or sending a message makes it discoverable immediately and keeps it after close. Durable name events survive a missing snapshot and protect against stale-writer cleanup. Untouched, settings-only and unsent-only drafts remain hidden and are removed on normal close/switch. Existing active-work and writer-lock safeguards remain in place.
+- Four real PTY CLI launches verify fresh defaults, empty cleanup, named-empty persistence and explicit resume. The corruption fixture accepts Node’s alternate Brotli “Decompression failed” error while still requiring corrupted data to fail and restored data to decode. Tests use temporary homes and local fixtures; no paid inference or real user-session changes.

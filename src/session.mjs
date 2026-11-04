@@ -142,7 +142,7 @@ export class Session {
   visibleConversation(){return this.streaming?.text?[...this.conversation,{role:'assistant',partial:true,content:[{type:'text',text:this.streaming.text}],timestamp:this.streaming.timestamp}]:this.conversation;}
   transcriptView(){return this.transcript.view(this.streaming);}
   rememberVisible(message){this.transcript.message(message);this.conversation.push(message);if(this.conversation.length>100)this.conversation.shift();}
-  async saveMeta(){this.meta.draft=!(this.meta.hasMessages&&titled(this.meta));await atomicJSON(join(this.dir,'meta.json'),this.meta);}
+  async saveMeta(){this.meta.draft=!(this.meta.hasMessages||titled(this.meta));await atomicJSON(join(this.dir,'meta.json'),this.meta);}
   async message(message,{requestId}={}) {
     const hadMessages=this.meta.hasMessages;
     await this.event({ type: 'message', message,...(requestId?{requestId}:{}) });
@@ -175,8 +175,8 @@ export class Session {
     if(!await stat(join(this.dir,'meta.json')).catch(()=>null))return false;
     const removed=await withLock(join(this.dir,'run.lock'),async()=>{
       const ui=join(this.dir,'ui.lock');if(await stat(ui).catch(()=>null)){const owner=await readJSON(ui,null).catch(()=>null);if(!owner?.pid||alive(owner.pid))return false;}
-      const meta=await readJSON(join(this.dir,'meta.json'),null);if(!meta||meta.hasMessages)return false;
-      for await(const e of this.events())if(e.type==='message'&&meaningful(e.message)||e.type==='final_response'&&e.text?.trim()||e.type==='usage'||e.type==='state'&&(e.state?.queuedMessages?.length||e.state?.loopGoal||e.state?.agents?.length))return false;
+      const meta=await readJSON(join(this.dir,'meta.json'),null);if(!meta||meta.hasMessages||titled(meta))return false;
+      for await(const e of this.events())if((e.type==='session_name'||e.type==='session_auto_name')&&e.name?.trim()||e.type==='message'&&meaningful(e.message)||e.type==='final_response'&&e.text?.trim()||e.type==='usage'||e.type==='state'&&(e.state?.queuedMessages?.length||e.state?.loopGoal||e.state?.agents?.length))return false;
       // Keep our open lock until its handle closes, including on Windows.
       for(const name of await readdir(this.dir))if(name!=='run.lock')await rm(join(this.dir,name),{recursive:true,force:true,maxRetries:5,retryDelay:20});
       return true;
@@ -188,9 +188,12 @@ export class Session {
     const data = await Promise.all(names.map(async n=>{
       const meta=await readJSON(join(home,'sessions',n,'meta.json'),null);if(!meta||meta.parentSession||await stat(join(home,'sessions',n,'worker.json')).catch(()=>null))return null;
       const journal=await journalInfo(join(home,'sessions',n)),updatedAt=new Date(journal.mtimeMs||Date.parse(meta.createdAt)||0).toISOString();
-      if(meta.hasMessages&&titled(meta))return{...meta,updatedAt};
-      // Read old snapshots or a first message committed just before a crash.
-      for await(const e of new Session(home,meta).events())if(e.type==='message'&&meaningful(e.message)||e.type==='final_response'&&e.text?.trim()){const title=titled(meta)?meta.title:cleanTerminal(typeof e.message?.content==='string'?e.message.content:e.text||'Recovered session').replace(/\s+/g,' ').trim().slice(0,100);return{...meta,title,hasMessages:true,draft:false,updatedAt};}
+      if(meta.hasMessages||titled(meta))return{...meta,draft:false,updatedAt};
+      // Recover a name or first message committed just before its snapshot.
+      for await(const e of new Session(home,meta).events()){
+        if((e.type==='session_name'||e.type==='session_auto_name')&&e.name?.trim())return{...meta,title:e.name,...(e.type==='session_name'?{named:true}:{autoNamed:true}),draft:false,updatedAt};
+        if(e.type==='message'&&meaningful(e.message)||e.type==='final_response'&&e.text?.trim()){const title=titled(meta)?meta.title:cleanTerminal(typeof e.message?.content==='string'?e.message.content:e.text||'Recovered session').replace(/\s+/g,' ').trim().slice(0,100);return{...meta,title,hasMessages:true,draft:false,updatedAt};}
+      }
       return null;
     }));
     return data.filter(Boolean).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)||b.id.localeCompare(a.id));

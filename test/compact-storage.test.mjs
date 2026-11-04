@@ -47,7 +47,7 @@ test('compressed corruption fails explicitly instead of silently dropping saved 
  const f=await fixture(t,()=>({text:'unused'}));await f.session.message({role:'user',content:text,timestamp:1});
  const root=join(f.session.dir,'history'),name=(await readdir(root))[0],path=join(root,name),saved=await readFile(path);
  const broken=Buffer.from(saved);broken[broken.length-5]^=255;await writeFile(path,broken);
- await assert.rejects(async()=>rows(f.session.dir),/check|invalid|corrupt|unexpected/i);
+ await assert.rejects(async()=>rows(f.session.dir),/check|invalid|corrupt|unexpected|decompression failed/i);
  await writeFile(path,saved);assert.equal((await rows(f.session.dir)).length,1);
 });
 

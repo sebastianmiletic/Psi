@@ -16,12 +16,24 @@ test('a process killed after a live text flush recovers the visible response wit
  assert.equal(saved.messages.length,1);assert.match(saved.visibleConversation().at(-1).content[0].text,/Saved before abrupt/);assert.equal(saved.visibleConversation().at(-1).partial,true);
  await saved.message({role:'assistant',content:[{type:'text',text:'Final complete response'}],timestamp:Date.now()},{requestId:'live'});assert.equal(saved.visibleConversation().length,2);assert.equal(saved.streaming,null);
 });
-test('bare startup resumes the last active conversation and its saved directory; --new remains empty',async t=>{
+test('bare startup is always fresh; explicit resume restores the saved chat and directory',async t=>{
  const f=await fixture(t,()=>({text:'unused'})),first=f.session;await first.message({role:'user',content:'Older chat',timestamp:Date.now()});await delay(5);
  const second=await Session.create(f.root,f.app.home);await second.message({role:'user',content:'Newer-created chat',timestamp:Date.now()});await delay(5);await first.message({role:'user',content:'Most recent activity',timestamp:Date.now()});
  assert.equal((await Session.list(f.app.home))[0].id,first.meta.id);
- const resumed=await startupSession({home:f.app.home,cwd:'/',interactive:true});assert.equal(resumed.meta.id,first.meta.id);assert.equal(resumed.meta.cwd,f.root);await resumed.uiLease?.release();
- const fresh=await startupSession({home:f.app.home,cwd:f.root,interactive:true,newSession:true});assert.equal(fresh.messages.length,0);assert.notEqual(fresh.meta.id,first.meta.id);await fresh.discardEmpty();
+ const resumed=await startupSession({home:f.app.home,cwd:'/',resume:first.meta.id,interactive:true});assert.equal(resumed.meta.id,first.meta.id);assert.equal(resumed.meta.cwd,f.root);await resumed.uiLease?.release();
+ const fresh=await startupSession({home:f.app.home,cwd:'/',interactive:true});assert.equal(fresh.meta.cwd,'/');assert.equal(fresh.messages.length,0);assert.notEqual(fresh.meta.id,first.meta.id);await fresh.discardEmpty();
+});
+test('continue is explicit, workspace-scoped and supports named empty chats; new overrides continue',async t=>{
+ const f=await fixture(t,()=>({text:'unused'}));await f.session.rename('Saved empty workspace');
+ const other=await Session.create('/',f.app.home);await other.message({role:'user',content:'Other workspace',timestamp:Date.now()});
+ const resumed=await startupSession({home:f.app.home,cwd:f.root,continueLatest:true,interactive:true});assert.equal(resumed.meta.id,f.session.meta.id);assert.equal(resumed.meta.named,true);await resumed.uiLease.release();
+ const fresh=await startupSession({home:f.app.home,cwd:f.root,continueLatest:true,newSession:true,interactive:true});assert.notEqual(fresh.meta.id,f.session.meta.id);assert.equal(fresh.messages.length,0);await fresh.discardEmpty();
+});
+test('repeated default launches ignore the last-chat pointer and preserve saved files',async t=>{
+ const f=await fixture(t,()=>({text:'unused'}));await f.session.message({role:'user',content:'Keep the original history',timestamp:Date.now()});
+ const paths=['meta.json','events.jsonl'].map(name=>join(f.session.dir,name)),before=await Promise.all(paths.map(path=>readFile(path,'utf8')));
+ for(const interactive of [true,false]){const fresh=await startupSession({home:f.app.home,cwd:f.root,interactive});assert.notEqual(fresh.meta.id,f.session.meta.id);assert.equal(fresh.meta.cwd,f.root);assert.deepEqual(fresh.messages,[]);assert.equal(await fresh.discardEmpty(),true);}
+ assert.deepEqual(await Promise.all(paths.map(path=>readFile(path,'utf8'))),before);assert.deepEqual((await Session.list(f.app.home)).map(s=>s.id),[f.session.meta.id]);
 });
 test('first-message journal commits are discoverable even if their title snapshot never finished',async t=>{
  const f=await fixture(t,()=>({text:'unused'}));await f.session.event({type:'message',message:{role:'user',content:'Crash-safe first message',timestamp:Date.now()}});const rows=await Session.list(f.app.home);assert.equal(rows[0].title,'Crash-safe first message');assert.equal((await Session.load(f.session.meta.id,f.app.home)).meta.title,'Crash-safe first message');

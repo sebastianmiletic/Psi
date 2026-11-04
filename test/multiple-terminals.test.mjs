@@ -19,7 +19,7 @@ test('a live inference lock starts an independent implicit chat without changing
  const other=await startupSession({home:f.app.home,cwd:f.root,interactive:true});assert.notEqual(other.meta.id,f.session.meta.id);assert.equal(other.messages.length,0);
  assert.equal(await readFile(join(f.session.dir,'events.jsonl'),'utf8'),before);
  await assert.rejects(startupSession({home:f.app.home,cwd:f.root,resume:f.session.meta.id,interactive:true}),/another terminal.*psi --new/);
- release();await lock;const resumed=await startupSession({home:f.app.home,cwd:f.root,interactive:true});assert.equal(resumed.meta.id,f.session.meta.id);await resumed.uiLease.release();await other.discardEmpty();
+ release();await lock;const resumed=await startupSession({home:f.app.home,cwd:f.root,resume:f.session.meta.id,interactive:true});assert.equal(resumed.meta.id,f.session.meta.id);await resumed.uiLease.release();await other.discardEmpty();
 });
 
 test('two interactive apps keep separate directories, prompts and durable journals',async t=>{
@@ -34,9 +34,9 @@ test('two interactive apps keep separate directories, prompts and durable journa
  await second.close();assert.equal(await sessionInUse(second.session.meta.id,f.app.home),false);assert.equal(await sessionInUse(f.session.meta.id,f.app.home),true);
 });
 
-test('simultaneous implicit startups reserve a saved chat at most once',async t=>{
+test('simultaneous implicit startups both create fresh chats and leave saved history untouched',async t=>{
  const f=await saved(t);const sessions=await Promise.all([startupSession({home:f.app.home,cwd:f.root,interactive:true}),startupSession({home:f.app.home,cwd:f.root,interactive:true})]);
- assert.equal(new Set(sessions.map(s=>s.meta.id)).size,2);assert.equal(sessions.filter(s=>s.meta.id===f.session.meta.id).length,1);
+ assert.equal(new Set(sessions.map(s=>s.meta.id)).size,2);assert.equal(sessions.filter(s=>s.meta.id===f.session.meta.id).length,0);assert.ok(sessions.every(s=>s.messages.length===0));assert.deepEqual((await Session.list(f.app.home)).map(s=>s.id),[f.session.meta.id]);
  for(const s of sessions){await s.uiLease?.release();if(s.meta.id!==f.session.meta.id)await s.discardEmpty();}
 });
 
@@ -44,7 +44,7 @@ test('a crashed terminal lease is recovered without losing the saved conversatio
  const f=await saved(t),module=new URL('../src/session-lease.mjs',import.meta.url).href;
  const code=`import {claimSessionUI} from ${JSON.stringify(module)};import{writeSync}from'node:fs';await claimSessionUI({dir:${JSON.stringify(f.session.dir)},meta:{id:${JSON.stringify(f.session.meta.id)}}});writeSync(1,'held');process.kill(process.pid,'SIGKILL');`;
  const child=spawnSync(process.execPath,['--input-type=module','-e',code],{encoding:'utf8',timeout:10000});assert.equal(child.stdout,'held');
- const resumed=await startupSession({home:f.app.home,cwd:f.root,interactive:true});assert.equal(resumed.meta.id,f.session.meta.id);assert.equal(resumed.messages[0].content,'Saved analysis');await resumed.uiLease.release();
+ const resumed=await startupSession({home:f.app.home,cwd:f.root,resume:f.session.meta.id,interactive:true});assert.equal(resumed.meta.id,f.session.meta.id);assert.equal(resumed.messages[0].content,'Saved analysis');await resumed.uiLease.release();
 });
 
 test('new-chat switching and reload transfer ownership, and active empty chats cannot be discarded',async t=>{
