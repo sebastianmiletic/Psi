@@ -88,3 +88,50 @@ test('group labels are validated before any child is created and overflow counts
   assert.equal(rows.at(-1).hidden, 20);
   assert.deepEqual(workerDisplay(input.map(r => ({ ...r, status: 'completed' }))), []);
 });
+
+const screen=ui=>{ui.tui.renderNow();return ui.tui.getScreenLines().map(stripTerminalSequences);};
+function click(terminal,lines,text){const row=lines.findIndex(line=>line.includes(text));assert.ok(row>=0,'Visible click target: '+text);terminal.input(`\x1b[<0;4;${row+1}M`);terminal.input(`\x1b[<0;4;${row+1}m`);}
+async function footerFixture(t,count=8){
+ const f=await fixture(t,()=>({text:'unused'})),terminal=new MemoryTerminal(100,36),ui=new TerminalUI(f.app,{terminal});f.app.ui=ui;t.after(()=>ui.stop());f.app.engine.config.animations=false;ui.start();ui.editor.setText('Keep this draft');
+ for(let i=0;i<count;i++)ui.event({type:'agent_status',agent:{id:'group-worker-'+i,name:'Assignment '+i,group:i<count/2?'Navigation':'Benchmarks',status:i%3?'running':'waiting',activity:'read',model:'fixture/test',createdAt:new Date().toISOString()}});
+ return{...f,terminal,ui};
+}
+test('clicking a group expands individual workers below usage and raises the composer; click again collapses',async t=>{
+ const {ui,terminal,requests}=await footerFixture(t);const before=screen(ui),inputRow=before.findIndex(line=>line.includes('EXECUTE')),history=ui.transcript.children.length;
+ assert.match(before.join('\n'),/▸ Navigation/);click(terminal,before,'Navigation');let lines=screen(ui);
+ assert.ok(lines.findIndex(line=>line.includes('EXECUTE'))<inputRow);assert.match(lines.join('\n'),/▾ Navigation/);
+ for(let i=0;i<4;i++)assert.match(lines.join('\n'),new RegExp('Assignment '+i+' · read · test'));
+ const usage=lines.findIndex(line=>line.includes('% left'));assert.ok(lines.findIndex(line=>line.includes('▾ Navigation'))>usage);assert.match(lines.slice(0,6).join('\n'),/Ψ\s+v/);
+ terminal.input('!');assert.equal(ui.editor.getText(),'Keep this draft!');terminal.input('\x7f');
+ click(terminal,lines,'▾ Navigation');lines=screen(ui);assert.equal(lines.findIndex(line=>line.includes('EXECUTE')),inputRow);assert.equal(ui.editor.getText(),'Keep this draft');assert.equal(ui.transcript.children.length,history);assert.equal(requests.length,0);
+});
+test('large expanded groups scroll to every worker with a pinned collapse control and survive resizes',async t=>{
+ const {ui,terminal,requests}=await footerFixture(t,60);let lines=screen(ui);click(terminal,lines,'Navigation');lines=screen(ui);
+ assert.match(lines.join('\n'),/▾ Subagents · collapse/);assert.ok(ui.subagentBar.scroll.viewportHeight>0);assert.match(lines.join('\n'),/Keep this draft/);
+ const seen=new Set();for(let i=0;i<30;i++){
+  for(const line of lines){const m=line.match(/Assignment (\d+) · read/);if(m)seen.add(Number(m[1]));}
+  const row=lines.findIndex(line=>line.includes('▾ Navigation'));
+  const wheelRow=row>=0?row+2:terminal.rows-2;
+  terminal.input(`\x1b[<65;6;${wheelRow}M`);lines=screen(ui);
+ }
+ for(let i=0;i<30;i++)assert.ok(seen.has(i),'Scrollable worker '+i);
+ for(const [columns,rows]of[[28,18],[68,24],[100,36]]){terminal.resize(columns,rows);lines=screen(ui);assert.match(lines.join('\n'),/Subagents/);assert.match(lines.join('\n'),/EXEC/);assert.match(lines.slice(0,6).join('\n'),/Ψ\s+v/);assert.ok(lines.every(line=>visibleWidth(line)<=columns));}
+ click(terminal,lines,'Subagents');lines=screen(ui);assert.equal(ui.subagentBar.expanded.size,0);assert.match(lines.join('\n'),/▸ Navigation/);assert.equal(ui.editor.getText(),'Keep this draft');assert.equal(requests.length,0);
+});
+test('overflow and keyboard toggle expose all groups; completed workers disappear and switching chats resets expansion',async t=>{
+ const {ui,terminal}=await footerFixture(t,12);
+ for(const [i,worker]of [...ui.workerRows.values()].entries())ui.workerRows.set(worker.id,{...worker,group:'Group '+i});
+ let lines=screen(ui);click(terminal,lines,'more');lines=screen(ui);assert.equal(ui.subagentBar.expanded.size,12);assert.match(lines.join('\n'),/Subagents/);
+ terminal.input('\x07');screen(ui);assert.equal(ui.subagentBar.expanded.size,0);terminal.input('\x07');screen(ui);assert.equal(ui.subagentBar.expanded.size,12);
+ for(const worker of [...ui.workerRows.values()])ui.event({type:'agent_finished',agent:{...worker,status:'completed'}});
+ lines=screen(ui);assert.equal(ui.workerRows.size,0);assert.equal(ui.subagentBar.expanded.size,0);assert.doesNotMatch(lines.join('\n'),/Subagents · collapse/);
+ ui.workerRows.set('new',{id:'new',name:'Next assignment',group:'Next group',status:'running'});terminal.input('\x07');screen(ui);assert.equal(ui.subagentBar.expanded.size,1);ui.clear();screen(ui);assert.equal(ui.subagentBar.expanded.size,0);
+});
+
+ test('groups expand independently and keep live membership while a menu is open',async t=>{
+ const {ui,terminal}=await footerFixture(t);let lines=screen(ui);click(terminal,lines,'Navigation');lines=screen(ui);click(terminal,lines,'Benchmarks');lines=screen(ui);assert.equal(ui.subagentBar.expanded.size,2);
+ const menu=ui.effortMenu({levels:['low','medium','high'],effort:'medium',overkill:false});lines=screen(ui);assert.match(lines.join('\n'),/OVERKILL/);assert.match(lines.join('\n'),/EXECUTE/);assert.match(lines.slice(0,6).join('\n'),/Ψ\s+v/);terminal.input('\x1b');await menu;
+ for(const worker of [...ui.workerRows.values()].slice(0,6))ui.event({type:'agent_status',agent:{...worker,status:'completed'}});
+ lines=screen(ui);assert.match(lines.join('\n'),/▾ Benchmarks/);assert.match(lines.join('\n'),/Assignment 6 · read/);assert.doesNotMatch(lines.join('\n'),/Navigation/);assert.equal(ui.subagentBar.expanded.size,1);
+ click(terminal,lines,'▾ Benchmarks');assert.equal(ui.subagentBar.expanded.size,0);assert.equal(ui.editor.getText(),'Keep this draft');
+});

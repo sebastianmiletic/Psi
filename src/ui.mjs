@@ -4,7 +4,7 @@ import {
   colorToRgb, parseColor, visibleWidth,
 } from '@earendil-works/pi-tui';
 import { modelLabel } from './model-label.mjs';
-import {activeWorker,workerDisplay} from './subagents-ui.mjs';
+import {activeWorker,SubagentPanel} from './subagents-ui.mjs';
 import { accentText,accentBadge } from './theme.mjs';
 import { usageLabel,applicableQuota,quotaFreshness,remainingPercent,resetCountdown } from './usage.mjs';
 import { EffortPanel,StatsPanel,ToolsPanel,ResetPanel } from './panels.mjs';
@@ -74,16 +74,7 @@ export class TerminalUI {
       const gap = Math.max(1,width-visibleWidth(left)-rightWidth-1);
       return [left+' '.repeat(gap)+(state.overkill?accentBadge(' '+right+' ',c):dim(right)), ...(app.engine.config.showUsage===false?[]:[truncateToWidth('  '+dim(safe(usageLabel(app.activeAccount,app.activeUsage,{sessionCost:app.session.meteredCost,costKnown:app.session.meteredCostKnown,remaining:true,compact:true,weeklyOnly:true,resets:true}))),width)])];
     } };
-    this.subagentBar={invalidate(){},render:width=>{
-      const max=Math.max(1,Math.min(3,Math.floor(this.terminal.rows/10)));
-      return workerDisplay([...this.workerRows.values()],max).map(entry=>{
-        const r=entry.workers[0],count=entry.workers.length;
-        const elapsed=Math.max(0,Math.floor((Date.now()-Date.parse(r.createdAt||new Date()))/1000));
-        const extra=entry.hidden?` · +${entry.hidden} more`:'';
-        const detail=entry.grouped?`${count} active · ${r.name}${count>1?` +${count-1}`:''}`:`${r.activity||r.status} · ${modelLabel(r.model)} · ${elapsed}s`;
-        return truncateToWidth('  '+this.paint('●')+' '+safe(entry.name)+' · '+dim(safe(detail+extra)),width);
-      });
-    }};
+    this.subagentBar=new SubagentPanel(this);
     this.progressBar={invalidate(){},render:width=>{
       const quota=applicableQuota(app.activeUsage),state=app.session.state.progress;
       const pct=remainingPercent(quota?.usedPercent??state?.percent??0);
@@ -118,6 +109,7 @@ export class TerminalUI {
         else void app.close();
         return { consume: true };
       }
+      if(matchesKey(data,'ctrl+g')&&!this.pending){this.subagentBar.toggleAll();return{consume:true};}
       if(matchesKey(data,'ctrl+t')&&!this.pending){this.expandedTools=!toolDetails(this);this.tui.invalidate();this.render();return{consume:true};}
       if(matchesKey(data,'ctrl+p')&&!this.pending){this.lastUser?.toggle();return{consume:true};}
       if(matchesKey(data,'shift+tab')&&!this.pending){this.toggleMode();return{consume:true};}
@@ -312,5 +304,5 @@ export class TerminalUI {
       this.editor.disableSubmit = true; this.tui.setFocus(editorFocus?this.editor:component); this.render();
     });
   }
-  clear() {this.response=null;this.stream=null;this.lastUser=null;this.openTools.clear();this.stopMotion();this.workerRows.clear();this.transcript.clear();this.scroll.scrollToEnd();this.tui.resetTextSelection();this.render();}
+  clear() {this.response=null;this.stream=null;this.lastUser=null;this.openTools.clear();this.stopMotion();this.workerRows.clear();this.subagentBar.reset();this.transcript.clear();this.scroll.scrollToEnd();this.tui.resetTextSelection();this.render();}
 }

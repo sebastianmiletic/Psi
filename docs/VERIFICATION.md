@@ -273,3 +273,9 @@ Actual API invoices and real competition transactions were not exercised in this
 - Default interactive and noninteractive startups create a fresh chat without consulting the last-chat pointer. Explicit resume restores saved history and its directory; continue remains scoped to the current workspace. Multiple simultaneous launches leave existing saved journals untouched.
 - Naming a chat or sending a message makes it discoverable immediately and keeps it after close. Durable name events survive a missing snapshot and protect against stale-writer cleanup. Untouched, settings-only and unsent-only drafts remain hidden and are removed on normal close/switch. Existing active-work and writer-lock safeguards remain in place.
 - Four real PTY CLI launches verify fresh defaults, empty cleanup, named-empty persistence and explicit resume. The corruption fixture accepts Node’s alternate Brotli “Decompression failed” error while still requiring corrupted data to fail and restored data to decode. Tests use temporary homes and local fixtures; no paid inference or real user-session changes.
+
+
+## Expandable subagent groups (0.2.35)
+
+- Actual renderer and SGR mouse events verify expanding/collapsing a group, composer movement, task details below usage, unchanged draft/focus and no model requests.
+- A 60-worker fixture checks mouse-wheel access to every expanded task, the pinned collapse control, narrow/short terminal resizing, independent group expansion, picker layout, live membership changes and automatic removal of completed groups. Overflow and Ctrl+G expose all groups; switching chats clears expansion.
