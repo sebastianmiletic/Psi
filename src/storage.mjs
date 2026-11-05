@@ -59,7 +59,7 @@ export const defaults = {
   maxSteps: 0, budget: 0, maxOutputTokens: 8192, contextFraction: 0.72,
   toolOutputChars: 16000, toolActivity:'compact', concurrency: 4, retries: 4, cacheRetention: 'long',
   debug: true, customProviders: [], accent: 'sage', showLogo: true, animations: true,
-  autoSwitchAccounts: false, accountSwitchThreshold: 100, quotaRefreshSeconds: 15,
+  autoSwitchAccounts: true, accountSwitchThreshold: 100, quotaRefreshSeconds: 15,
   fallbackModels: [], loopRetrySeconds: 30, showUsage: true, customPrices: {},
   agentMode:'execute', overkill:false, subagentDepth:0, checkForUpdates:true, autoUpdate:false, openAfterUpdate:false,
   claudeCli:'claude',

@@ -188,7 +188,7 @@ Enable **Account switching** in `/settings` to move between saved accounts of th
 
 - Sage, cyan, blue, violet, rose or amber accents, plus custom hex/OKLCH colours.
 - Logo visibility, Motion and account usage visibility.
-- Automatic account switching, threshold, explicit fallback models and usage refresh interval.
+- Automatic account switching (on by default), threshold, explicit fallback models and usage refresh interval.
 - Main/compaction model, thinking, output tokens, prompt-cache retention and tool preview size.
 - Read concurrency, loop retry delay, budget/request limits, API prices, Battlecode CLI and debug logging.
 
@@ -364,3 +364,12 @@ The web response cache is compressed and limited to 16 MiB; expired five-minute 
 ## Provider connection recovery
 
 A dropped response stream reconnects within the existing retry, request and budget limits. A provider-side abort does not mean the user stopped Psi. Retrying discards incomplete tool calls, keeps saved partial text for inspection and executes tools only after receiving a complete successful response. Repeated failures report a connection error with saved progress retained. Double Escape or Ctrl+C still stops immediately, including during reconnect backoff. Authentication and quota handling remain separate.
+
+
+## Automatic account switching
+
+Account switching is enabled by default. Psi checks the selected account and then other saved accounts for the current provider, skipping any account with an exhausted five-hour, weekly, model-specific, other reported quota, or request/token rate window. Replacement usage is refreshed before changing the selection. Provider usage-limit errors also trigger switching when no usable quota snapshot is available.
+
+The same conversation, completed tool results, model and effort continue on the selected account. Only explicitly configured fallback models allow a provider/model change. If every account is unavailable, an autonomous `/loop` waits for capacity and resumes at a safe boundary; a regular task retains its saved progress with an account-unavailable error. Switching never bypasses request/budget limits or automatically spends reset credits.
+
+Settings → Account switching controls the global preference, including resumed sessions; a stale session setting cannot silently turn it off. You can disable it to keep one selected account.

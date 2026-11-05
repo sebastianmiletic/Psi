@@ -72,7 +72,7 @@ test('quota refresh is cached, account-specific, and backs off after HTTP 429',a
   assert.doesNotMatch(await readFile(monitor.usage.path,'utf8'),/test-access|Authorization/);
 });
 test('settings UI persists colours, automatic switching and token limits; logo colour updates without a restart',async t=>{
-  const f=await fixture(t,()=>({text:'Unused'}));const answers=['accent','violet','autoSwitchAccounts','maxOutputTokens',null];
+  const f=await fixture(t,()=>({text:'Unused'}));await f.app.update({autoSwitchAccounts:false});const answers=['accent','violet','autoSwitchAccounts','maxOutputTokens',null];
   f.app.ui={choose:async()=>answers.shift(),ask:async()=> '2048',note:()=>{},render:()=>{},event:()=>{},stop:()=>{}};
   await f.app.settingsMenu();const c=await loadConfig(f.session.home);assert.equal(c.accent,'violet');assert.equal(c.autoSwitchAccounts,true);assert.equal(c.maxOutputTokens,2048);
   assert.notDeepEqual(renderPsi(12,4,0,false,'sage'),renderPsi(12,4,0,false,'violet'));
@@ -98,7 +98,7 @@ test('settings can change during a running goal: appearance updates now, model c
 });
 
 test('an exhausted account keeps a goal waiting without sending inference calls, even with automatic switching off',async t=>{
-  const f=await fixture(t,()=>({text:'must not be called'}));
+  const f=await fixture(t,()=>({text:'must not be called'}));f.app.engine.config.autoSwitchAccounts=false;
   const id=await f.app.registry.accounts.add('fixture','Waiting',{type:'api_key',key:'test-key'});
   await f.app.accountUsage.patch(id,{limits:[{kind:'quota',label:'5h',usedPercent:100,resetAt:9999999999}]});
   const notify=f.app.options.onEvent;f.app.options.onEvent=e=>{notify(e);if(e.type==='waiting')setTimeout(()=>f.app.engine.stop(),5);};

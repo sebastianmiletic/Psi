@@ -286,3 +286,11 @@ Actual API invoices and real competition transactions were not exercised in this
 - Short prompts stay unfolded at widths 12–100, with multiline and Unicode fixtures, terminal resizes, Ctrl+P and unchanged composer drafts. The 1,800/1,801-character boundary is covered; long prompts retain exact input and saved history.
 - A real local HTTP/SSE connection drop reproduced the raw `terminated` failure before the repair. It now retries within the configured ceiling, keeps incomplete tool calls unexecuted, and completes without a false stopped label.
 - Adapter-side aborted results and internal AbortError failures recover independently of genuine cancellation. User stop during streaming/backoff still stops without another request. Exhaustion reports an explicit connection error; request limits remain enforced. No paid inference or user-session edits were used.
+
+
+## Automatic account failover (0.2.37)
+
+- New settings default to account switching on. Global settings override stale saved/pending session switches, while explicit opt-out still works.
+- Isolated local-provider tests cover five-hour, weekly, model-specific and other quota windows; live replacement validation; expired windows; request/token rate limits; and usage errors without HTTP codes. A real tool round commits a file before the account fails, then the replacement receives the same conversation and tool result exactly once.
+- All-account autonomous waiting recovers after a usage refresh. Exhausted candidates do not change the active selection, cooldowns respect the longest blocked window, and earliest recovery considers every exhausted window per account. Context-overflow errors retain compaction handling.
+- Codex and Claude Code route IDs are exercised against local compatible-provider fixtures, including real HTTP quota errors and account-specific authorization. These verify routing, not live subscription authentication. No paid inference, real account exhaustion, reset-credit consumption or live competition activity is used.

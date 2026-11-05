@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
-import { AccountRouter, QuotaMonitor, exhausted } from './quota.mjs';
+import { AccountRouter, QuotaMonitor, exhausted,limitResetAt } from './quota.mjs';
 import { validateSettings } from './settings.mjs';
 import { AccountUsage, limitsFromHeaders } from './usage.mjs';
 import { Type, getSupportedThinkingLevels, clampThinkingLevel } from '@earendil-works/pi-ai';
@@ -37,10 +37,10 @@ export class LimitError extends Error {}
 export class AccountUnavailableError extends Error {constructor(message,retryAt){super(message);this.retryAt=retryAt;}}
 export class Engine {
   constructor({ registry, session, tools, config, onEvent = () => {} }) {
-    this.registry = registry; this.session = session; this.tools = tools; this.config = withoutWorkerProfiles({ ...config, ...session.state.settings }); this.onEvent = onEvent;
+    this.registry = registry; this.session = session; this.tools = tools; this.config = withoutWorkerProfiles({ ...config, ...session.state.settings,autoSwitchAccounts:config.autoSwitchAccounts??true }); this.onEvent = onEvent;
     this.accountUsage = new AccountUsage(session.home);
     this.router=new AccountRouter(registry,this.accountUsage,this.config);this.quota=new QuotaMonitor(registry,this.config,session.home);
-    this.pendingSettings=withoutWorkerProfiles(session.state.pendingSettings);
+    this.pendingSettings=withoutWorkerProfiles(session.state.pendingSettings);delete this.pendingSettings.autoSwitchAccounts;
     this.busy = false; this.queue = [...session.state.queuedMessages||[]]; this.controller = null;
     tools.add('session_title','Set a concise chat title once after the first user message. User-set names are protected; never rename later.',{title:Type.String({minLength:1,maxLength:80})},async({title})=>({renamed:await session.autoName(title),title:session.meta.title}));
     tools.add('finish', 'Complete verified work. Include report: the full user-facing Markdown final review (outcome, scope, evidence/findings, verification, limitations and relevant next steps). Psi displays report after validation without another model request. Never finish with only a progress update. Evidence must be existing regular files; use only when the objective is actually achieved.', { summary: Type.String({minLength:1}), evidence: Type.Array(Type.String(),{minItems:1}), report:Type.Optional(Type.String({minLength:1,maxLength:100000})), experiment_id:Type.Optional(Type.String()) }, async (args,signal) => {
@@ -83,7 +83,7 @@ export class Engine {
     }
     if (patch.summaryModel) this.registry.find(patch.summaryModel);
     if (patch.effort && !getSupportedThinkingLevels(patch.model ? this.registry.find(patch.model) : this.model).includes(patch.effort)) throw new Error(`Supported efforts: ${getSupportedThinkingLevels(this.model).join(', ')}`);
-    const visual=Object.keys(patch).every(k=>['accent','showLogo','animations','showUsage','toolActivity','debug','checkForUpdates','autoUpdate','openAfterUpdate'].includes(k));
+    const visual=Object.keys(patch).every(k=>['accent','showLogo','animations','showUsage','toolActivity','debug','checkForUpdates','autoUpdate','openAfterUpdate','autoSwitchAccounts'].includes(k));
     if(this.busy&&!this.waiting&&!immediate&&!visual){
       Object.assign(this.pendingSettings,patch);await this.session.event({type:'state',state:{pendingSettings:this.pendingSettings}});
       this.onEvent({type:'settings_queued',settings:this.pendingSettings,patch:{...patch}});return;
@@ -118,23 +118,21 @@ export class Engine {
     const reserve = (inputEstimate * model.cost.input + maxTokens * model.cost.output) / 1e6;
     if (this.config.budget > 0 && this.session.totals.cost + reserve > this.config.budget) throw new LimitError(`Budget reserve reached. Estimated next request: $${reserve.toFixed(4)}; session estimate: $${this.session.totals.cost.toFixed(4)}. Adjust budget or output tokens in /settings.`);
     const effort = clampThinkingLevel(model, this.config.effort);
-    const excluded=[];
+    const excluded=[];let lastAccountError;
     for (let attempt = 0; ; attempt++) {
       this.controller.signal.throwIfAborted();
       if (this.config.maxSteps > 0 && this.runRequests >= this.config.maxSteps) throw new LimitError(`Reached the ${this.config.maxSteps} request limit. Resume to continue.`);
       if (this.config.budget > 0 && this.session.totals.cost + reserve > this.config.budget) throw new LimitError('Budget reserve reached before retry.');
       const selected=await this.registry.accounts.selected(model.provider);
-      if(selected.type==='oauth')await this.quota.refresh(selected,{signal:this.controller.signal});
-      const chosen=await this.router.choose(model.provider,{exclude:excluded});
+      const chosen=await this.router.choose(model.provider,{exclude:excluded,refresh:account=>this.quota.refresh(account,{signal:this.controller.signal})});
       if(!chosen){
         const next=(this.config.autoSwitchAccounts?this.config.fallbackModels||[]:[]).find(m=>m!==modelName&&!_routes.includes(m));
         if(next){const previous=modelName;if(summary)this.config.summaryModel=next;else {this.config.model=next;this.config.effort=clampThinkingLevel(this.registry.find(next),this.config.effort);}
           await this.session.event({type:'state',state:{settings:{...this.session.state.settings,...(summary?{summaryModel:next}:{model:next,effort:this.config.effort})}}});
           this.onEvent({type:'model_fallback',previous,model:next});return this.request(messages,{maxTokens,tools,summary,_routes:[..._routes,modelName]});}
-        throw new AccountUnavailableError('All eligible accounts are waiting for quota or credentials',await this.router.nextReset(model.provider));
+        throw new AccountUnavailableError(lastAccountError||'All eligible accounts are waiting for quota or credentials',await this.router.nextReset(model.provider));
       }
-      if(chosen.type==='oauth'&&chosen.id!==selected.id){const u=await this.quota.refresh(chosen,{signal:this.controller.signal});if(exhausted(u,this.config.accountSwitchThreshold||100).length){excluded.push(chosen.id);continue;}}
-      if(chosen.id!==selected.id)this.onEvent({type:'account_switched',account:chosen,previous:selected.name});
+      if(chosen.id!==selected.id){if(chosen.type!=='ambient')await this.registry.accounts.use(chosen.id);this.onEvent({type:'account_switched',account:chosen,previous:selected.name});}
       const { account, models } = await this.registry.forRequest(model.provider,chosen);account.billingMode=this.registry.billingMode(account);
       const requestId = randomUUID(); let limits = [],reportedCost=null,retryAfter=60;
       this.onEvent({ type: 'account_selected', account, accountUsage: await this.accountUsage.get(account.id) });
@@ -179,9 +177,15 @@ export class Engine {
       if (result.stopReason === 'aborted' || this.controller.signal.aborted) throw this.controller.signal.reason || new Error('Request aborted.');
       if (result.stopReason !== 'error') { this.onEvent({ type: 'request_end', message: result, summary }); return result; }
       const error = redact(result.errorMessage || 'Provider request failed.');
-      const quotaOrAuth=/429|rate.?limit|usage.limit|quota|insufficient_quota|401|403|invalid.api.key|invalid.grant|authentication/i.test(error);
+      const credentialFailure=/401|403|invalid.api.key|invalid.grant|authentication/i.test(error);
+      const contextLimit=/context.{0,30}(length|limit|window|exceed)|too many tokens|maximum.{0,20}tokens/i.test(error);
+      const quotaOrAuth=credentialFailure||!contextLimit&&/429|rate.?limit|usage[_ .-]?limit|quota|insufficient[_ .-]?(?:quota|credits?|balance)|(?:hit|reached|exceeded|exhausted).{0,40}(?:limit|usage|credits?)|(?:limit|credits?|balance).{0,40}(?:reached|exceeded|exhausted|depleted)/i.test(error);
       if(quotaOrAuth){
-        await this.router.block(account,{seconds:retryAfter,error:/401|403|auth|invalid/i.test(error)?'credentials':'quota'});
+        lastAccountError=error;
+        if(!credentialFailure)await this.quota.refresh(account,{force:true,signal:this.controller.signal});
+        const usage=await this.accountUsage.get(account.id),reset=exhausted(usage,100).map(l=>limitResetAt(l,usage)).filter(Number.isFinite);
+        const seconds=Math.max(retryAfter,...reset.map(at=>Math.max(0,(at-Date.now())/1000)));
+        await this.router.block(account,{seconds,error:credentialFailure?'credentials':'quota'});
         if(!this.config.autoSwitchAccounts)throw new AccountUnavailableError(error,Date.now()+retryAfter*1000);
         excluded.push(account.id);this.onEvent({type:'account_exhausted',account,error:'Account unavailable; checking configured alternatives'});continue;
       }
