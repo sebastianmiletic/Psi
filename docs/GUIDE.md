@@ -333,7 +333,7 @@ The pinned header shows `Ψ v<running version>` and retains a known newer versio
 
 ## Compact conversation and parallel terminals (0.2.25)
 
-Long prompts show three preview rows with a clickable Full prompt disclosure. Click it again or use Ctrl+P for the latest prompt. Expansion does not send a message or change the composer draft. The complete original prompt remains in the journal and model input; this is a visual fold, not lossy context compaction.
+Prompts longer than 1,800 characters show three preview rows with a clickable Full prompt disclosure. Shorter prompts remain fully visible even when wrapped in a narrow terminal. Click it again or use Ctrl+P for the latest prompt. Expansion does not send a message or change the composer draft. The complete original prompt remains in the journal and model input; this is a visual fold, not lossy context compaction.
 
 The default compact activity view hides successful reads, searches, simple shell inspections and housekeeping. It keeps failures, interrupted operations, builds/tests, durable background jobs, grouped file changes, subagent launches/reports and the final review visible. Ctrl+T reveals retained tool details without inference; Settings > Tool activity selects compact or full. Full durable tool records remain in session journals/artifacts. Hiding rows does not itself reduce provider token usage.
 
@@ -359,3 +359,8 @@ Cleanup is automatic: a short-lived background worker runs after normal startup,
 The web response cache is compressed and limited to 16 MiB; expired five-minute responses are pruned on startup, fetch and manual maintenance. Saved response artifacts are independent and remain available. Verbose diagnostic logs rotate and compress separately from messages. Existing content-hashed text artifacts continue to reuse the same path within a session.
 
 `/export` still produces readable Markdown. `psi storage export <session-id> > history.jsonl` reconstructs a complete raw journal without leaving a second decoded copy on disk. The `read` tool treats the original session `events.jsonl` path as a virtual complete transcript even when most history is compressed. Converted histories require Psi 0.2.27 or later; export JSONL first if another tool needs the old format. Storage compression does not change model requests or AI usage.
+
+
+## Provider connection recovery
+
+A dropped response stream reconnects within the existing retry, request and budget limits. A provider-side abort does not mean the user stopped Psi. Retrying discards incomplete tool calls, keeps saved partial text for inspection and executes tools only after receiving a complete successful response. Repeated failures report a connection error with saved progress retained. Double Escape or Ctrl+C still stops immediately, including during reconnect backoff. Authentication and quota handling remain separate.

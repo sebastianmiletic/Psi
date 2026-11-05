@@ -57,7 +57,7 @@ export class UserMessage {
   render(width){
     const enabled=this.animate&&this.ui.app.engine.config.animations!==false,t=enabled?Math.min(1,Math.max(0,(this.ui.now()-this.started)/240)):1;
     const marker=pulse('›',this.ui,0.48+0.52*(1-(1-t)**4)),room=Math.max(1,width-2);
-    const preview=this.preview.render(room);this.collapsible=this.text.length>1800||preview.length>6;
+    const preview=this.preview.render(room);this.collapsible=this.text.length>1800;
     const all=this.collapsible?(this.expanded?this.body.render(room):preview.slice(0,3)):preview;
     const lines=all.map((line,i)=>truncateToWidth((i===0?marker+' ':'  ')+line,width));
     this.toggleRow=null;

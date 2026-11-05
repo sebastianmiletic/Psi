@@ -24,6 +24,7 @@ export async function fixture(t, respond) {
       const calls=answer.calls || (answer.call?[answer.call]:[]);
       for(const [i,call]of calls.entries())send({ choices: [{ index: 0, delta: { tool_calls: [{ index:i, id: `call-${requests.length}-${i}`, type: 'function', function: { name: call.name, arguments: JSON.stringify(call.args) } }] }, finish_reason: null }] });
       if (answer.text) send({ choices: [{ index: 0, delta: { content: answer.text }, finish_reason: null }] });
+      if(answer.disconnect){await delay(30);res.destroy();return;}
       send({ choices: [{ index: 0, delta: {}, finish_reason: calls.length ? 'tool_calls' : 'stop' }], usage: { ...(answer.billedCost!==undefined?{cost:answer.billedCost}:{}), prompt_tokens: 100, completion_tokens: 20, total_tokens: 120, prompt_tokens_details: { cached_tokens: 30 } } });
       res.end('data: [DONE]\n\n');
     } catch (e) { res.destroy(e); }

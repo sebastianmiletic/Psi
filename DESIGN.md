@@ -27,7 +27,7 @@ Shift+Tab toggles PLAN/EXECUTE. /model and account pickers keep focus in the rea
 
 ## Compact conversation
 
-Long user prompts fold to three preview rows and a small accent disclosure: Full prompt / Hide prompt, with Ctrl+P as the keyboard equivalent. The control stays immediately after the preview when expanded; it preserves the composer draft and scroll anchor. Short prompts remain unchanged. Full prompt text stays in durable history and inference input.
+Prompts longer than 1,800 characters fold to three preview rows and a small accent disclosure: Full prompt / Hide prompt, with Ctrl+P as the keyboard equivalent. The control stays immediately after the preview when expanded; it preserves the composer draft and scroll anchor. Short prompts remain fully visible regardless of wrapping, newlines or terminal width. Full prompt text stays in durable history and inference input.
 
 Compact is the default tool-activity presentation. Successful routine exploration and housekeeping consume no chat rows. Errors, interrupted operations, builds/tests, background jobs, deduplicated file-change groups, subagent launches/reports and the final review remain visible. Ctrl+T reveals tool detail and Settings offers Full activity. Settled hidden activity and empty response placeholders are evicted before visible messages in the bounded transcript. No extra model request is made to generate UI summaries or disclose content.
 

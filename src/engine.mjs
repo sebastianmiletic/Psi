@@ -159,8 +159,11 @@ export class Engine {
         result = await stream.result();
       } catch (e) {
         if (this.controller.signal.aborted){if(!summary)await this.session.event({type:'stream_end',requestId,outcome:'aborted'});throw e;}
-        result = { stopReason: 'error', errorMessage: e.message };
+        result = { stopReason: 'error', errorMessage: e.name==='AbortError'?'Provider connection interrupted.':e.message };
       }
+      // A provider-side abort is a failed connection, not a user cancellation.
+      const providerAborted=result.stopReason==='aborted'&&!this.controller.signal.aborted;
+      if(providerAborted)result={...result,stopReason:'error',errorMessage:result.errorMessage||'Provider connection interrupted.'};
       if(!summary)await this.session.event({type:'stream_end',requestId,outcome:result.stopReason});
       const billing={mode:this.registry.billingMode(account),known:reportedCost!==null||this.registry.pricesKnown(model),source:reportedCost!==null?'provider_reported':'usage_at_model_rates'};
       if(reportedCost!==null&&result.usage?.cost)result.usage.cost.total=reportedCost;
@@ -182,10 +185,11 @@ export class Engine {
         if(!this.config.autoSwitchAccounts)throw new AccountUnavailableError(error,Date.now()+retryAfter*1000);
         excluded.push(account.id);this.onEvent({type:'account_exhausted',account,error:'Account unavailable; checking configured alternatives'});continue;
       }
-      const transient = /429|rate.?limit|overload|50[0-9]|52[0-9]|timeout|timed out|ECONN|fetch failed|socket|temporar/i.test(error);
-      if (!transient || attempt >= this.config.retries) throw new Error(error);
+      const connectionLost=providerAborted||/\bterminated\b|other side closed|UND_ERR_(?:SOCKET|CONNECT_TIMEOUT|HEADERS_TIMEOUT|BODY_TIMEOUT)|provider connection interrupted/i.test(error);
+      const transient = connectionLost||/429|rate.?limit|overload|50[0-9]|52[0-9]|timeout|timed out|ECONN|fetch failed|socket|temporar/i.test(error);
+      if (!transient || attempt >= this.config.retries) throw new Error(connectionLost?'Provider connection lost before completing the response. Saved progress is intact.':error);
       const ms = Math.min(30000, 1000 * 2 ** attempt + Math.floor(Math.random() * 300));
-      this.onEvent({ type: 'retry', error, attempt: attempt + 1, delay: ms });
+      this.onEvent({ type: 'retry', error:connectionLost?'Provider connection lost; reconnecting.':error, attempt: attempt + 1, delay: ms });
       await delay(ms, undefined, { signal: this.controller.signal });
     }
   }

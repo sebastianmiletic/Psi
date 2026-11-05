@@ -32,6 +32,13 @@ test('prompt disclosure handles short messages, wide Unicode and narrow resizes'
  for(const width of[20,28,60,100]){assert.ok(message.render(width).every(l=>visibleWidth(l)<=width));assert.equal(message.collapsible,true);message.toggle();assert.ok(message.render(width).every(l=>visibleWidth(l)<=width));message.toggle();}
 });
 
+test('short prompts never acquire a disclosure from wrapping or newlines',async t=>{
+ const f=await setup(t),prompts=['Fix the prompt display and preserve every detail. '.repeat(5),Array.from({length:10},(_,i)=>'Step '+i).join('\n'),'你好 🧪 Ψ '.repeat(35),'x'.repeat(1800)];
+ for(const prompt of prompts){const message=new UserMessage(f.ui,prompt,{animate:false});for(const width of[12,20,28,68,100]){const lines=message.render(width).map(stripTerminalSequences);assert.equal(message.collapsible,false);assert.equal(message.toggle(),false);assert.doesNotMatch(lines.join('\n'),/Full prompt|Hide prompt/);assert.ok(lines.every(line=>visibleWidth(line)<=width));assert.ok(lines.length>1);}}
+ const long=new UserMessage(f.ui,'x'.repeat(1801),{animate:false});long.render(100);assert.equal(long.collapsible,true);assert.equal(long.toggle(),true);
+ f.ui.user(prompts[0],{animate:false});f.ui.editor.setText('Unchanged draft');for(const columns of[28,100]){f.terminal.resize(columns,32);frame(f.ui);assert.equal(f.ui.lastUser.collapsible,false);f.terminal.input('\x10');assert.equal(f.ui.lastUser.expanded,false);}assert.equal(f.ui.editor.getText(),'Unchanged draft');assert.equal(f.requests.length,0);
+});
+
 test('compact activity hides routine successes, exposes errors, and reveals details without inference',async t=>{
  const f=await setup(t);
  call(f.ui,'read','read',{path:'source.mjs'},'PRIVATE READ CONTENT');call(f.ui,'search','search',{pattern:'secret pattern'},'PRIVATE SEARCH CONTENT');call(f.ui,'shell','bash',{command:'wc -l source.mjs'},JSON.stringify({status:'completed',exitCode:0,output:'PRIVATE SHELL CONTENT'}));

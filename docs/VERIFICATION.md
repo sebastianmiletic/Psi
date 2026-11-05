@@ -279,3 +279,10 @@ Actual API invoices and real competition transactions were not exercised in this
 
 - Actual renderer and SGR mouse events verify expanding/collapsing a group, composer movement, task details below usage, unchanged draft/focus and no model requests.
 - A 60-worker fixture checks mouse-wheel access to every expanded task, the pinned collapse control, narrow/short terminal resizing, independent group expansion, picker layout, live membership changes and automatic removal of completed groups. Overflow and Ctrl+G expose all groups; switching chats clears expansion.
+
+
+## Prompt folding and disconnected streams (0.2.36)
+
+- Short prompts stay unfolded at widths 12–100, with multiline and Unicode fixtures, terminal resizes, Ctrl+P and unchanged composer drafts. The 1,800/1,801-character boundary is covered; long prompts retain exact input and saved history.
+- A real local HTTP/SSE connection drop reproduced the raw `terminated` failure before the repair. It now retries within the configured ceiling, keeps incomplete tool calls unexecuted, and completes without a false stopped label.
+- Adapter-side aborted results and internal AbortError failures recover independently of genuine cancellation. User stop during streaming/backoff still stops without another request. Exhaustion reports an explicit connection error; request limits remain enforced. No paid inference or user-session edits were used.
