@@ -185,8 +185,8 @@ export class Engine {
         lastAccountError=error;
         if(!credentialFailure)await this.quota.refresh(account,{force:true,signal:this.controller.signal});
         const usage=await this.accountUsage.get(account.id),reset=exhausted(usage,100).map(l=>limitResetAt(l,usage)).filter(Number.isFinite);
-        const seconds=Math.max(retryAfter,...reset.map(at=>Math.max(0,(at-Date.now())/1000)));
-        await this.router.block(account,{seconds,error:credentialFailure?'credentials':'quota'});
+        const until=Math.max(Date.now()+retryAfter*1000,...reset);
+        await this.router.block(account,{seconds:retryAfter,until,error:credentialFailure?'credentials':'quota'});
         if(!this.config.autoSwitchAccounts)throw new AccountUnavailableError(error,Date.now()+retryAfter*1000);
         excluded.push(account.id);this.onEvent({type:'account_exhausted',account,error:'Account unavailable; checking configured alternatives'});continue;
       }

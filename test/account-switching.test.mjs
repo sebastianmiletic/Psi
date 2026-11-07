@@ -105,3 +105,9 @@ test('Codex and Claude Code provider routes continue on their next saved account
   await f.app.engine.run('Continue the current provider task');assert.equal(f.requests.length,2);assert.deepEqual(f.requestHeaders.map(h=>h.authorization),['Bearer provider-first','Bearer provider-next']);assert.equal((await f.app.registry.accounts.selected(provider)).id,b);assert.equal(f.app.engine.config.model,provider+'/test');assert.equal(f.session.status,'idle');
  }
 });
+
+ test('absolute reset timestamps do not drift when time advances before writing a cooldown',async t=>{
+ const f=await fixture(t,()=>({text:'unused'})),ids=await accounts(f,1),start=Date.now(),until=start+86400000;let clock=start;
+ const router=new AccountRouter(f.app.registry,f.app.accountUsage,f.app.engine.config,{now:()=>++clock});
+ await router.block({id:ids[0]},{seconds:60,until});assert.equal(Date.parse((await f.app.accountUsage.get(ids[0])).cooldownUntil),until);
+});

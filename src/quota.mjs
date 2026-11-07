@@ -128,8 +128,9 @@ export class AccountRouter {
     }
     return null;
   }
-  async block(account, { seconds=60, error='quota' }={}) {
-    await this.usage.patch(account.id,{cooldownUntil:new Date(this.now()+seconds*1000).toISOString(),cooldownReason:error});
+  async block(account, { seconds=60, until, error='quota' }={}) {
+    const reset=Math.max(this.now()+seconds*1000,Number.isFinite(until)?until:0);
+    await this.usage.patch(account.id,{cooldownUntil:new Date(reset).toISOString(),cooldownReason:error});
   }
   async nextReset(provider) {
     const active=await this.registry.accounts.selected(provider),accounts=(await this.registry.accounts.list()).filter(a=>a.provider===provider);

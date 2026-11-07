@@ -375,7 +375,7 @@ The same conversation, completed tool results, model and effort continue on the 
 Settings → Account switching controls the global preference, including resumed sessions; a stale session setting cannot silently turn it off. You can disable it to keep one selected account.
 
 
-## Working menus, recovery and session statistics (0.2.38)
+## Working menus, recovery and session statistics (0.2.39)
 
 `/accounts`, `/model`, `/settings`, `/stats` and session browsing remain available while inference runs. Account switching preserves the account pinned to the current request and uses the new choice for later requests; model/provider settings apply at a safe boundary. Removing the account currently serving a request waits until it completes. Opening or dismissing a menu does not stop the AI.
 

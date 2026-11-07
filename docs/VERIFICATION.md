@@ -296,7 +296,7 @@ Actual API invoices and real competition transactions were not exercised in this
 - Codex and Claude Code route IDs are exercised against local compatible-provider fixtures, including real HTTP quota errors and account-specific authorization. These verify routing, not live subscription authentication. No paid inference, real account exhaustion, reset-credit consumption or live competition activity is used.
 
 
-## Menus during work, sustained recovery and session stats (0.2.38)
+## Menus during work, sustained recovery and session stats (0.2.39)
 
 - A real local streaming request stays in flight while Accounts, Models, Settings and Session Stats open and close. Changing accounts keeps the original request pinned and sends the next tool/model round through the replacement. Narrow stats retain the header, composer and human-time row without overflow.
 - Real HTTP GET body failures retry without retaining partial bytes. Repeated failures stop after three attempts, cancellation stops immediately, response-size limits remain effective and HTTP 404 is not retried. Nested transport errors and premature closes are classified separately from application/auth errors.
@@ -304,3 +304,5 @@ Actual API invoices and real competition transactions were not exercised in this
 - Ordinary tasks and final reviews recover after a failed reconnect batch without restarting or losing their conversation. User stop and request ceilings remain enforced. Failure category receipts contain no prompt text.
 - Session stats exclude other chats, include nested workers exactly once, retain undated legacy usage only in Session/All, and distinguish overlapping AI wall time from combined process time. Live time advances without new usage receipts.
 - Human-time fixtures merge timestamp windows, exclude workers, cap idle time, close on blur/session switch/exit and verify throttling without keystroke contents. Old stats caches rebuild safely; timer tests verify automatic refresh and cleanup. Existing history and model inputs remain intact.
+
+- The 0.2.38 release was withheld after macOS exposed a one-millisecond cooldown drift. Cooldowns now accept the provider’s absolute reset timestamp; a controlled advancing-clock regression verifies no duration-conversion drift.
