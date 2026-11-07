@@ -26,8 +26,10 @@ test('an adapter abort without a user abort reconnects and never claims the user
  await f.app.engine.run('Recover the adapter');assert.equal(calls(),2);assert.equal(f.requests.length,1);assert.equal(f.session.status,'idle');assert.equal(f.events.filter(e=>e.type==='retry').length,1);assert.ok(!f.events.some(e=>e.type==='stopped'));
 });
 
-test('connection recovery remains bounded and exhausted retries report a connection error',async t=>{
- const f=await fixture(t,()=>({disconnect:true}));await assert.rejects(f.app.engine.run('Recover a persistent outage'),/Provider connection lost/i);assert.equal(f.requests.length,2);assert.equal(f.session.status,'error');assert.ok(!f.events.some(e=>e.type==='stopped'));
+test('exhausted connection retries pause without terminating the task and user stop cancels waiting',async t=>{
+ const f=await fixture(t,()=>({disconnect:true})),observe=f.app.options.onEvent;
+ f.app.options.onEvent=e=>{observe(e);if(e.type==='waiting')f.app.engine.stop();};
+ await f.app.engine.run('Recover a persistent outage');assert.equal(f.requests.length,2);assert.ok(f.events.some(e=>e.type==='waiting'&&/provider connection/.test(e.reason)));assert.ok(!f.events.some(e=>e.type==='error'));assert.equal(f.session.status,'stopped');
 });
 
 test('a genuine user stop cancels a request without reconnecting',async t=>{
@@ -48,4 +50,16 @@ test('stopping during reconnect backoff prevents any further provider request',a
 test('reconnect attempts obey the request ceiling rather than bypassing it',async t=>{
  const f=await fixture(t,()=>({disconnect:true}));f.app.engine.config.maxSteps=1;
  await assert.rejects(f.app.engine.run('Bounded reconnect'),/request|ceiling|limit/i);assert.equal(f.requests.length,1);assert.equal(f.session.status,'limited');assert.ok(!f.events.some(e=>e.type==='stopped'));
+});
+
+ test('a normal task recovers after waiting through a full failed connection batch',async t=>{
+ const f=await fixture(t,(_p,n)=>n<=2?{disconnect:true}:{text:'Recovered without restarting the task.'}),observe=f.app.options.onEvent;
+ f.app.options.onEvent=e=>{observe(e);if(e.type==='waiting')setTimeout(()=>f.app.engine.wake?.(),5);};
+ await f.app.engine.run('Keep working after the outage');assert.equal(f.requests.length,3);assert.equal(f.session.status,'idle');assert.ok(f.events.some(e=>e.type==='waiting'));assert.ok(!f.events.some(e=>e.type==='stopped'||e.type==='error'));assert.equal(f.session.messages.filter(m=>m.role==='user'&&!m.internal).length,1);
+});
+
+test('a completed task still delivers its final review after a connection outage during finalization',async t=>{
+ const f=await fixture(t,(_p,n)=>n===1?{call:{name:'write',args:{path:'proof.txt',content:'verified'}}}:n===2?{call:{name:'finish',args:{summary:'Verified task',evidence:['proof.txt']}}}:n<=4?{disconnect:true}:{text:'Verified final review after reconnect.'}),observe=f.app.options.onEvent;
+ f.app.options.onEvent=e=>{observe(e);if(e.type==='waiting')setTimeout(()=>f.app.engine.wake?.(),5);};
+ await f.app.engine.run('Finish and provide a review');assert.equal(f.requests.length,5);assert.equal(f.session.status,'idle');assert.match(JSON.stringify(f.session.conversation.at(-1)),/Verified final review/);assert.ok(f.events.some(e=>e.type==='waiting'));assert.ok(!f.events.some(e=>e.type==='stopped'||e.type==='error'));
 });

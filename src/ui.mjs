@@ -100,6 +100,7 @@ export class TerminalUI {
     this.tui.setLayoutRoot(this.layout);
     this.tui.setFocus(this.editor);
     this.tui.addInputListener(data => {
+      if(!/^\x1b(?:\]|\[\?)/.test(data))app.recordHumanActivity?.('input');
       if (this.logoAnimation && (matchesKey(data, 'escape') || matchesKey(data, 'ctrl+c') || matchesKey(data, 'ctrl+d'))) { this.hideLogo(); return { consume: true }; }
       if(matchesKey(data,'escape')&&this.pending){this.lastEscape=0;this.pending.cancel();return{consume:true};}
       if (matchesKey(data, 'ctrl+c')) {
@@ -119,9 +120,13 @@ export class TerminalUI {
   }
   start() {
     this.closed=false;
-    this.tui.start();this.syncMotion();
+    // Focus reports are consumed by the renderer before its input listeners.
+    const terminal=this.terminal,start=terminal.start;
+    terminal.start=(onInput,onResize)=>start.call(terminal,data=>{if(data==='\x1b[O')this.app.recordHumanActivity?.('blur');else if(data==='\x1b[I')this.app.recordHumanActivity?.('focus');onInput(data);},onResize);
+    try{this.tui.start();}finally{terminal.start=start;}
+    this.app.recordHumanActivity?.('focus');this.syncMotion();
   }
-  stop() { this.closed=true; this.hideLogo();this.stopMotion();clearTimeout(this.renderTimer); this.pending?.cancel(); clearTimeout(this.renderTimer); this.tui.stop(); }
+  stop() { if(!this.closed)this.app.recordHumanActivity?.('closed');this.closed=true; this.hideLogo();this.stopMotion();clearTimeout(this.renderTimer); this.pending?.cancel(); clearTimeout(this.renderTimer); this.tui.stop(); }
   toggleMode() {
     if(this.modeSwitch)return;
     const mode=this.app.engine.pendingSettings.agentMode||this.app.engine.config.agentMode;

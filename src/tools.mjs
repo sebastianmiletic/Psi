@@ -1,3 +1,5 @@
+import {setTimeout as delay} from 'node:timers/promises';
+import {connectionFailure} from './connection.mjs';
 import { readFile, writeFile, appendFile, mkdir, stat, access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname, join } from 'node:path';
@@ -13,7 +15,15 @@ import { Directories,canonical } from './directories.mjs';
 const str = (description) => Type.String({ description });
 const opt = schema => Type.Optional(schema);
 const num = (min, max, description) => Type.Number({ minimum: min, maximum: max, description });
-export async function boundedFetch(url, { signal, maxBytes = 5_000_000, headers = {} } = {}) {
+export async function boundedFetch(url,options={}) {
+  for(let attempt=0;;attempt++)try{return await fetchBody(url,options);}catch(error){
+    if(options.signal?.aborted)throw options.signal.reason||error;
+    if(!connectionFailure(error))throw error;
+    if(attempt>=2)throw new Error('Website connection lost before the download completed. Retry the fetch when the site is available.');
+    await delay(250*(attempt+1),undefined,{signal:options.signal});
+  }
+}
+async function fetchBody(url, { signal, maxBytes = 5_000_000, headers = {} } = {}) {
   const u = new URL(url);
   if (!['http:', 'https:'].includes(u.protocol)) throw new Error('Only HTTP/HTTPS URLs are supported.');
   const response = await fetch(url, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000), headers: { 'User-Agent': 'Psi/0.1 (local research harness)', ...headers } });

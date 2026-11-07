@@ -373,3 +373,14 @@ Account switching is enabled by default. Psi checks the selected account and the
 The same conversation, completed tool results, model and effort continue on the selected account. Only explicitly configured fallback models allow a provider/model change. If every account is unavailable, an autonomous `/loop` waits for capacity and resumes at a safe boundary; a regular task retains its saved progress with an account-unavailable error. Switching never bypasses request/budget limits or automatically spends reset credits.
 
 Settings → Account switching controls the global preference, including resumed sessions; a stale session setting cannot silently turn it off. You can disable it to keep one selected account.
+
+
+## Working menus, recovery and session statistics (0.2.38)
+
+`/accounts`, `/model`, `/settings`, `/stats` and session browsing remain available while inference runs. Account switching preserves the account pinned to the current request and uses the new choice for later requests; model/provider settings apply at a safe boundary. Removing the account currently serving a request waits until it completes. Opening or dismissing a menu does not stop the AI.
+
+Replacing a background usage poll no longer cancels an inference request sharing that quota check. Provider disconnects, premature closes and internal transport aborts reconnect. If a retry batch fails, ordinary tasks now wait with their progress saved and resume when the connection returns, just as persistent loops do. Menus remain available while waiting. User cancellation and configured request/budget limits still apply. Website GETs retry up to twice after a broken connection, discard partial downloads and retain the existing response-size limit. HTTP failures and mutating operations are not blindly retried.
+
+`/stats` starts on **Session**. It includes this chat and its saved subagents, deduplicates copied worker usage, and shows tokens, input/output/cache usage, requests, tools, prompts, subagent count, AI wall-clock work time, combined AI process time and session age. Week/Month/All remain available. Stats refresh every five seconds while open.
+
+**Human time is an activity estimate**, not a claim about how long the task would take manually. Input/focus timestamps extend a one-minute activity window, with input writes throttled to 15 seconds; losing focus, switching chats and closing stop the interval. Keystroke text is not recorded by this tracker, and subagent activity does not count as human activity. Previous versions did not record this information, so earlier human time is unavailable.

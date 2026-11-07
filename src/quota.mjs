@@ -32,16 +32,37 @@ export function parseQuota(provider, body, now=Date.now()) {
   }
   return {limits,plan:typeof body.plan_type==='string'?body.plan_type:null};
 }
+function observeQuota(task,signal){
+  if(!signal)return task;
+  signal.throwIfAborted();
+  return new Promise((resolve,reject)=>{
+    const abort=()=>{signal.removeEventListener('abort',abort);reject(signal.reason||new Error('Stopped'));};
+    signal.addEventListener('abort',abort,{once:true});
+    task.then(value=>{signal.removeEventListener('abort',abort);resolve(value);},error=>{signal.removeEventListener('abort',abort);reject(error);});
+  });
+}
 export class QuotaMonitor {
   constructor(registry, config, home, { fetchImpl = fetch, now = () => Date.now() } = {}) {
     this.registry=registry;this.config=config;this.home=home;this.fetch=fetchImpl;this.now=now;this.pending=new Map();
     this.usage=new AccountUsage(home);
   }
   async refresh(account, { force=false, signal } = {}) {
+    signal?.throwIfAborted();
     if (account?.type !== 'oauth' || !['openai-codex','openai','anthropic'].includes(account.provider)) return this.usage.get(account?.id);
-    if (this.pending.has(account.id)) return this.pending.get(account.id);
-    const task=this.read(account,{force,signal});this.pending.set(account.id,task);
-    try { return await task; } finally { this.pending.delete(account.id); }
+    const existing=this.pending.get(account.id);
+    if(existing){
+      try{return await observeQuota(existing.task,signal);}
+      catch(error){
+        signal?.throwIfAborted();
+        // The UI may have cancelled its poll while inference was sharing it.
+        if(!existing.signal?.aborted)throw error;
+        if(this.pending.get(account.id)===existing)this.pending.delete(account.id);
+        return this.refresh(account,{force,signal});
+      }
+    }
+    const entry={signal,task:this.read(account,{force,signal})};this.pending.set(account.id,entry);
+    try { return await observeQuota(entry.task,signal); }
+    finally { if(this.pending.get(account.id)===entry)this.pending.delete(account.id); }
   }
   async read(account,{force,signal}) {
     return withLock(join(this.home,'quota',`${account.id}.lock`),async()=>{

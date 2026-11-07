@@ -56,6 +56,8 @@ export class App {
     if(this.engine.config.profile==='battlecode'&&existsSync(join(this.session.meta.cwd,'tools/vision/live_trial.py')))this.battlecode.register(this.tools);
   }
   event(event) {
+    if(event.type==='account_selected')this.inflightAccountId=event.account.id;
+    if(['request_end','retry','waiting','error','stopped','run_end','account_exhausted'].includes(event.type))this.inflightAccountId=null;
     if(event.type==='settings')this.syncProjectTools();
     if (event.account && event.account.provider === this.engine.model.provider) {
       this.activeAccount = event.account;
@@ -77,6 +79,12 @@ export class App {
     if(engine!==this.engine||this.closing)return{account:this.activeAccount,usage:this.activeUsage};
     const current=await this.registry.accounts.selected(engine.model.provider);if(current.id!==account.id)return{account:this.activeAccount,usage:this.activeUsage};
     this.activeAccount=configured?account:null;this.activeUsage=usage;this.ui?.render();return{account:this.activeAccount,usage};
+  }
+  recordHumanActivity(kind='input'){
+    const now=Date.now(),id=this.session.meta.id;
+    if(kind==='input'&&this.activitySession===id&&['input','focus'].includes(this.lastHumanKind)&&now-(this.lastHumanActivity||0)<15000)return;
+    this.activitySession=id;this.lastHumanActivity=now;this.lastHumanKind=kind;
+    void this.session.event({type:'ui_activity',kind}).catch(()=>{});
   }
   startStorageMaintenance(){this.storageMaintenance?.start();}
   async startUI() {
@@ -141,9 +149,10 @@ export class App {
     let nextLease;
     if(this.ui&&different)try{nextLease=await claimSessionUI(session);}catch(error){if(/Another Psi process holds/.test(error.message))throw new Error(sessionBusyMessage);throw error;}
     try{
-      await this.agents.dispose();if(!different)await session.assertLatest().catch(async()=>{session=await Session.load(session.meta.id,this.home);});await this.tools.close();
+      await this.agents.dispose();await session.assertLatest().catch(async()=>{session=await Session.load(session.meta.id,this.home);});await this.tools.close();
+      if(this.ui&&different)await previous.event({type:'ui_activity',kind:'closed'});
       await previous.compactStorage?.();
-      this.session=session;this.bind();committed=true;
+      this.session=session;this.bind();committed=true;if(this.ui&&different)this.recordHumanActivity('focus');
       if(different){this.uiLease=nextLease;await previousLease?.release();void this.storageMaintenance?.kick('closed',previous.meta.id);if(!((await this.jobs.list()).some(j=>j.sessionId===previous.meta.id&&['running','queued'].includes(j.status))))await previous.discardEmpty();}
     }catch(error){if(!committed){await nextLease?.release();this.session=previous;this.uiLease=previousLease;this.bind();if(this.ui)await this.agents.restore();}throw error;}
     if (this.ui) { const { CombinedAutocompleteProvider } = await import('@earendil-works/pi-tui'); const { commands } = await import('./ui.mjs'); this.ui.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, session.meta.cwd)); }
@@ -170,7 +179,6 @@ export class App {
     return this.ui.modelMenu(items,query);
   }
   async accountMenu(action) {
-    if (this.engine.busy&&!this.engine.waiting) throw new Error('Press Escape twice to stop before changing accounts, or wait for a quota pause.');
     if(!action){const selected=await this.accountPicker('Accounts',{overview:true});if(!selected)return;if(selected.startsWith('account:')){const provider=await this.registry.accounts.use(selected.slice(8));await this.useProvider(provider);this.ui.note('Account switched.');return;}action=selected;}
     if (!action) return;
     if (action === 'login') {
@@ -203,7 +211,7 @@ export class App {
       const id = await this.accountPicker(action === 'switch' ? 'Switch accounts' : 'Remove account');
       if (!id) return;
       if (action === 'switch') { const provider = await this.registry.accounts.use(id); await this.useProvider(provider); this.ui.note('Account switched.'); }
-      else { await this.registry.accounts.remove(id); await this.refreshAccount(); this.ui.note('Account removed.'); }
+      else { if(this.engine.busy&&this.inflightAccountId===id){this.ui.note('This account is serving the current request. Remove it after the request completes.');return;}await this.registry.accounts.remove(id); await this.refreshAccount(); this.ui.note('Account removed.'); }
     } else throw new Error('Use /accounts login, switch, or remove.');
   }
   async accountPicker(title,{overview=false}={}){
@@ -241,12 +249,12 @@ export class App {
     }
     const match = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text.trim()); const command = match?.[1]; const arg = match?.[2] || '';
     if (this.authController && !['quit', 'help'].includes(command)) throw new Error('Finish or cancel account sign-in first.');
-    if (this.engine.busy && !this.engine.waiting && !['name','reset','stats','effort','settings','subagents','reload','refresh','directory','update','logo','usage','tools','project','experiments','cost','status','help','quit'].includes(command)) throw new Error('Press Escape twice to stop, or enter a message to queue it at the next tool boundary.');
+    if (this.engine.busy && !this.engine.waiting && !['accounts','model','resume','name','reset','stats','effort','settings','subagents','reload','refresh','directory','update','logo','usage','tools','project','experiments','cost','status','help','quit'].includes(command)) throw new Error('Press Escape twice to stop, or enter a message to queue it at the next tool boundary.');
     if(['continue','stop','jobs','budget','limit','tokens','agents','provider','cd','summary-model','checkpoint'].includes(command))throw new Error(`/${command} was removed. Use /settings for limits, /subagents for workers, or Escape twice to stop.`);
     if(command==='name'){const value=arg||await this.ui.ask({type:'text',message:'Session name',placeholder:this.session.meta.title});if(value===null)return;this.ui.note('Session: '+await this.session.rename(value,{duringRun:this.engine.busy}));return;}
     if(command==='settings')return this.settingsMenu();
     if(command==='reset')return this.resetMenu();
-    if(command==='stats')return this.ui.statsMenu(()=>this.statistics.read());
+    if(command==='stats')return this.ui.statsMenu(()=>this.statistics.read({sessionId:this.session.meta.parentSession||this.session.meta.id}));
     if(command==='subagents')return this.agentsMenu();
     if(command==='directory')return this.directoryCommand(arg);
     if(command==='update'){if(this.engine.busy)throw new Error('Stop the active run before updating Psi.');this.ui.note('Checking GitHub releases…');const result=await (this.options.updateInstallation||updateInstallation)(this.home);this.ui.note(result.message);if(result.updated)this.updateInfo={...this.updateInfo,installed:true};this.ui.render();

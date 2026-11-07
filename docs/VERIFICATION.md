@@ -294,3 +294,13 @@ Actual API invoices and real competition transactions were not exercised in this
 - Isolated local-provider tests cover five-hour, weekly, model-specific and other quota windows; live replacement validation; expired windows; request/token rate limits; and usage errors without HTTP codes. A real tool round commits a file before the account fails, then the replacement receives the same conversation and tool result exactly once.
 - All-account autonomous waiting recovers after a usage refresh. Exhausted candidates do not change the active selection, cooldowns respect the longest blocked window, and earliest recovery considers every exhausted window per account. Context-overflow errors retain compaction handling.
 - Codex and Claude Code route IDs are exercised against local compatible-provider fixtures, including real HTTP quota errors and account-specific authorization. These verify routing, not live subscription authentication. No paid inference, real account exhaustion, reset-credit consumption or live competition activity is used.
+
+
+## Menus during work, sustained recovery and session stats (0.2.38)
+
+- A real local streaming request stays in flight while Accounts, Models, Settings and Session Stats open and close. Changing accounts keeps the original request pinned and sends the next tool/model round through the replacement. Narrow stats retain the header, composer and human-time row without overflow.
+- Real HTTP GET body failures retry without retaining partial bytes. Repeated failures stop after three attempts, cancellation stops immediately, response-size limits remain effective and HTTP 404 is not retried. Nested transport errors and premature closes are classified separately from application/auth errors.
+- A shared quota-poll regression cancels the UI owner while inference is preparing a request, and verifies inference refreshes safely rather than aborting. Cancelled waiters detach immediately without stopping the owner.
+- Ordinary tasks and final reviews recover after a failed reconnect batch without restarting or losing their conversation. User stop and request ceilings remain enforced. Failure category receipts contain no prompt text.
+- Session stats exclude other chats, include nested workers exactly once, retain undated legacy usage only in Session/All, and distinguish overlapping AI wall time from combined process time. Live time advances without new usage receipts.
+- Human-time fixtures merge timestamp windows, exclude workers, cap idle time, close on blur/session switch/exit and verify throttling without keystroke contents. Old stats caches rebuild safely; timer tests verify automatic refresh and cleanup. Existing history and model inputs remain intact.

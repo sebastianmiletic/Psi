@@ -55,24 +55,33 @@ export function heatmap(s,weeks,paint){
 }
 export class StatsPanel {
  focused=true;
- constructor(ui,{data=null,cancel,refresh}){this.ui=ui;this.data=data;this.index=2;this.cancel=cancel;this.refresh=refresh;this.loading=false;if(!data)void this.load();}
- async load(){if(this.loading)return;this.loading=true;this.error=null;try{this.data=await this.refresh();}catch(e){this.error=e.message;}finally{this.loading=false;this.ui.render();}}
+ constructor(ui,{data=null,cancel,refresh}){this.ui=ui;this.data=data;this.index=data?.length===3?2:3;this.cancel=cancel;this.refresh=refresh;this.loading=false;this.timer=setInterval(()=>void this.load(),5000);this.timer.unref();if(!data)void this.load();}
+ async load(){if(this.loading)return;this.loading=true;this.error=null;try{const data=await this.refresh();if(!this.closed){this.data=data;this.index=Math.min(this.index,data.length-1);}}catch(e){this.error=e.message;}finally{this.loading=false;if(!this.closed)this.ui.render();}}
+ dispose(){this.closed=true;clearInterval(this.timer);}
  invalidate(){}
  render(width){
   const paint=this.ui.paint,budget=this.ui.panelRows(),wide=width>=72;
-  const tabs=['Week','Month','All'].map((v,i)=>i===this.index?paint(bold('['+v+']')):dim(v)).join('  ');
+  const labels=this.data?.length===3?['Week','Month','All']:['Week','Month','All','Session'];
+  const tabs=width<48?paint(bold('['+labels[this.index]+']')):labels.map((v,i)=>i===this.index?paint(bold('['+v+']')):dim(v)).join('  ');
   const lines=[bold('Stats')+' · '+tabs];
   if(!this.data){lines.push(this.error?safe(this.error):dim('…'),dim('esc'));return lines.map(s=>row(s,width));}
   const s=this.data[this.index];
-  if(wide){
+  if(s.period==='session'){
+   lines.push(`Tokens ${bold(compactCount(s.tokens))} · ${compactCount(s.requests)} calls`,
+    `AI Time ${bold(formatDuration(s.activeMs))}`,
+    `Human ${s.humanMs===null?dim('not recorded'):bold(formatDuration(s.humanMs))+dim(' · est.')}`,
+    dim(`In ${compactCount(s.input)}  Out ${compactCount(s.output)}  Cache ${compactCount(s.cacheRead)} (${s.cachePercent}%)`),
+    `${compactCount(s.tools)} tools · ${s.workers} subagents · ${s.messages||0} prompts`,
+    dim(`Combined AI ${formatDuration(s.agentMs)} · Age ${formatDuration(s.ageMs||0)}`));
+  }else if(wide){
    lines.push(`Tokens ${bold(compactCount(s.tokens))} · Time ${bold(formatDuration(s.activeMs))} · Calls ${bold(compactCount(s.requests))}`,
     `Sessions ${s.sessions}  ·  Workers ${s.workers}  ·  Tools ${compactCount(s.tools)}  ·  Goals ${s.goals}`,
     dim(`In ${compactCount(s.input)}  Out ${compactCount(s.output)}  Cache ${s.cachePercent}%`));
   }else lines.push(`${bold(compactCount(s.tokens))} tokens · ${bold(formatDuration(s.activeMs))}`,
     `${compactCount(s.requests)} calls · ${s.sessions} sessions`,`${s.workers} workers · ${compactCount(s.tools)} tools`);
   const weeks=Math.max(2,Math.min(16,Math.floor((width-7)/2))),chart=heatmap(s,weeks,paint);
-  if(budget>=13){lines.push('',...chart);}
-  else if(budget>=7){
+  if(s.period!=='session'&&budget>=13){lines.push('',...chart);}
+  else if(s.period!=='session'&&budget>=7){
    const cells=[];for(let i=weeks*7-1;i>=0;i--){const d=new Date(s.now);d.setDate(d.getDate()-i);cells.push(s.days[dayKey(d)]||0);}
    const max=Math.max(1,...cells),points=Math.max(1,Math.min(width-4,cells.length));
    lines.push(cells.slice(-points).map(n=>n?paint(['▂','▄','▆','█'][Math.min(3,Math.floor(n/max*3))]):dim('·')).join(''));
@@ -85,7 +94,8 @@ export class StatsPanel {
  }
  handleInput(data){
   if(matchesKey(data,'escape')||matchesKey(data,'enter')){this.cancel();return;}
-  if(matchesKey(data,'left'))this.index=(this.index+2)%3;else if(matchesKey(data,'right')||matchesKey(data,'tab'))this.index=(this.index+1)%3;
+  const size=this.data?.length||4;
+  if(matchesKey(data,'left'))this.index=(this.index+size-1)%size;else if(matchesKey(data,'right')||matchesKey(data,'tab'))this.index=(this.index+1)%size;
   else if(data==='r'&&!this.loading)void this.load();this.ui.render();
  }
 }

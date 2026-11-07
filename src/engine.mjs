@@ -1,3 +1,4 @@
+import {ConnectionUnavailableError,connectionFailure} from './connection.mjs';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -157,7 +158,7 @@ export class Engine {
         result = await stream.result();
       } catch (e) {
         if (this.controller.signal.aborted){if(!summary)await this.session.event({type:'stream_end',requestId,outcome:'aborted'});throw e;}
-        result = { stopReason: 'error', errorMessage: e.name==='AbortError'?'Provider connection interrupted.':e.message };
+        result = { stopReason: 'error', errorMessage: connectionFailure(e)?'Provider connection interrupted.':e.message };
       }
       // A provider-side abort is a failed connection, not a user cancellation.
       const providerAborted=result.stopReason==='aborted'&&!this.controller.signal.aborted;
@@ -189,9 +190,10 @@ export class Engine {
         if(!this.config.autoSwitchAccounts)throw new AccountUnavailableError(error,Date.now()+retryAfter*1000);
         excluded.push(account.id);this.onEvent({type:'account_exhausted',account,error:'Account unavailable; checking configured alternatives'});continue;
       }
-      const connectionLost=providerAborted||/\bterminated\b|other side closed|UND_ERR_(?:SOCKET|CONNECT_TIMEOUT|HEADERS_TIMEOUT|BODY_TIMEOUT)|provider connection interrupted/i.test(error);
+      const connectionLost=providerAborted||connectionFailure(error);
+      await this.session.event({type:'request_failure',requestId,category:connectionLost?'connection':'provider'});
       const transient = connectionLost||/429|rate.?limit|overload|50[0-9]|52[0-9]|timeout|timed out|ECONN|fetch failed|socket|temporar/i.test(error);
-      if (!transient || attempt >= this.config.retries) throw new Error(connectionLost?'Provider connection lost before completing the response. Saved progress is intact.':error);
+      if (!transient || attempt >= this.config.retries) {if(connectionLost)throw new ConnectionUnavailableError('Provider connection unavailable. Saved progress is intact.');throw new Error(error);}
       const ms = Math.min(30000, 1000 * 2 ** attempt + Math.floor(Math.random() * 300));
       this.onEvent({ type: 'retry', error:connectionLost?'Provider connection lost; reconnecting.':error, attempt: attempt + 1, delay: ms });
       await delay(ms, undefined, { signal: this.controller.signal });
@@ -332,9 +334,9 @@ export class Engine {
           if (++stalls >= 3) await this.waitFor('The model is still working on the goal',Math.min(3,this.config.loopRetrySeconds||3));
           await this.session.message({ role: 'user', content: `Continue the autonomous objective: ${this.session.state.loopGoal}\nTake the next concrete action. Call finish with existing evidence paths only when the complete objective is achieved. A plain final response does not end this loop.`, timestamp: Date.now() });
           } catch(error) {
-            if(this.finalizing&&!this.controller.signal.aborted){await this.fallbackReview(error.message);this.finalizing=false;if(this.queue.length)continue;break;}
-            if(this.controller.signal.aborted || !this.session.state.loopGoal)throw error;
-            const reason=error instanceof LimitError?error.message:error instanceof AccountUnavailableError?'Waiting for an eligible account or quota reset':`Recovering: ${redact(error.message)}`;
+            if(this.finalizing&&!this.controller.signal.aborted&&!(error instanceof ConnectionUnavailableError)){await this.fallbackReview(error.message);this.finalizing=false;if(this.queue.length)continue;break;}
+            if(this.controller.signal.aborted || !this.session.state.loopGoal&&!(error instanceof ConnectionUnavailableError))throw error;
+            const reason=error instanceof ConnectionUnavailableError?'Waiting for provider connection':error instanceof LimitError?error.message:error instanceof AccountUnavailableError?'Waiting for an eligible account or quota reset':`Recovering: ${redact(error.message)}`;
             await this.waitFor(reason,error.retryAt?Math.max(1,(error.retryAt-Date.now())/1000):this.config.loopRetrySeconds);
           }
         }
