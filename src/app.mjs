@@ -1,3 +1,4 @@
+import {DraftAutosave} from './draft-autosave.mjs';
 import {AutomaticStorage} from './automatic-storage.mjs';
 import {pruneWebCache} from './packed-json.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -29,6 +30,7 @@ import { saveConfig,loadConfig, readJSON, psiHome, cleanTerminal, redact, defaul
 
 export class App {
   constructor(config, session, options = {}) {
+    this.draftAutosave=new DraftAutosave({onError:error=>this.ui?.note('Could not save input draft: '+error.message,true)});
     this.config = config; this.session = session; this.options = options;this.uiLease=session.uiLease;delete session.uiLease;
     this.home = options.home || psiHome(); this.registry = new Registry(config, this.home); this.accountUsage = new AccountUsage(this.home); this.activeAccount = null; this.activeUsage = null;
     this.statistics=new Statistics(this.home);this.bind();
@@ -80,6 +82,9 @@ export class App {
     const current=await this.registry.accounts.selected(engine.model.provider);if(current.id!==account.id)return{account:this.activeAccount,usage:this.activeUsage};
     this.activeAccount=configured?account:null;this.activeUsage=usage;this.ui?.render();return{account:this.activeAccount,usage};
   }
+  queueDraft(text){this.draftAutosave.schedule(this.session,text);}
+  editorDraft(){return this.ui?.draftText?.()??this.ui?.editor?.getText?.()??'';}
+  async flushDraft(){if(this.ui?.editor)this.queueDraft(this.editorDraft());await this.draftAutosave.flush();}
   recordHumanActivity(kind='input'){
     const now=Date.now(),id=this.session.meta.id;
     if(kind==='input'&&this.activitySession===id&&['input','focus'].includes(this.lastHumanKind)&&now-(this.lastHumanActivity||0)<15000)return;
@@ -95,10 +100,10 @@ export class App {
     try {
       await this.engine.recoverReview();await this.session.markActive();await this.refreshAccount();
       this.updateInfo=await readJSON(join(this.home,'update-check.json'),null).catch(()=>null);
+      const draft=await this.session.getDraft();
       const { TerminalUI } = await import('./ui.mjs');
       this.ui = new TerminalUI(this,{terminal:this.options.terminal});
-      this.ui.start();await this.agents.restore();this.startUsageMonitor();
-      if(this.session.state.composerDraft)this.ui.editor.setText(this.session.state.composerDraft);
+      this.ui.editor.setText(draft);this.ui.start();await this.agents.restore();this.startUsageMonitor();
       this.ui.render();
       if(this.engine.config.checkForUpdates){void this.checkUpdates({force:true});this.updateTimer=setInterval(()=>void this.checkUpdates(),3600000);this.updateTimer.unref();}
       if (this.session.meta.hasMessages||this.session.visibleConversation().length) this.showHistory();
@@ -145,6 +150,7 @@ export class App {
   }
   async changeSession(session,{preserveTranscript=false}={}) {
     if (this.engine.busy) throw new Error('Stop the current run first.');
+    await this.flushDraft();
     const previous=this.session,previousLease=this.uiLease,different=session.meta.id!==previous.meta.id;let committed=false;
     let nextLease;
     if(this.ui&&different)try{nextLease=await claimSessionUI(session);}catch(error){if(/Another Psi process holds/.test(error.message))throw new Error(sessionBusyMessage);throw error;}
@@ -158,7 +164,7 @@ export class App {
     if (this.ui) { const { CombinedAutocompleteProvider } = await import('@earendil-works/pi-tui'); const { commands } = await import('./ui.mjs'); this.ui.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, session.meta.cwd)); }
     await this.engine.recoverReview();await this.refreshAccount();
     if(this.ui)this.startUsageMonitor();
-    await this.session.markActive();if(!preserveTranscript)this.ui?.clear();if(this.ui){await this.agents.restore();if(!preserveTranscript)this.showHistory();} this.ui?.note(`Session ${session.meta.id}\n${session.meta.cwd}`);
+    await this.session.markActive();if(different&&this.ui)this.ui.editor.setText(await this.session.getDraft());if(!preserveTranscript)this.ui?.clear();if(this.ui){await this.agents.restore();if(!preserveTranscript)this.showHistory();} this.ui?.note(`Session ${session.meta.id}\n${session.meta.cwd}`);
   }
   async update(patch) { await this.engine.settings(patch); this.config = await saveConfig(patch, this.home); await this.refreshAccount(); if(this.ui)this.startUsageMonitor(); this.engine.wake?.(); }
   async selectModel(query = '') {
@@ -241,8 +247,9 @@ export class App {
     if (!text.startsWith('/')) {
       if(this.closing)throw new Error('Psi is closing; reopen the session before sending.');
       const accept=(this.inputChain||Promise.resolve()).then(async()=>{
-        if(this.engine.busy){await this.engine.steer(text);this.ui?.user(text);return{};}
+        if(this.engine.busy){await this.engine.steer(text);await this.flushDraft();this.ui?.user(text);return{};}
         await withLock(join(this.session.dir,'run.lock'),async()=>{await this.session.assertLatest();await this.session.message({role:'user',content:text,timestamp:Date.now()});await this.session.event({type:'state',state:{composerDraft:''}});},{timeout:500});
+        if(this.ui?.editor)await this.flushDraft();else await this.session.saveDraft('');
         this.ui?.user(text);this.activeRun=this.engine.run(text,{inputSaved:true});void this.activeRun.catch(()=>{});return{run:this.activeRun};
       });this.inputChain=accept.then(()=>{},()=>{});const accepted=await accept;if(accepted.run)await accepted.run.catch(()=>{});
       return;
@@ -337,7 +344,7 @@ export class App {
       this.engine.stop();await this.agents.stopAll({wait:true});
       while(this.engine.busy&&!this.closing)await delay(25);
       if(this.closing)return false;
-      await this.agents.dispose();const session=await Session.load(this.session.meta.id,this.home);
+      await this.flushDraft();await this.agents.dispose();const session=await Session.load(this.session.meta.id,this.home);
       await session.event({type:'state',state:{settings:config,pendingSettings:{}}});
       await this.tools.close();clearInterval(this.quotaTimer);this.quotaController?.abort();
       this.config=config;this.session=session;this.registry=registry;this.bind();
@@ -406,7 +413,7 @@ export class App {
     await this.activeRun?.catch(()=>{});for(let i=0;this.engine.busy&&i<250;i++)await delay(20);
     try{
       await this.agents.dispose();await this.tools.close();await this.session.flush?.();await this.session.markActive?.();
-      if(this.ui?.editor&&!this.session.meta.draft)await this.session.event({type:'state',state:{composerDraft:this.ui.editor.getText()}});
+      await this.flushDraft();
       if(!this.engine.busy)await this.session.compactStorage?.();
     }finally{await this.uiLease?.release();this.uiLease=undefined;}
     if(!preserveSession&&!this.engine.busy&&typeof this.session.discardEmpty==='function'&&!((await this.jobs.list()).some(j=>j.sessionId===this.session.meta.id&&['running','queued'].includes(j.status))))await this.session.discardEmpty();await this.storageMaintenance?.close();this.options.onClose?.();

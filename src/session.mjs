@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {compactJournal,journalInfo,journalLines,SEGMENT_BYTES,compressFile,syncDirectory} from './journal.mjs';
 import {TranscriptHistory} from './transcript-history.mjs';
-import { privateDir, atomicJSON,cleanTerminal, readJSON, psiHome, withLock, alive } from './storage.mjs';
+import { privateDir, atomicJSON,replaceFile,cleanTerminal, readJSON, psiHome, withLock, alive } from './storage.mjs';
 
 const meaningful=m=>!m?.internal&&['user','assistant'].includes(m?.role)&&(typeof m.content==='string'?!!m.content.trim():Array.isArray(m.content)&&m.content.some(c=>c.type==='image'||c.type==='text'&&c.text?.trim()));
 const titled=meta=>typeof meta.title==='string'&&!!meta.title.trim()&&(meta.title!=='New session'||meta.named||meta.autoNamed||meta.seedNamed);
@@ -53,7 +53,7 @@ export class Session {
         }
       }
       if (session.status === 'running') await session.event({ type: 'status', status: 'interrupted' });
-      await session.saveMeta();
+      await session.getDraft();await session.saveMeta();
       return session;
     }, { timeout: 500 });
   }
@@ -138,11 +138,31 @@ export class Session {
     if(size>=SEGMENT_BYTES)await compactJournal(this.dir).catch(error=>{this.storageError=error;});
   }
   async flush(){await this.writeChain;}
-  async markActive(){if(!this.meta.parentSession&&this.meta.hasMessages)await atomicJSON(join(this.home,'last-session.json'),{id:this.meta.id,cwd:this.meta.cwd,at:new Date().toISOString()});}
+  async markActive(){if(!this.meta.parentSession&&(this.meta.hasMessages||this.meta.hasDraft||titled(this.meta)))await atomicJSON(join(this.home,'last-session.json'),{id:this.meta.id,cwd:this.meta.cwd,at:new Date().toISOString()});}
   visibleConversation(){return this.streaming?.text?[...this.conversation,{role:'assistant',partial:true,content:[{type:'text',text:this.streaming.text}],timestamp:this.streaming.timestamp}]:this.conversation;}
   transcriptView(){return this.transcript.view(this.streaming);}
   rememberVisible(message){this.transcript.message(message);this.conversation.push(message);if(this.conversation.length>100)this.conversation.shift();}
-  async saveMeta(){this.meta.draft=!(this.meta.hasMessages||titled(this.meta));await atomicJSON(join(this.dir,'meta.json'),this.meta);}
+  async saveMeta(){this.meta.draft=!(this.meta.hasMessages||this.meta.hasDraft||titled(this.meta));await atomicJSON(join(this.dir,'meta.json'),this.meta);}
+  async getDraft(){
+    const snapshot=await readJSON(join(this.dir,'composer-draft.json'),null);
+    const text=typeof snapshot?.text==='string'?snapshot.text:typeof this.state.composerDraft==='string'?this.state.composerDraft:'';
+    this.state.composerDraft=text;this.savedDraft=text;this.hasDraftFile=typeof snapshot?.text==='string';this.meta.hasDraft=!!text.trim();return text;
+  }
+  async saveDraft(text){
+    if(typeof text!=='string')throw new Error('Input drafts must be text.');
+    return this.enqueue(async()=>{
+      if(this.hasDraftFile&&this.savedDraft===text)return false;
+      const target=join(this.dir,'composer-draft.json'),temporary=target+'.'+randomUUID()+'.tmp';
+      try{
+        const handle=await open(temporary,'wx',0o600);
+        try{await handle.writeFile(JSON.stringify({text,updatedAt:new Date().toISOString()})+'\n');await handle.sync();}finally{await handle.close();}
+        await replaceFile(temporary,target);await syncDirectory(this.dir);
+      }finally{await rm(temporary,{force:true});}
+      const changed=this.meta.hasDraft!==!!text.trim();
+      this.state.composerDraft=text;this.savedDraft=text;this.hasDraftFile=true;this.meta.hasDraft=!!text.trim();
+      if(changed){await this.saveMeta();await this.markActive();}return true;
+    });
+  }
   async message(message,{requestId}={}) {
     const hadMessages=this.meta.hasMessages;
     await this.event({ type: 'message', message,...(requestId?{requestId}:{}) });
@@ -176,7 +196,9 @@ export class Session {
     const removed=await withLock(join(this.dir,'run.lock'),async()=>{
       const ui=join(this.dir,'ui.lock');if(await stat(ui).catch(()=>null)){const owner=await readJSON(ui,null).catch(()=>null);if(!owner?.pid||alive(owner.pid))return false;}
       const meta=await readJSON(join(this.dir,'meta.json'),null);if(!meta||meta.hasMessages||titled(meta))return false;
-      for await(const e of this.events())if((e.type==='session_name'||e.type==='session_auto_name')&&e.name?.trim()||e.type==='message'&&meaningful(e.message)||e.type==='final_response'&&e.text?.trim()||e.type==='usage'||e.type==='state'&&(e.state?.queuedMessages?.length||e.state?.loopGoal||e.state?.agents?.length))return false;
+      const snapshot=await readJSON(join(this.dir,'composer-draft.json'),null);if(typeof snapshot?.text==='string'&&snapshot.text.trim())return false;let legacyDraft='';
+      for await(const e of this.events()){if(e.type==='state'&&typeof e.state?.composerDraft==='string')legacyDraft=e.state.composerDraft;if((e.type==='session_name'||e.type==='session_auto_name')&&e.name?.trim()||e.type==='message'&&meaningful(e.message)||e.type==='final_response'&&e.text?.trim()||e.type==='usage'||e.type==='state'&&(e.state?.queuedMessages?.length||e.state?.loopGoal||e.state?.agents?.length))return false;}
+      if(!snapshot&&legacyDraft.trim())return false;
       // Keep our open lock until its handle closes, including on Windows.
       for(const name of await readdir(this.dir))if(name!=='run.lock')await rm(join(this.dir,name),{recursive:true,force:true,maxRetries:5,retryDelay:20});
       return true;
@@ -187,13 +209,18 @@ export class Session {
     const names = (await readdir(join(home, 'sessions'),{withFileTypes:true}).catch(e => { if (e.code === 'ENOENT') return []; throw e; })).filter(e=>e.isDirectory()).map(e=>e.name);
     const data = await Promise.all(names.map(async n=>{
       const meta=await readJSON(join(home,'sessions',n,'meta.json'),null);if(!meta||meta.parentSession||await stat(join(home,'sessions',n,'worker.json')).catch(()=>null))return null;
-      const journal=await journalInfo(join(home,'sessions',n)),updatedAt=new Date(journal.mtimeMs||Date.parse(meta.createdAt)||0).toISOString();
-      if(meta.hasMessages||titled(meta))return{...meta,draft:false,updatedAt};
+      const snapshot=await readJSON(join(home,'sessions',n,'composer-draft.json'),null);
+      const journal=await journalInfo(join(home,'sessions',n)),updatedAt=new Date(Math.max(journal.mtimeMs||Date.parse(meta.createdAt)||0,Date.parse(snapshot?.updatedAt||'')||0)).toISOString();
+      if(meta.hasMessages||titled(meta))return{...meta,hasDraft:typeof snapshot?.text==='string'?!!snapshot.text.trim():!!meta.hasDraft,draft:false,updatedAt};
+      let draftText=typeof snapshot?.text==='string'?snapshot.text:'';
+      if(draftText.trim())return{...meta,title:'Draft · '+cleanTerminal(draftText).replace(/\s+/g,' ').trim().slice(0,80),hasDraft:true,draft:false,updatedAt:snapshot.updatedAt||updatedAt};
       // Recover a name or first message committed just before its snapshot.
       for await(const e of new Session(home,meta).events()){
+        if(!snapshot&&e.type==='state'&&typeof e.state?.composerDraft==='string')draftText=e.state.composerDraft;
         if((e.type==='session_name'||e.type==='session_auto_name')&&e.name?.trim())return{...meta,title:e.name,...(e.type==='session_name'?{named:true}:{autoNamed:true}),draft:false,updatedAt};
         if(e.type==='message'&&meaningful(e.message)||e.type==='final_response'&&e.text?.trim()){const title=titled(meta)?meta.title:cleanTerminal(typeof e.message?.content==='string'?e.message.content:e.text||'Recovered session').replace(/\s+/g,' ').trim().slice(0,100);return{...meta,title,hasMessages:true,draft:false,updatedAt};}
       }
+      if(draftText.trim())return{...meta,title:'Draft · '+cleanTerminal(draftText).replace(/\s+/g,' ').trim().slice(0,80),hasDraft:true,draft:false,updatedAt};
       return null;
     }));
     return data.filter(Boolean).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)||b.id.localeCompare(a.id));

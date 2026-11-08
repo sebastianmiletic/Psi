@@ -57,10 +57,12 @@ export class TerminalUI {
     this.transcript = new Transcript(); this.panel = new Container(); this.pending = null;
     this.editor = new Composer(this, { borderColor: dim, selectList: this.selectionTheme });
     this.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, app.session.meta.cwd));
+    this.editor.onChange=text=>{if(!this.suspendDraftSave&&!this.composerSearch)app.queueDraft?.(text);};
     this.editor.onSubmit = text => {
       if(this.composerSearch)return;
       if (!text.trim()) return;
-      this.editor.addToHistory(text); this.editor.setText('');
+      this.editor.addToHistory(text);this.suspendDraftSave=true;try{this.editor.setText('');}finally{this.suspendDraftSave=false;}
+      if(text.startsWith('/'))app.queueDraft?.('');
       void app.submit(text).catch(e => {if(!this.editor.getText())this.editor.setText(text);this.note(e.message, true);});
     };
     this.header = new PsiHeader({ app, onActivate: () => this.showLogo(), format: t => bold(safe(t)), subdued: t => dim(safe(t)),terminal,glow:()=>this.isOverkill()?(app.engine.config.animations===false?0:this.now()/360):null });
@@ -262,9 +264,11 @@ export class TerminalUI {
     });
   }
   async modelMenu(items,query=''){return this.composerMenu('Model',items,query,{deduplicate:true});}
+  draftText(){return this.menuDraft??this.editor.getText();}
   async composerMenu(title,items,query='',{deduplicate=false,refresh,showDetails=false}={}){
     if(this.pending)throw new Error('Finish the current selection first.');
-    const draft=this.editor.getText(),previousChange=this.editor.onChange,previousSubmit=this.editor.onSubmit;
+    const draft=this.editor.getText();this.menuDraft=draft;
+    const previousChange=this.editor.onChange,previousSubmit=this.editor.onSubmit;
     const previousAutocomplete=this.editor.autocompleteProvider,controller=new AbortController();
     let list,finish,filter;
     const make=source=>{const value=new SelectList(source,Math.max(1,Math.min(7,this.panelRows()-2)),this.selectionTheme);value.onSelect=item=>finish(item.value);value.onCancel=()=>finish(null);return value;};
@@ -276,7 +280,7 @@ export class TerminalUI {
       if(refresh)void Promise.resolve().then(()=>refresh({signal:controller.signal,update:next=>{if(!controller.signal.aborted){items=next;filter(this.editor.getText());}}})).catch(()=>{});
       return{focused:true,invalidate(){},dispose(){controller.abort();},render:width=>{const details=showDetails&&width<72&&list.getSelectedItem()?.description?new Text(dim(safe(list.getSelectedItem().description)),0,0).render(Math.max(1,width-4)).slice(0,3).map(line=>'  '+line):[];list.maxVisible=Math.max(1,Math.min(7,this.panelRows()-2-details.length));return[truncateToWidth('  '+bold(safe(title)),width),...list.render(width),...details,truncateToWidth(dim('  ↑ ↓ · ↵ · esc'),width)];},handleInput};
     },undefined,{editorFocus:true});}
-    finally{controller.abort();this.composerSearch=null;this.editor.onChange=previousChange;this.editor.onSubmit=previousSubmit;if(previousAutocomplete)this.editor.setAutocompleteProvider(previousAutocomplete);this.editor.setText(draft);this.render();}
+    finally{controller.abort();this.composerSearch=null;this.editor.onChange=previousChange;this.editor.onSubmit=previousSubmit;if(previousAutocomplete)this.editor.setAutocompleteProvider(previousAutocomplete);this.editor.setText(draft);delete this.menuDraft;this.render();}
   }
   async effortMenu(options){
     try{return await this.interact('',({resolve,cancel})=>new EffortPanel(this,{...options,resolve,cancel}));}

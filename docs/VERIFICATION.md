@@ -271,7 +271,7 @@ Actual API invoices and real competition transactions were not exercised in this
 
 - The 0.2.33 release was withheld when Windows caught a POSIX-only expected path in the new startup fixture. The assertion now uses the platform’s resolved root.
 - Default interactive and noninteractive startups create a fresh chat without consulting the last-chat pointer. Explicit resume restores saved history and its directory; continue remains scoped to the current workspace. Multiple simultaneous launches leave existing saved journals untouched.
-- Naming a chat or sending a message makes it discoverable immediately and keeps it after close. Durable name events survive a missing snapshot and protect against stale-writer cleanup. Untouched, settings-only and unsent-only drafts remain hidden and are removed on normal close/switch. Existing active-work and writer-lock safeguards remain in place.
+- Naming a chat or sending a message makes it discoverable immediately and keeps it after close. Durable name events survive a missing snapshot and protect against stale-writer cleanup. Untouched and settings-only drafts remain hidden and are removed on normal close/switch. Unsent text is retained beginning with 0.2.40. Existing active-work and writer-lock safeguards remain in place.
 - Four real PTY CLI launches verify fresh defaults, empty cleanup, named-empty persistence and explicit resume. The corruption fixture accepts Node’s alternate Brotli “Decompression failed” error while still requiring corrupted data to fail and restored data to decode. Tests use temporary homes and local fixtures; no paid inference or real user-session changes.
 
 
@@ -306,3 +306,11 @@ Actual API invoices and real competition transactions were not exercised in this
 - Human-time fixtures merge timestamp windows, exclude workers, cap idle time, close on blur/session switch/exit and verify throttling without keystroke contents. Old stats caches rebuild safely; timer tests verify automatic refresh and cleanup. Existing history and model inputs remain intact.
 
 - The 0.2.38 release was withheld after macOS exposed a one-millisecond cooldown drift. Cooldowns now accept the provider’s absolute reset timestamp; a controlled advancing-clock regression verifies no duration-conversion drift.
+
+
+## Live composer drafts (0.2.40)
+
+- Real PTY CLI typing saves before Enter, survives a forced kill, and restores in the resumed input bar. Real renderer input also saves an unnamed, message-free chat live. Close/reopen, switching chats, reload and an abruptly killed subprocess restore the exact text without inference. A draft committed before its metadata snapshot remains discoverable and protected from cleanup.
+- Input snapshots are private, synced and atomically replaced. Rapid edits coalesce into the newest text; failed saves report an error and can recover. Empty snapshots suppress legacy close-time drafts.
+- Picker filtering and closing with a picker open preserve the underlying draft. Submission clears the snapshot only after input acceptance. Drafts saved while inference holds the run lock remain outside all subsequent model requests. Startup failure does not overwrite saved input.
+- Untouched sessions are still removed; newly typed unsent text is intentionally retained under the updated draft-saving behavior. No paid inference or real user-session modifications were used.

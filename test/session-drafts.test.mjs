@@ -27,11 +27,11 @@ test('a durable name survives a missing snapshot and stale-writer empty cleanup'
  assert.equal(await stale.discardEmpty(),false);const restored=await Session.load(session.meta.id,dir);assert.equal(restored.meta.named,true);assert.equal(restored.meta.draft,false);
 });
 
-test('a message without a title is saved, while unsent drafts remain temporary',async t=>{
+test('a message without a title and an unsent legacy draft are preserved',async t=>{
  const dir=await home(t),session=await Session.create(dir,dir),draft=await Session.create(dir,dir);
  await session.message({role:'assistant',content:[{type:'text',text:'Saved message'}],timestamp:Date.now()});
  await draft.event({type:'state',state:{composerDraft:'Not sent'}});
- assert.equal(session.meta.title,'New session');assert.equal(session.meta.draft,false);assert.deepEqual((await Session.list(dir)).map(s=>s.id),[session.meta.id]);assert.equal(await session.discardEmpty(),false);assert.equal(await draft.discardEmpty(),true);
+ assert.equal(session.meta.title,'New session');assert.equal(session.meta.draft,false);assert.deepEqual(new Set((await Session.list(dir)).map(s=>s.id)),new Set([session.meta.id,draft.meta.id]));assert.equal(await session.discardEmpty(),false);assert.equal(await draft.discardEmpty(),false);
 });
 
 test('the first message saves an automatically titled session; closing preserves its conversation',async t=>{

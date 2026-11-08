@@ -310,7 +310,7 @@ Completed substantive tasks automatically finish with a Markdown review: outcome
 
 Subscription usage refreshes every 15 seconds by default (5–30 seconds in Settings), and after responses or account changes. Provider-reported decimals are preserved to one decimal place. Cached or stale readings are labeled; absent subscription quotas show Usage unavailable rather than estimated goal progress. Retry-After/backoff is respected. Provider latency and rounded source values still limit how immediate the display can be. Polling consumes no model tokens.
 
-New chats stay temporary until you name them or send a message. Either action saves the chat immediately; the first message also creates a title automatically. Untouched chats, settings-only chats and unsent drafts stay out of `/resume`, `psi sessions` and continue selection, and are removed on close or chat switching. Named empty chats, existing conversations and locked/in-use sessions are preserved.
+New chats stay temporary until you type a meaningful draft, name them or send a message. Each saves the chat; the first message also creates a title automatically. Untouched and settings-only chats stay out of `/resume`, `psi sessions` and continue selection, and are removed on close or chat switching. Named empty chats, existing conversations and locked/in-use sessions are preserved.
 
 Subagent conversations now live under `sessions/<parent>/agents/<worker>`, alongside the parent chat. `/resume`, `psi sessions` and continue selection show only parent conversations. Existing idle worker sessions migrate on startup without changing journal content or usage identities. Active/locked workers wait until a later idle startup; they stay hidden from chat history. `/subagents` retains status, reports and follow-up actions.
 
@@ -384,3 +384,12 @@ Replacing a background usage poll no longer cancels an inference request sharing
 `/stats` starts on **Session**. It includes this chat and its saved subagents, deduplicates copied worker usage, and shows tokens, input/output/cache usage, requests, tools, prompts, subagent count, AI wall-clock work time, combined AI process time and session age. Week/Month/All remain available. Stats refresh every five seconds while open.
 
 **Human time is an activity estimate**, not a claim about how long the task would take manually. Input/focus timestamps extend a one-minute activity window, with input writes throttled to 15 seconds; losing focus, switching chats and closing stop the interval. Keystroke text is not recorded by this tracker, and subagent activity does not count as human activity. Previous versions did not record this information, so earlier human time is unavailable.
+
+
+## Live input drafts (0.2.40)
+
+Psi saves unsent composer text as you type to a private `composer-draft.json` snapshot inside that session. Each snapshot is atomically replaced and synced; rapid edits coalesce, and unchanged text is not rewritten. The latest draft replaces the previous one instead of creating a typing history.
+
+Reopen the chat with `/resume` or `psi --resume <id>` to restore its prompt ready to edit or submit. New chats with unsent text remain in session history, even without a name or sent message. Bare `psi` still starts a new chat. Clearing an unnamed, message-free draft makes that chat temporary again.
+
+Closing, switching chats, `/reload` and updating preserve drafts. Model/account picker filters never replace the underlying draft. A draft never becomes chat history or model input until you submit it. Previously saved close-time drafts are read automatically; an empty new snapshot prevents an old draft from returning after you clear it.
