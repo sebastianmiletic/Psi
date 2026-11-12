@@ -314,3 +314,10 @@ Actual API invoices and real competition transactions were not exercised in this
 - Input snapshots are private, synced and atomically replaced. Rapid edits coalesce into the newest text; failed saves report an error and can recover. Empty snapshots suppress legacy close-time drafts.
 - Picker filtering and closing with a picker open preserve the underlying draft. Submission clears the snapshot only after input acceptance. Drafts saved while inference holds the run lock remain outside all subsequent model requests. Startup failure does not overwrite saved input.
 - Untouched sessions are still removed; newly typed unsent text is intentionally retained under the updated draft-saving behavior. No paid inference or real user-session modifications were used.
+
+
+## Stale session ownership and resume ordering (0.2.41)
+
+- Saved chats and unsent drafts reopen after dead, reused-PID, old empty, malformed and ownerless UI/run locks. Legacy PID-only locks are compared with OS process birth time; new locks retain a process identity and unique ownership token. Fresh incomplete files and genuinely live owners remain protected. Process metadata checks never read arguments or environment values.
+- Recovery is serialized and rechecks the lock under a recovery mutex. Five concurrent session claims admit one terminal; five real subprocesses recovering the same stale lock never overlap their critical sections. Forced process death releases ownership on the next open, without deleting history. Shutdown does not unlink a replacement owner's lock.
+- Selecting the already open chat is a no-op, including during inference. `/resume` precedes `/reset` in both the command list and fuzzy `/res` suggestions; exact `/reset` still selects reset. No paid inference or user-session modifications are used.

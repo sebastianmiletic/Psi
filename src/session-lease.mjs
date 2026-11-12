@@ -1,14 +1,12 @@
 import {join} from 'node:path';
-import {stat} from 'node:fs/promises';
 import {Session} from './session.mjs';
-import {alive,readJSON,withLock} from './storage.mjs';
+import {inspectLock,withLock} from './storage.mjs';
 
 export async function sessionInUse(id,home){
  const dir=Session.path(home,id);
  for(const name of ['ui.lock','run.lock']){
-  const path=join(dir,name);if(!await stat(path).catch(()=>null))continue;
-  const owner=await readJSON(path,null).catch(()=>null);
-  if(!owner?.pid||alive(owner.pid)&&owner.kind!=='storage-maintenance')return true;
+  const lock=await inspectLock(join(dir,name));
+  if(lock.exists&&!lock.stale&&lock.owner?.kind!=='storage-maintenance')return true;
  }
  return false;
 }

@@ -2,6 +2,8 @@ import { mkdir, readFile, writeFile, rename, open, unlink, stat, chmod } from 'n
 import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
+import lockfile from 'proper-lockfile';
+import {processIdentity,ownProcessIdentity} from './process-identity.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 
 export const psiHome = () => resolve(process.env.PSI_HOME || join(homedir(), '.psi'));
@@ -29,30 +31,65 @@ export function alive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
 }
+// Missing/malformed ownership is briefly protected while a newly created file is written.
+export const LOCK_WRITE_GRACE=30_000;
+export async function inspectLock(path){
+  let handle;
+  try{handle=await open(path,'r');}catch(e){if(e.code==='ENOENT')return{exists:false};throw e;}
+  let info,owner;
+  try{info=await handle.stat();try{owner=JSON.parse(await handle.readFile('utf8'));}catch{}}
+  finally{await handle.close();}
+  let stale=false;
+  if(!Number.isInteger(owner?.pid)||owner.pid<=0)stale=Date.now()-info.mtimeMs>LOCK_WRITE_GRACE;
+  else if(!alive(owner.pid))stale=true;
+  else{
+    const identity=owner.pid===process.pid?await ownProcessIdentity():await processIdentity(owner.pid);
+    if(identity){
+      // Old releases wrote only a PID. A process born after that file cannot own it.
+      stale=!identity.running||(owner.processKey?owner.processKey!==identity.key:identity.startedAt>info.mtimeMs+1000);
+    }
+    // If OS metadata is unavailable, retain the live PID rather than steal a writer.
+  }
+  return{exists:true,stale,owner,info};
+}
+async function reclaimLock(path){
+  let release;
+  try{release=await lockfile.lock(path,{realpath:false,lockfilePath:path+'.reclaim',stale:30000,retries:0});}
+  catch(e){if(e.code==='ELOCKED')return false;throw e;}
+  try{
+    // Reinspect inside the recovery mutex: a competing recoverer may have finished.
+    const current=await inspectLock(path);
+    if(current.stale){await unlink(path).catch(e=>{if(e.code!=='ENOENT')throw e;});return true;}
+    return !current.exists;
+  }finally{await release();}
+}
 export async function withLock(path, fn, { signal, timeout = 60_000, kind, waitForMaintenance = true } = {}) {
   await privateDir(dirname(path));
-  const start = Date.now();
+  const start = Date.now(),identity=await ownProcessIdentity(),token=randomUUID();
   let handle;
   while (!handle) {
     let maintenanceOwner=false;
     signal?.throwIfAborted();
-    try { handle = await open(path, 'wx', 0o600); await handle.writeFile(JSON.stringify({ pid: process.pid,...(kind?{kind}:{}) })); }
-    catch (e) {
-      if (e.code !== 'EEXIST') throw e;
-      try {
-        const owner = await readJSON(path, null);
-        maintenanceOwner=owner?.kind==='storage-maintenance';
-        if (owner?.pid && !alive(owner.pid)) { await unlink(path); continue; }
-      } catch (e) {
-        // An owner may still be writing its freshly created lock.
-        const info = await stat(path).catch(() => null);
-        if (info && Date.now() - info.mtimeMs > 30_000) await unlink(path).catch(() => {});
-      }
-      if (Date.now() - start >= Math.max(timeout,maintenanceOwner&&waitForMaintenance?10000:0)) throw new Error(`Another Psi process holds ${path}`);
-      await delay(50, undefined, { signal });
+    try{
+      handle=await open(path,'wx',0o600);
+      try{await handle.writeFile(JSON.stringify({pid:process.pid,token,...(identity?{processKey:identity.key}:{}),...(kind?{kind}:{})}));}
+      catch(e){await handle.close();handle=null;await unlink(path).catch(()=>{});throw e;}
+    }catch(e){
+      if(e.code!=='EEXIST')throw e;
+      const current=await inspectLock(path);
+      maintenanceOwner=current.owner?.kind==='storage-maintenance';
+      if(!current.exists)continue;
+      if(current.stale&&await reclaimLock(path))continue;
+      if(Date.now()-start>=Math.max(timeout,maintenanceOwner&&waitForMaintenance?10000:0))throw new Error(`Another Psi process holds ${path}`);
+      await delay(50,undefined,{signal});
     }
   }
-  try { return await fn(); } finally { await handle.close(); await unlink(path).catch(() => {}); }
+  try{return await fn();}finally{
+    await handle.close();
+    // Never remove a successor's lock if this path was replaced during shutdown.
+    const owner=await readJSON(path,null).catch(()=>null);
+    if(owner?.token===token)await unlink(path).catch(e=>{if(e.code!=='ENOENT')throw e;});
+  }
 }
 export const defaults = {
   model: 'openai-codex/gpt-5.6-sol', subagentModel: 'openai-codex/gpt-5.6-sol', effort: 'medium', profile: 'battlecode',

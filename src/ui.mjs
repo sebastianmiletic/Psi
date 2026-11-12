@@ -26,10 +26,22 @@ const markdownTheme = {
 };
 export const commands = [
  ['model','Model'],['effort','Effort + OVERKILL'],['accounts','Accounts'],['directory','Working directory'],['settings','Settings'],['subagents','Subagents'],
- ['loop','Persistent goal'],['stats','Activity'],['tools','Tools'],['usage','Account usage'],['reset','Quota resets'],['cost','Session cost'],['new','New session'],['resume','Resume'],['name','Rename session'],
+ ['loop','Persistent goal'],['stats','Activity'],['tools','Tools'],['usage','Account usage'],['resume','Resume'],['reset','Quota resets'],['cost','Session cost'],['new','New session'],['name','Rename session'],
  ['reload','Reload Psi'],['refresh','Reload Psi'],['compact','Compact context'],['project','Battlecode project'],['experiments','Experiments'],['profile','Workflow'],
  ['logo','3D logo'],['update','Update Psi'],['status','Session status'],['export','Export session'],['help','Commands'],['quit','Quit']
 ].map(([name,description])=>({name,description}));
+
+export class CommandAutocomplete extends CombinedAutocompleteProvider {
+  constructor(cwd){super(commands,cwd);}
+  async getSuggestions(...args){
+    const result=await super.getSuggestions(...args);
+    if(result?.prefix?.startsWith('/')&&!result.prefix.includes(' ')){
+      const resume=result.items.findIndex(i=>i.value==='resume'),reset=result.items.findIndex(i=>i.value==='reset');
+      if(reset>=0&&resume>reset)result.items.splice(reset,0,...result.items.splice(resume,1));
+    }
+    return result;
+  }
+}
 
 class Transcript extends Container {
   addChild(child) { super.addChild(child); if (this.children.length > 100) {const quiet=this.children.findIndex(c=>c instanceof ExplorationGroup&&!c.tools.some(t=>t.active||t.failed||t.interrupted)||c instanceof ToolMessage&&!c.active&&!importantTool(c)||c instanceof AssistantMessage&&!c.active&&!c.text);this.children.splice(quiet>=0?quiet:0,1);} }
@@ -56,7 +68,7 @@ export class TerminalUI {
     this.markdownTheme={...markdownTheme,link:this.paint,code:this.paint,listBullet:this.paint};
     this.transcript = new Transcript(); this.panel = new Container(); this.pending = null;
     this.editor = new Composer(this, { borderColor: dim, selectList: this.selectionTheme });
-    this.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, app.session.meta.cwd));
+    this.editor.setAutocompleteProvider(new CommandAutocomplete(app.session.meta.cwd));
     this.editor.onChange=text=>{if(!this.suspendDraftSave&&!this.composerSearch)app.queueDraft?.(text);};
     this.editor.onSubmit = text => {
       if(this.composerSearch)return;

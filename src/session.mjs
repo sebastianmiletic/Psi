@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {compactJournal,journalInfo,journalLines,SEGMENT_BYTES,compressFile,syncDirectory} from './journal.mjs';
 import {TranscriptHistory} from './transcript-history.mjs';
-import { privateDir, atomicJSON,replaceFile,cleanTerminal, readJSON, psiHome, withLock, alive } from './storage.mjs';
+import { privateDir, atomicJSON,replaceFile,cleanTerminal, readJSON, psiHome, withLock, inspectLock } from './storage.mjs';
 
 const meaningful=m=>!m?.internal&&['user','assistant'].includes(m?.role)&&(typeof m.content==='string'?!!m.content.trim():Array.isArray(m.content)&&m.content.some(c=>c.type==='image'||c.type==='text'&&c.text?.trim()));
 const titled=meta=>typeof meta.title==='string'&&!!meta.title.trim()&&(meta.title!=='New session'||meta.named||meta.autoNamed||meta.seedNamed);
@@ -194,7 +194,7 @@ export class Session {
     await this.writeChain;
     if(!await stat(join(this.dir,'meta.json')).catch(()=>null))return false;
     const removed=await withLock(join(this.dir,'run.lock'),async()=>{
-      const ui=join(this.dir,'ui.lock');if(await stat(ui).catch(()=>null)){const owner=await readJSON(ui,null).catch(()=>null);if(!owner?.pid||alive(owner.pid))return false;}
+      const ui=await inspectLock(join(this.dir,'ui.lock'));if(ui.exists&&!ui.stale)return false;
       const meta=await readJSON(join(this.dir,'meta.json'),null);if(!meta||meta.hasMessages||titled(meta))return false;
       const snapshot=await readJSON(join(this.dir,'composer-draft.json'),null);if(typeof snapshot?.text==='string'&&snapshot.text.trim())return false;let legacyDraft='';
       for await(const e of this.events()){if(e.type==='state'&&typeof e.state?.composerDraft==='string')legacyDraft=e.state.composerDraft;if((e.type==='session_name'||e.type==='session_auto_name')&&e.name?.trim()||e.type==='message'&&meaningful(e.message)||e.type==='final_response'&&e.text?.trim()||e.type==='usage'||e.type==='state'&&(e.state?.queuedMessages?.length||e.state?.loopGoal||e.state?.agents?.length))return false;}

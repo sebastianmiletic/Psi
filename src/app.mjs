@@ -161,7 +161,7 @@ export class App {
       this.session=session;this.bind();committed=true;if(this.ui&&different)this.recordHumanActivity('focus');
       if(different){this.uiLease=nextLease;await previousLease?.release();void this.storageMaintenance?.kick('closed',previous.meta.id);if(!((await this.jobs.list()).some(j=>j.sessionId===previous.meta.id&&['running','queued'].includes(j.status))))await previous.discardEmpty();}
     }catch(error){if(!committed){await nextLease?.release();this.session=previous;this.uiLease=previousLease;this.bind();if(this.ui)await this.agents.restore();}throw error;}
-    if (this.ui) { const { CombinedAutocompleteProvider } = await import('@earendil-works/pi-tui'); const { commands } = await import('./ui.mjs'); this.ui.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands, session.meta.cwd)); }
+    if (this.ui) { const { CommandAutocomplete } = await import('./ui.mjs'); this.ui.editor.setAutocompleteProvider(new CommandAutocomplete(session.meta.cwd)); }
     await this.engine.recoverReview();await this.refreshAccount();
     if(this.ui)this.startUsageMonitor();
     await this.session.markActive();if(different&&this.ui)this.ui.editor.setText(await this.session.getDraft());if(!preserveTranscript)this.ui?.clear();if(this.ui){await this.agents.restore();if(!preserveTranscript)this.showHistory();} this.ui?.note(`Session ${session.meta.id}\n${session.meta.cwd}`);
@@ -298,7 +298,7 @@ export class App {
     if (command === 'resume') {
       const sessions = await Session.list(this.home);
       const id = arg || await this.ui.choose('Resume session', sessions.map(s => ({ value: s.id, label: s.title, description: `${s.createdAt.slice(0, 16)} · ${s.cwd}` })));
-      if (id) {if(id!==this.session.meta.id&&await sessionInUse(id,this.home))throw new Error(sessionBusyMessage);await this.changeSession(await Session.load(id, this.home));} return;
+      if (id&&id!==this.session.meta.id) {if(await sessionInUse(id,this.home))throw new Error(sessionBusyMessage);await this.changeSession(await Session.load(id, this.home));} return;
     }
     if (command === 'reload' || command === 'refresh') return this.reload();
     if (command === 'export') { const path = resolve(this.session.meta.cwd, arg || `psi-${this.session.meta.id}.md`); await writeFile(path, await this.exportMarkdown(), { mode: 0o600 }); this.ui.note(`Exported: ${path}`); return; }
@@ -348,7 +348,7 @@ export class App {
       await session.event({type:'state',state:{settings:config,pendingSettings:{}}});
       await this.tools.close();clearInterval(this.quotaTimer);this.quotaController?.abort();
       this.config=config;this.session=session;this.registry=registry;this.bind();
-      if(this.ui){const {CombinedAutocompleteProvider}=await import('@earendil-works/pi-tui');const {commands}=await import('./ui.mjs');this.ui.editor.setAutocompleteProvider(new CombinedAutocompleteProvider(commands,session.meta.cwd));this.ui.finishResponse();}
+      if(this.ui){const {CommandAutocomplete}=await import('./ui.mjs');this.ui.editor.setAutocompleteProvider(new CommandAutocomplete(session.meta.cwd));this.ui.finishResponse();}
       await this.refreshAccount();if(this.ui){this.startUsageMonitor();await this.agents.restore();this.ui.syncMotion();this.ui.tui.invalidate();this.ui.render();}
       this.ui?.note('Reloaded');return true;
     }finally{this.reloading=false;}
